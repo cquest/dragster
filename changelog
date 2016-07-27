@@ -1,0 +1,1340 @@
+Informations sur la version 1.91 et suivantes de Dragster
+=========================================================
+Les informations contenues dans ce document sont CONFIDENTIELLES.
+
+
+Modifications de DragsterEdit:
+-----------------------------
+
+La majorité de ces modifications corrige tout un ensemble de bugs présents
+dans la version 1.90. La plupart de ces corrections sont 'invisibles'.
+Voici les principales:
+
+• Correction du compilateur, l'appel des routines externes était incorrect.
+• Corrections diverses au niveau de "Configurer…" dans le menu Fichier
+
+
+Modifications apportées au langage:
+----------------------------------
+
+• STATUS$ rend le bon format pour la version Télétel de Dragster, il n'est
+	plus nécessaire de lire MESSDOWNLOAD$(0) comme il était indiqué dans le
+	manuel "Installation de Dragster Télétel".
+	
+• WAITCONNECT n'a plus besoin d'être précédé d'un STATUS$ comme il était
+	indiqué dans le manuel "Installation de Dragster Télétel".
+
+• ZONE: les attributs ont été complétés par les valeurs suivantes:
+		4096 = zone de FIN (pour les SUITE) rend key=6
+		8192 = zone de DEBUT (pour les RETOUR) rend Key=7
+	Ceci permet de reprendre la main en cours de saisie.
+	Des améliorations doivent encore être apportées à ces nouveaux attributs.
+	La saisie au kilomètre n'a pas encore été corrigée.
+
+• DELAY 0 ne bloque plus la voie en cause, désormais DELAY 0 équivaut à YIELDCPU
+
+• PRINTSCREEN reconnaît désormais les écrans qui ne sont pas au format 'VCOD'
+	de Dragster (écrans Graphitex entre autre).
+
+• Modification de GETFINFO, dans le cas de demande d'infos sur un dossier les
+	données rendues sont:
+		GETFINFO mondossier$,signature$,nb,datesauv,datecree,datemodif
+où:
+		signature$ est une chaine vide
+		nb indique le nombre de fichiers et dossiers contenus dans mondossier$
+		datesauv donne la date de dernier backup
+		datecree et datemodif donne la date de création et de modif. du dossier
+
+• BASEMAXSIZE donne la taille de zone de comm. de la base de donnée
+	Exemple: A=BASEMAXSIZE
+	Cette variable interne est pratique pour tester si la taille définie par
+	l'utilisateur est suffisante.
+	
+• RUNFLAGS$ indique le mode de fonctionnement
+	car1: I = Interpreté	C = compilé
+	car2:	R = Modem Téléphone	L = modem Local		T = Télétel		E = Emulateur
+	ATTENTION: d'autres infos pourront s'ajouter à celles-ci
+	Exemple: A$=RUNFLAGS$
+	
+
+Modifications de la tâche de fond:
+---------------------------------
+
+• Utilisation sous MultiFinder: l'init Dragster Startup a été supprimée.
+Pour utiliser le Multifinder sur un Macintosh servant de serveur Dragster,
+il faut fixer le démarrage sous Finder sur le programme 'DragsterBoot' et
+cocher la case 'Démarrer le Multifinder' dans celui-ci. Le démarrage se
+passera de la manière suivante:
+		- boot du Macintosh
+		- démarrage de DragsterBoot
+		- au bout de 15s, démarrage du serveur en tâche de fond
+		- lancement du MultiFinder.
+ATTENTION: vérifiez que vous avez assez de mémoire libre.
+
+• Indication de la mémoire utilisée par le serveur après démarrage de celui-ci.
+
+• Changement des routines interne d'envoi de données de Dragster.
+En effet, les instructions telles que LOCATE, FORECOLOR, PRINT, et autres,
+envoyait immédiatement les données au modem. Ceci prenait beaucoup de temps
+pour souvent peu de données, de plus la communication entre le Mac et les
+modems se faisant par paquet, chaque paquet ayant 3 octets + les octets de
+données, il est préférable d'envoyer des paquets bien remplis.
+Désormais, Dragster conserve les données en mémoire, dès qu'il y a plus de 
+128 octets à envoyer, un paquet complet est envoyé et le reste est conservé
+en mémoire. Dès une mise en attente de la voie (DELAY, saisie, etc) les données
+en mémoire sont envoyée. Ce nouveau système améliore les temps de réponse et
+la charge de tout serveur, en particulier ceux ayant un grand nombre de voies
+connectées.
+
+• Ajout de Dragster/AppleTalk (documentation en cours de réalisation).
+
+• Meilleur contrôle du flux de données sur les Dragster Télétel, ceci corrige
+	les problèmes d'affichage de pages d'accueil et de longues pages.
+	
+	
+Ce qui n'a pas été corrigé:
+--------------------------
+
+• La base de donnée de Dragster n'a pas été modifiée, celle-ci devant être totalement
+	réécrite dans une prochaine version.
+
+
+
+Informations sur la verion 1.92
+===============================
+
+Modifications du langage:
+------------------------
+
+• KILL permet de supprimer des dossiers. ATTENTION, les dossiers doivent être VIDE.
+	Une erreur -47 indique que le dossier contient au moins un élément.
+	
+• Correction d'un défaut dans l'instruction GETFILE$, dans certains cas,
+	GETFILE$ se bloque encore…
+
+
+DragsterEdit:
+------------
+
+• Correction d'un défaut de gestion mémoire dans DragsterEdit qui perturbait
+	le compilateur, le message "Routine externe inconnue" n'apparait en principe plus.
+
+• Correction d'un défaut sur la routine de traduction vidéotex de DragsterEdit:
+	en effet, lors des PRINT, Dragster traduit une chaine de caractères Macintosh
+	en caractères équivalents pour le Minitel (accents, etc). Cette chaine traduite
+	est souvent plus longue que l'original et de ce fait peut dépasser la limite
+	de 255 caractères ce qui provoquait une erreur. Désormais, si la chaine
+	traduite dépasse 255 car. celle-ci est tronquée à 255 car.
+	
+• Modifications de DragsterEdit pour un meilleur fonctionnement sous système 7:
+	- reconnaissance des AppleEvents de base
+	- nouveaux dialogue d'ouverture/sauvegarde de fichiers
+	- utilisation du dossier "Temporary files" lors des compilations
+	- ajout des ballons d'aide
+	
+• Ajout d'une vérification des tableaux en fin de compilation dans DragsterEdit,
+	cette vérification permet de détecter des tableaux non dimensionnés.
+	
+• La compilation des routines externes a été revue. Un problème pouvait survenir
+	lors de l'ajout de nouvelles instructions dans Dragster. Une recompilation était
+	nécessaire si vous utilisez des routines externes. Ce problème est maintenant
+	résolu.
+	
+• Optimisation du code compilé: Dragster optimise le code tant au niveau taille
+	que rapidité d'exécution. Certains appels à la librairie interne de Dragster
+	ont été remplacés par du code assembleur directement généré par le compilateur.
+	
+• Options de compilation: l'inclusion des N° de lignes et d'instructions n'est
+	plus obligatoire lorsque l'on demande une vérification des bornes de tableaux.
+
+	
+DragsterBoot:
+------------
+
+• Correction d'un défaut dans DragsterBoot au niveau de la saisie du nom de
+	l'application vidéotex exécutable.
+	
+• DragsterBoot fonctionne désormais sous MultiFinder et sous Système 7.
+	Son fonctionnement a entièrement été revu, après avoir démarré le serveur
+	en tâche de fond, DragsterBoot se comporte comme une application qui permet
+	de suivre l'utilisation du serveur. Sous système 6 sans MultiFinder, il est
+	possible de quitter cette application et d'y revenir si le besoin de présente.
+	Sous Système 6 + MultiFinder ou Système 7, il n'est pas possible de quitter
+	DragsterBoot, mais on peut très bien 'switcher' sur une autre appli.
+	
+• Modification du chargement des routines externes. Celles-ci sont chargées
+	correctement, même en cas d'ajout de nouvelles instructions dans Dragster.
+	
+• Modification des routines d'interruptions pour permettre au noyau interne
+	de Dragster de tourner plus vite. Dragster était appelé 60 fois par secondes
+	désormais c'est plus de 150 fois par secondes. Ceci améliore nettement le
+	fonctionnement de la tâche de fond dans certaines configuration.
+	
+• Optimisation de la librairie interne: certaine routines de la librairie
+	de la tâche de fond ont été réécrites en assembleur ce qui les rends plus
+	courtes en taille et en exécution.
+	
+	
+Version 1.92.3
+==============
+
+Modifications du langage:
+------------------------
+
+Zones de saisie:
+
+• Une zone de longueur nulle figurant dans une liste de zones est automatiquement
+	"sautée" lors de l'utilisation des touches SUITE ou RETOUR.
+	
+• Un WAIT 0 équivaut à un WAIT ZONENUMBER.
+
+• Fonction RND(max) qui rend un nombre aléatoire compris entre 0 et max-1
+	Exemple: DE=RND(6)+1 (simule un dé à 6 faces)
+
+• TRPRINT n  permet de passer Dragster en mode "transparent". Ceci est utile pour
+	des applications de téléchargement ou en 80 colonnes. En effet, Dragster
+	compacte les informations pour utiliser un minimum de codes vidéotex et pour
+	traduire les accents du Macintosh en accents vidéotex.
+	Exemple:	TRPRINT 1 -> Dragster est "transparent"
+						TRPRINT 0 -> retour au mode normal
+						
+• GETVOL$(n) rend le nom du nième volume en ligne
+	Exemple: A$=GETVOL$(1)  (A$ contient le nom du premier volume en ligne)
+	
+	
+DragsterEdit:
+------------
+
+•	Amélioration des compilations en tâche de fond sous Système 7 et MultiFinder.
+	DragsterEdit gère mieux l'utilisation du multitâche coopératif du Mac.
+	
+• Ajout d'icônes en couleur dans les dialogues.
+
+
+DragsterBoot:
+------------
+
+• amélioration de la détection des déconnexions sur Télétel. Il arrivait que
+	Dragster ne s'apperçoive pas correctement des déconnexions lors des PRINTSCREEN.
+	Ceci pouvait éventuellement bloquer certaines voies.
+	
+• DragsterBoot peut désormais fonctionner uniquement avec des voies
+	Dragster/AppleTalk. Il n'est plus nécessaire de mettre un ou plusieurs modems
+	en plus des voies AppleTalk.
+	
+• La mémoire occupée par la tâche de fond a été réduite. En effet, certaines
+	tâches internes ne sont pas toujours utiles (Base de donnée, AppleTalk, etc).
+	DragsterBoot installe désormais uniquement les tâches internes réellement
+	utilisées.
+	
+Nouveautés:
+----------
+
+• une routine externe pour "Macsbug" (dcmd) permet de consulter l'état du serveur
+	même en cas de plantage grave (blocage complet du Macintosh par exemple).
+	Pour fonctionner, cette routine externe doit être recopiée dans le fichier
+	"Debuggers Pref" utilisé par Macsbug qui se trouve dans le dossier système.
+	Macsbug doit bien sûr être installé sur le Macintosh en question.
+	Une fois sous Macsbug, il suffit de taper "tcb" suivi de <return> pour qu'une
+	liste apparaisse. Si vous voulez conserver cette liste dans un fichier tapez
+	les commandes suivantes dans Macsbug:
+	
+		LOG BUG			tout ce qui suit sera enregistré dans le fichier 'bug'
+		TCB					affichage de l'état de Dragster
+		LOG					fermeture du fichier de 'log'
+		
+	La liste se trouvera dans un fichier "bug". Pour redémarrer le serveur, vous
+	pouvez faire "RS" suivi de <return>.
+	
+	Pour plus d'informations sur le fonctionnement de Macsbug et des 'dcmd',
+	consultez "Macsbug Reference and Debugging Guide" (Ref APDA: R0063LL/A).
+	
+	
+Version 1.92.4
+==============
+
+Modifications du langage:
+------------------------
+
+• FORMAT$: si la chaine donnée est plus longue que la longueur indiquée dans
+	le FORMAT$, la chaine est coupée, FORMAT$ rend donc une chaine qui a toujours
+	la longueur demandée, même si la chaine originale est plus longue.
+	Ex: FORMAT$(5,0,0,"123456789") -> "12345"
+
+• DATE$(-1) rend la date au format 'AAMMJJ'.
+
+15/5/92
+• GETFILE$ sur un dossier inexistant rend une chaine vide et positionne ERROR.
+
+8/9/92
+• MID$(X$,Y,Z) avec Y>LEN(X$) rend une chaine vide.
+	Même modif. sur RIGHT$ et LEFT$.
+
+13/10/92
+• DATE2SECS reconnaît maintenant 3 formats de dates:
+	- JJ/MM/AAhh:mm:ss
+	- JJ/MM/AA (l'heure est considérée comme 00:00:00)
+	- AAMMJJ (l'heure est considérée comme 00:00:00)
+
+
+
+Routines externes:
+-----------------
+
+• ajout de routines de traitement des dates:
+	- DAYOF(chaine) rend le N° du jour d'une date,
+	- MONTHOF(chaine) rend le N° du mois d'une date,
+	- YEAROF(chaine) rend le N° de l'année d'une date,
+	- DAYOFWEEK(chaine) rend le N° du jour de la semaine d'une date
+		(1=Lundi, 2=Mardi … 7=Dimanche).
+	Les dates peuvent être aux formats suivants:
+	- AAMMJJ,
+	- JJ/MM/AA,
+	- JJ/MM/AAHH:MM:SS,
+	- chaine vide = date du jour.
+	
+
+Librairie pour routines externes en mode compilé:
+------------------------------------------------
+
+• Création d'une librairie de "callback" permettant d'exploiter la librairie
+	de Dragster depuis une routine externe. Ces "callback" ne peuvent être
+	utilisés qu'en mode compilé (DragsterBoot).
+	
+• Ajout de 4 nouveaux callbacks:
+	- Drg_NewHandle qui alloue un Handle dans le heap
+	de DragsterBoot ou en mémoire temporaire,
+	- Drg_StoreData qui stocke un pointeur. Ceci permet à une même routine
+	d'utiliser les mêmes données entre plusieurs appels,
+	- Drg_RestoreData qui permet de récupérer le pointeur précédemment
+	sauvé,
+	- Drg_KillData qui détruit une donnée sauvegardée.
+	REMARQUE: seul le pointeur est conservé, pas les données pointées.
+	Il est possible de conserve autre chose qu'un pointeur.
+	ATTENTION: ces "callback" ne sont pas utilisables en Système 6/Finder
+	car DragsterBoot doit rester actif pour traiter les requêtes.
+	
+21/5/92
+• Modification des CallBacks pour compatibilité future en mode interpretté…
+	Les sauts dans la librairie de Dragster ne se font plus par des
+	"JSR xxx(A5)" mais en passant pas une globale système…
+	"MOVE.L $A78,A0  JSR xxx(A0)".
+	
+27/5/92
+• Modification des callback en interpretté/compilé pour ne pas utilisé
+	la globale $A78 (incompatibilité avecx le Finder du Système 7.0).
+	Désormais, l'adresse de la JumpTable est passée via la pile.
+	Il faut recompilé les externes et les sources utilisant ces externes.
+	Un nouveau type d'externe 'DEXC' a été créé pour que DragsterEdit
+	reconnaisse le nouveau mode d'appel pour ces callBacks.
+	Les anciennes rout. externes avec callBacks fonctionnent tjrs
+	en compilé si elles sont tjrs des 'DEXT'.
+	
+
+DragsterEdit:
+------------
+
+•	Quelques améliorations au niveau du "look" (icônes, réaffichages, etc…)
+
+•	Amélioration de la gestion mémoire du compilateur.
+
+• Un source n'est plus considéré comme "modifié" si l'on utilise
+	les flèches sur le clavier.
+
+• La position de la fenêtre de TRACE n'est plus perdue lorsqu'on la ferme.
+
+• Compilateur: lorsqu'un écran est introuvable ou non analysé, le compilateur
+	indique désormais dans quel écran celui-ci a été utilisé pour la 1ère fois.
+	
+• Il n'est plus possible d'ouvrir le même écran deux fois. Si l'on essaie
+	d'ouvrir un écran déjà ouvert, celui-ci passe automatiquement en fenêtre
+	de premier plan.
+	
+• Ajout d'un dialogue lors de la compilation, ce dialogue indique le nom du
+	module en cours de compilation. L'arrêt de la compil. peut se faire
+	par Cmd-:
+
+• Amélioration de l'affichage de la barre de menus, celle-ci ne clignote
+	plus lorsque l'on tape au clavier.
+
+• Reconnaissance des "_" dans les noms de routines externes.
+
+• Modification de différentes limites, telles que:
+		- nombre maxi. de variables porté à 10000,
+		- nombre maxi. de constantes chaine porté à 10000,
+		- nombre maxi. d'étiquettes dans un module porté à 1000,
+		- nombre maxi. de routines externes porté à 100.
+
+• Compilateur: celui-ci n'accepte plus plusieurs DIM pour un même tableau !
+	de même, un tableau utilisé mais non dimensionné sera indiqué par un
+	message d'erreur en fin de compilation.
+
+9/4/92	
+• Compilateur: celui-ci teste le type des fichiers à compiler. Ceci est utile
+	si des sources Dragster ont été compressés et doivent donc être décompressés
+	avant d'être compilés.
+	Si un module à compiler n'est pas du bon type, DragsterEdit affiche le msg
+	suivant:  Le fichier "xxxx" n'est pas au format Dragster.
+	
+• Compilation à partir d'un fichier précompilé: l'item "Compiler" se change en
+	"Compiler…" et est toujours disponible, même si aucun source n'est ouvert.
+	
+5/5/92
+• Correction d'un bug sur "Dupliquer…" qui empêchait d'ouvrir un module
+	qui ne possédait pas de "resource fork" (modules en version 1.68).
+	
+7/5/92
+• Optimisation du code généré par le compilateur (plus court, plus rapide)…
+	- lors de l'inclusion des numéros de lignes et/ou d'instruction
+		le compilateur générait des lignes "vides" lorsqu'une ligne ne
+		générait pas de code (Ex: SHARED A$:DECSCREEN "TOTO"),
+	- améliorations internes pour l'accès aux éléments de tableaux,
+	
+8/5/92
+• Correction des "copier/coller" entre applications, le presse-papiers n'était
+	par correctement géré entre DragsterEdit et une autre application.
+	
+• Ajout de la couleur dans l'éditeur vidéotex.
+
+11/5/92
+• Optimisation de l'affichage couleur de l'éditeur vidéotex.
+	- utilisation d'une offScreenBitMap pour dessiner les car.
+	- test de la visRgn pour les updates.
+	
+• Correction des ascenseurs (une de plus diront certains…).
+	Je n'utilise plus TESelView qui ne faisait pas correctement le scroll
+	dont j'avais besoin… je calcule moi même le scroll à faire.
+	
+12/5/92
+• Correction de l'impression des sources Basic, les lignes trop longues
+	finissent par '…' et continuent sur la ligne suivante avec '…' au début.
+	La fin de ligne n'est plus perdue comme auparavant.
+	
+15/5/92
+• Impressions: les étiquettes sont imprimées en gras pour mieux les faire
+	ressortir.
+	
+• Interpreteur: lorsqu'une erreur est détectée en interpretté, DragsterEdit
+	affiche l'instruction en cause dans la fenêtre de Trace.
+
+18/5/92
+• Transformation du dialogue de compilation en movable modal dialog.
+	Sous système 6, c'est un dialogue normal…
+	
+• Correction de certaines resources d'aide pour que les entourages de
+	boutons "OK" ne soient pas effacés par les ballons d'aide.
+
+19/5/92
+• Transformation des dialogues de "Chercher/Remplacer" en movable modal
+	dialog.
+	Ecriture de "MyFilter" qui gère tous les updates et évènements correctement
+	pour les dialogues (movables ou non).
+	(Ex: gestion d'Escape et Enter/Return pour les boutons Annuler et OK)
+	
+6/92
+• Compilation: l'item du dialogue de compilation était parfois entouré comme
+	un bouton 'OK'.
+	
+13/6/92
+• Correction dans la gestion de l'Æ OpenDoc (HandleODOC) un écran déjà ouvert
+	pouvait être ouvert directement depuis le Finder, ce n'est plus
+	possible (comme pour un "Ouvrir…" normal).
+	
+4/7/92
+• Correction d'un bug lors d'une demande de compil. avec 'option', l'écran
+	courant était perdu après fermeture du dial. d'options de compil donc
+	plantage.
+	
+• La fenêtre "Erreur/Trace" ne passe plus en premier plan lors de la compil.
+	Ce n'est plus nécessaire depuis que l'on a la fenêtre de compil.
+	
+• Le compilateur utilise les nouveaux dialogues de sélection de fichier du
+	système 7.
+
+8/7/92
+• correction de l'ouverture des écrans (NewScreen) qui pouvait abîmer
+	le heap de DragsterEdit.
+
+9/7/92
+• compilateur: lorsqu'une compilation est stoppée, le listing de compilation
+	éventuel est maintenant supprimé. Il est conservé lorsqu'une compilation se
+	termine par une erreur, ceci permet de voir ce qui a déjà été compilé.
+	
+• interpreteur: lorsqu'une erreur intervient en mode interpreté, l'instruction
+	en cause ainsi que le nom du module sont affiché dans la fenêtre d'erreur.
+	Ex: ==> GOTOSCREEN "MENU" (ARBO) <==
+	Erreur dans le module "ARBO" sur l'instruction GOTOSCREEN "MENU".
+	
+• interpreteur: utilisation du TCB bidon dans l'interpreteur. Ceci permettra
+	aux routines externes de partager le même TCB que l'interpreteur.
+
+24/7/92	
+• Editeur: ajout des commandes "Décalage à gauche, Décalage à droite et Aligner"
+	dans le menu "Edition".
+	
+• Interpreteur: le type des modules appelés est testé, ceci évite des problèmes
+	lorsque l'on veut éxécuter un écran compressé sur disque (DiskDoubler et autres).
+	-> GOTOSCREEN/GOSUBSCREEN/LOADSCREEN/DRAWSCREEN
+	
+28/7/92
+•	Les items "Chercher suivant" et "Remplacer suivant" sont grisés tant qu'une
+	recherche n'a pas été faite (chaîne à chercher vide).
+	
+30/7/92
+•	Ajout de "Chercher sélection" dans le menu "Edition" (Cmd-H).
+
+• Correction de l'ascenseur sur effacement d'une grande portion de source,
+	l'ascenseur disparaissait, mais le source n'était pas recalé en haut…
+
+31/7/92
+•	Gestion d'Annuler pour les nouvelles fonctions d'édition (Décaler/Aligner).
+
+• Correction d'un bug dans le compilateur (CallGen ne prenait que 5 paramètres
+	maximum et pas 6 comme c'est défini dans TokDetok.p).
+	
+18/8/92
+• DragsterEdit n'ouvre plus les écrans qui ont été créés avec d'autres
+	applications (Ex: Scanex, Graphitex, Pictex…). Le type ET le créateur sont
+	contrôlés avant ouverture. Ceci sert à éviter des problèmes de décodage
+	vidéotex d'écrans trop "compliqués" pour DragsterEdit.
+	
+21/8/92
+• Correction d'un bug dans 'GetSelection' qui faisait planter qd on
+	cliquait dans la barre de menu si aucun écran d'ouvert.
+	
+8/9/92
+• Emulateur: il fonctionne désormais en Couleur ou niveaux de gris, il
+	reconnaît aussi le DRCS (même émulateur que 'Minitel' de Dragster/AppleTalk)
+	Le dialogue "Configurer…" a lui aussi changé pour permettre de
+	choisir le type d'émulation.
+	
+11/9/92
+• Modification de DoShiftText et DoAlign pour indiquer que le source doit
+	être à nouveau analysé (ErrFlag:=TRUE).
+	
+22/9/92
+•	Correction du INPUT en émulation, celui-ci remettait la couleur de
+	caractère en noir !
+	('AfftheAtts' n'affiche plus les attributs pour les INPUT).
+
+23/9/92
+• Optimisation du compilateur (encore !) Gain ≈ 16% de moins en taille.
+
+29/9/92
+• Correction de l'appel des 'DEXC' par le compilateur, l'adresse de la
+	JumpTable n'était pas mis sur la pile au bon moment !
+	
+30/9/92
+• Compilateur: meilleure gestion des évènements lors de la compilation.
+	Les updates de fenêtre se font plus rapidement.
+
+• Modif. protection: le compteur d'utilisation ne se décrémente plus deux fois
+	le même jour.
+
+5/10/92
+• Compilateur: correction d'un bug dans la génération de code pour
+	l'affectation des variables numériques partagées.
+	
+6/10/92
+• Modif émulateur (reprise des modifs de la version AppleTalk).
+	- optimisation des updates…
+	
+• Ajout d'un "beep" ou d'une notification en fin de compilation.
+
+• Correction différents "DisposHandle" qui était fait en trop
+	(compilateur, DisposHandle après ReleaseResource)
+	(editeur: disposHandle sur handledéjà disposés)
+
+8/10/92
+• Ajout du choix "Aller à la ligne N°…" dans le menu édition.
+	Un dialogue permet d'entrer le numéro de ligne, cette ligne est
+	ensuite sélectionnée.
+	
+• Modification de la police de caractère utilisée dans les sources
+	pour pouvoir différencier les lettre O des chiffre 0 et les L
+	minuscule des I majuscule.
+	
+• Correction bug: passage de DrgEdit en arrière plan si fenêtre vidéotex
+	en FrontWindow… (ManageMenu)
+
+• Compilateur: celui-ci prend les fichiers sources en priorité par rapport
+	aux fichiers précompilés.
+	
+9/10/92
+• "Aller à la ligne N°…" montre la ligne sélectionnée (il manquait un
+	FocalHte pour que la sélection soit visible).
+	
+14/10/92
+• Correction émulateur sur Mac sans Color QD. Maintenant , on teste si
+	Color QD est présent, si absent, l'émulation se fait en gris tramés.
+	
+• Correction compilateur, l'adresse de la jumptable lors des appels aux
+	'DEXC' se fait bien en PREMIER paramètre. (Le bug du 29/9/92 était faux !)
+
+
+DragsterBoot:
+------------
+
+• Gestion du protocole ASM/X.
+
+• Correction d'un bug sur l'instruction FRONTSCREEN.
+
+• Correction bug empêchant le démarrage sous MultiFinder/Système 7 si
+	aucune voie AppleTalk présente. (blocage lors du démarrage ou bombe).
+
+• Ajout de nouveaux callbacks (voir § "Librairie pour routines externes…")
+
+4/5/92
+• Ajout d'une fenêtre invisible qui empêche "Système 7 Tune Up" de quitter
+	DragsterBoot pour récupérer de la mémoire.
+
+5/5/92
+• Suppression de la limitation des noms de fichiers à 80 caractères.
+	Désormais, un chemin d'accès peut faire 255 car. maximum. (limite
+	au niveau du système).
+	
+25/5/92
+• Ajout de HoldMemory dans Init2Proc pour compatibilité avec la mémoire
+	virtuelle. Dragster conserve une grande partie de ses données en mémoire
+	physique, la swapping sera donc assez important au niveau de la mémoire
+	virtuelle. L'utilisation de la mémoire virtuelle reste très fortement
+	déconseillée.
+	L'appel à Dragster se fait désormais via un DeferUserFn si l'on est
+	sous interruption et que la mém. virtuelle est présente.
+
+10/6/92
+• Modification de la protection antivirus, elle n'arrivait pas toujours
+	à charger les resources à contrôler car la routine de contrôle ne
+	purgeait pas complètement les resources chargée, maintenant c'est un
+	ReleaseResource qui libère la mémoire occupée par les resources
+	chargées pour être contrôlées. (même modif dans DragsterEdit).
+	
+4/7/92
+• Modif dans la tâche de gestion de fichiers, la routine DIRECTREQUEST
+	a été optimisée, le ReqCatMove a été supprimé.
+	
+8/7/92
+• Modification des DITL pour les versions étrangères (italien).
+
+28/7/92
+• Correction de l'installation de la tâche de fond, DragsterBoot ne veut
+	plus démarrer si il n'y a pas au moins un "hard" connecté (modem, clé…).
+	En effet, avec les versions précédentes, DragsterBoot pouvait démarrer
+	avec uniquement la voie AppleTalk de démonstration…
+	
+27/8/92
+•	Ajout de reconnaissance automatique de la vitesse du minitel pour les
+	versions "port série" (1200/4800 Bauds).
+
+31/8/92
+• Modif de la configuration du port série sur les versions utilisant le
+	minitel en direct. Si l'on met une valeur négative comme vitesse,
+	celle-ci est interprettée comme la config complète (ce qui permet de
+	changer le nmbre de bits, la parité etc…
+	Ex: 19466 = 9600Bds, 8Bits, pas de parité (Minitel Photo)
+			19478 = 4800Bds…, " , "
+			
+21/9/92
+• Modification du dialogue "About" pour affichage pict N&B si moins de
+	16 couleurs à l'écran.
+	
+• On peut désormais arrêter le serveur Dragster en quittant DragsterBoot.
+
+• Affichage du déroulement du boot dans la fenêtre "Dragster".
+
+29/9/92
+• Ajout de la fermeture des fichiers lors de l'arrêt du serveur.
+	- modification de FileTask: ajout d'une requête N°-1 -> CloseAll
+	- modification de RemoveDragster dans DragsterBoot pour envoyer
+		cette requête à FileTask.
+
+30/9/92
+• Correction chargement des routines externes 'DEXT' et 'DEXC', les 'DEXC'
+	n'étaient pas prises en compte dans la taille des routines externes !
+
+2/10/92
+• Ajout d'un UnholdMemory dans removeDragster quand on quitte DragsterBoot.
+
+• RemoveDragster envoie une requête de fermeture de fichiers uniquement si le
+	serveur était complètement lancé (flag dans DrgGlobs.started).
+	
+• Modification du comptage des modems Dragster, si TOUS les modems sont
+	présents c'est que l'on a sûrement un modem Hayes branché qui renvoi tout
+	en écho ! Donc countModem=64 -> 0…
+	
+9/10/92
+• Le dialogue de configuration s'affiche si:
+	- il n'y a pas de ressource de config (CONF=256),
+	- le nom d'appli. n'est pas un fichier Dragster compilé.
+
+12/10/92
+• Ajout d'un message d'erreur au cas où il manque une ou plusieurs routines
+	externes.
+	
+13/10/92
+• Si il n'y a que des voies AppleTalk, DragsterBoot referme les ports série
+	ouverts.
+
+15/10/92
+• Correction d'un GROS BUG sur l'ouverture des bases. Le compteur d'accès
+	'accessnumber' n'était pas correctement incrémenté à cause d'un vilain
+	GOTO mal placé.
+
+• Les bases sont maintenant refermées lorsque l'on quitte DragsterBoot.
+
+• Les chemins d'accès des bases ont eux aussi été passés à 255 caractères.
+
+
+Version 1.94d
+=============
+
+Langage & routines externes:
+---------------------------
+
+4/11/92
+• Réécriture de FILECOPY pour utiliser les CALLBACKs des DEXC, maintenant on
+	peut utiliser FILECOPY en interprèté.
+	
+5/11/92
+• Correction bug sur CONNECTED: la valeur d'ERROR (et de KEY) était perdue
+	dans les CONNECTED, maintenant elle est conservée.
+
+• Ajout de DECEXEC/IFEXEC/ENDIFEXEC
+	DECEXEC sert à déclarer une exécution conditionnelle
+	IFEXEC/ENDIFEXEC sert à délimiter les partie à exécuter de façon
+	conditionnelle, exemple:
+	
+	DECEXEC "DEBUG"
+	…
+	IFEXEC "DEBUG"
+		IF ERROR
+		  MESSAGE 0,1,120,"Err="+STR$(ERROR)
+			…
+		ENDIF
+	ENDIFEXEC
+	
+	Lors de la compilation, aucun code ne sera généré pour les IFEXEC/ENDIFEXEC
+	qui ne sont pas déclarés par un DECEXEC correspondant.
+
+9/11/92
+• Ajout du REPEAT/UNTIL. Les BREAK et CONTINUE fonctionnent aussi pour les
+	REPEAT/UNTIL.
+
+13/11/92
+• Correction de FILECOPY. ERROR est positionné par FILECOPY, la copie avec
+	remplacement fonctionne correctement (on ne teste plus les erreurs sur le
+	HDelete du début).
+	
+14/11/92
+• Ajout de callbacks pour protection EVE.
+
+24/11/92
+• Modification des callBacks de gestion de variables. Les noms des variables
+	conservées sont "case-sensitive" et "diacritic-sensitive" (pour accélérer).
+	
+	
+
+DragsterEdit:
+------------
+
+30/10/92
+• Modif de l'équivalent clavier de "Tester l'écran" (Cmd-E) qui était le même
+	que "Remplacer suivant" (Cmt-T).
+	
+• Modif de l'affichage de la petite icône dans les notifications, maintenant
+	elle est en couleur.
+	
+• Modif de la fenêtre de trace pour éviter les SetCtlValue sur chaque scroll.
+
+• Ajout de "Mot entier" dans les chercher/remplacer.
+
+• Correction bug émulation sur réception de PRO2/START ou PRO2/STOP non traités.
+	(entre autre visible si l'on utilise l'instruction LOWER)
+
+2/11/92
+• Correction bug interpreteur: si un GOTO/GOSUBSCREEN se faisait sur un écran
+	non analysé, l'affichage d'erreur ne se faisait pas correctement. Maintenant
+	on sort de LoadCode dès que l'on a détecté un problème.
+
+• Ajout de l'équivalent clavier Cmd-J sur de "Aller à la ligne N°…".
+
+• Correction Chercher/Remplacer qui ne pouvait pas trouver le premier mot
+  d'un source !!!
+	
+• Correction bug dans le dialogue "A propos", parfois le N° de version était
+	celui d'un des fichiers de routines externes.
+	Un UseResFile(gAppResRef) a été ajouté pour éviter cela.
+
+3/11/92
+• Correction bug du sélection/déselection de fenêtres Basic sur (de)activate.
+	Si l'on faisait une compil puis que l'on quitte directement, on avait un
+	double DisposHandle. Ceci venait du fait que les activate/deactivate gérés
+	par HandleEvent provoquait des changements dans varTab et cstTab aussi
+	utilisées par le compilateur.
+	
+• VerifScreen, la routines de comparaison de deux références d'écrans ouverts
+	prenait en compte les majuscules/minuscules. Maintenant EqualString est
+	utilisé pour ne pas prendre en compte les maj/minuscules.
+	
+• Lorsque l'on sauve un écran sous le même nom qu'un écran ouvert, l'écran
+	ouvert est remplacé par le nouveau (fermeture sans sauvegarde).
+	
+4/11/92
+• Correction bug sur ouverture/fermeture/ouverture d'écrans.
+
+11/11/92
+• Optimisation Compilateur: les boucles FOR/NEXT génère un code optimisé
+	en fonction de la valeur du STEP. Si c'est une constante numérique, un
+	seul test est fait en fonction du signe de la constante, si c'est une
+	variable, le signe de l'incrément est testé comme auparavant.
+
+25/11/92
+• Compilateur: les écrans vidéotex qui n'ont pas été créés par DragsterEdit 
+	sont correctement inclus lors de la compilation.
+
+27/11/92
+• Editeur sources: modification des flèches gauche et droite lorsqu'une
+	partie de source est sélectionnée.
+
+• OPENSER: lorsque l'on arrêtait l'appli. en interpreté, le port série
+	n'était pas forcément fermé.
+
+4/12/92
+• Modif appel des routines externes. Le flag 'LockExternal' est remis à TRUE
+	si la routine est déjà lockée en mémoire (ex: plusieurs appels à OPENBASE
+	qui installe une procédure d'arrêt, donc qui doit resté vérouilllée).
+	
+11/12/92
+• Ajout curseur tournant durant la compilation…
+
+• Ajout gestion des évènements durant la recopie du code compilé en fin
+	de compilation.
+	
+6/1/93
+• Ajout d'une nouvelle case à cocher dans les options de compilation.
+	"Utiliser ecrans précompilés" Cette case force le compilateur à
+	utiliser uniquement les écrans provenant d'un fichier précompilé.
+	Si cette case n'est pas cochée, le compilateur utiliser un écran Dragster
+	normal si celui-ci existe. Ceci permet de remplacer un écran
+	précompilé par un écran normal.
+	
+8/1/93
+• Changement de la police Monaco 9: maintenant les caractères de contrôle
+	s'affichent en clair.
+
+• Modification du compilateur pour que les octets d'alignements soit toujours
+	à 0 afin d'optimiser les logiciels de "patch".
+
+• Ajout d'une ressource "DATE" dans les compilations faites avec DragsterEdit,
+	ceci permet de faire des patch sur des compilations en étant sûr de bien
+	appliquer le patch sur la bonne version de l'appli. compilée.
+	
+22/1/93
+• Modif. de l'ouverture des ports série pour prendre en compte le
+	SerialPortArbitrator (interpreteur et OpenSer/SerConfig).
+
+31/1/93
+• L'icône clignotante dans la barre de menu pour la fin de compilation
+	disparaît au bout d'une minute…
+
+• Correction bug sur raz des octets d'alignement dans les écrans vidéotex
+	inclus en compilation. Les premiers écrans à être inclus étaient abîmés.
+
+1/2/93
+• Optimisation du code compilé: les constantes chaines uniquement utilisées
+	dans les TRACE ne sont plus incluses dans la compilation.
+
+5/2/93
+• Correction bug compilateur: le fin du code compilé n'était pas enregistré.
+
+17/2/93
+• Création d'une version "démo" de DragsterEdit:
+	- limitation à 20 sources en compilation,
+	- les applications compilée ne peuvent être utilisée qu'avec
+		DragsterBootDémo.
+
+18/2/93
+• Modification du format d'enregistrement des précompilations pour permettre
+	une mise à jour par "Patch".
+	Une ressource "DATE" a aussi été ajoutée pour contrôler que c'est la bonne
+	précompilation que l'on met à jour.
+
+15/4/93
+•	Correction bug compilateur/precompilateur:
+	suppression du 'IF key=0 THEN key=$63;' dans le precompilateur.
+	
+• Modif version de démo: la limite de 20 écrans compilés ne prend pas en
+	compte les écrans précompilés. Ceci permet de tester les précompilations
+	avec une version de démo de DragsterEdit.
+	
+5/5/93
+• Bug interpreteur: RND(0) provoquait un 'Divide by zero', maintenant une
+	erreur est rendue par l'interpreteur lors de l'exécution (pas de problème
+	en compilé).
+
+28/5/93
+• Correction bug détection modem: un seul des deux drivers était ouvert !
+
+1/6/93
+• Ajout d'une STR#1000 contenant une liste de 10 modules (maxi) à ne pas
+	inclure dans les précompils.
+
+16/6/93
+• Modif protection: la disquette n'est plus demandé si il n'y a pas de
+	lecteur de disquette… (PowerBook Duo et autres…)
+
+18/8/93
+• Compilateur: si il y a une erreur de compil. plusieurs "beep" (3 ou 4).
+
+21/9/93
+• Modif protection disquettes pour compatibilité avec Quadra 840AV.
+
+22/9/93
+• Ajout de "Ouvrir sélection" dans le menu fichier.
+
+28/9/93
+• Correction activation de "Format d'impression"
+• Corrections sur "Ouvrir Sélection", les sous-dossiers (un niveau) sont
+	correctement gérés.
+	> Le seul cas restant non géré est le suivant: ouvrir "CLS" depuis
+		un écran dans un sous dossier (ex ":.EuroAs:Saisie")
+
+30/9/93
+• Correction bug sur "Enregistrer Sous" lié aux modifs de "Ouvrir Sélection"
+
+• Les fichiers de routines externes peuvent être regroupés dans un dossier
+	nommé 'Dossier Externes Dragster' qui doit se trouver au même niveau que
+	DragsterEdit (ou DragsterEditDémo). On peut mettre plusieurs fichiers
+	de routines externes, DragsterEdit les ouvrira tous (15 au maximum).
+
+2/11/93
+• Correction protection disquette: elle fonctionne sur tous les Mac
+	(y compris les "AV"). Il manquait aussi un DisposPtr, c'est corrigé.
+	
+28/11/93
+• Modification du nombre maxi de paramètres pouvant être passés dans une
+	intructions du langage (utile pour les routines externes).
+
+2/12/93
+• Modif de l'interpretteur: les tableaux de chaines sont alloués en un seul
+	bloc. Ceci assure une compatibilité avec les externes travaillant directement
+	sur des tableaux de chaines (ex: 4D Open pour Dragster).
+	ATTENTION: La mémoire occupée est donc plus importante qu'auparavant !
+
+3/2/94
+• Ajout de la gestion des touches "home,end,page up, page down" dans l'éditeur.
+
+• Dans l'éditeur: enter = analyse de Syntaxe.
+
+4/2/94
+• Mise à jour des CopyRights (nous sommes en 1994).
+
+10/2/94
+• Correction Compilateur de DragsterEditDémo, le code compilé n'était pas
+	toujours correctement crypté pour utilisation exclusive avec DragsterBootDémo.
+	Le décryptage générait donc du code incorrect de temps en temps.
+
+• Optimisation du compilateur:
+	- Utilisation des sauts courts pour les BRA, BEQ, etc, quand c'est
+		possible.
+	- les affectations de constantes se font directement (qd c'est possible)
+	- X$="" ne génère qu'un CLR.B quand c'est possible,
+	- les transferts de chaines ne sont plus faits par BlockMove mais directement
+		par une boucle (MOVE (A0)+,(A1)+), le code est plus long (4 octets),
+		mais beaucoup plus rapide !
+
+26/2/94
+• Suppressions des sauts courts dans le compilateur. Le code généré était
+	incorrect.
+
+7/3/94
+• Correction d'un bug dans l'optimisation des affectations de constantes
+	numériques. Le code généré était incorrect…
+
+8/3/94
+• Correction d'un bug dans l'émulateur.
+
+14/3/94
+• Les noms des Tokens du langage est limité à 20 car. Les
+	caractères supplémentaires sont automatiquement supprimés.
+
+• Support du Drag Manager. On peut désormais faire glisser un morceau de source
+	vers DragsterEdit ou depuis DragsterEdit.
+	Tout n'est pas implémenté: le "drag" dans la corbeille est à traiter,
+	la touche "option" et le "drag" à l'intérieur d'un source restent à faire.
+
+15/3/94
+• Correction de l'enregistrement de la position des fenêtres de source.
+	La date de modification du source était modifiée alors qu'elle ne
+	devait pas l'être.
+
+12/4/94
+• Correction d'un bug de segmentation.
+	Lorsque l'on utilisait le menu Basic lors de l'exécution, un plantage
+	pouvait survenir aléatoirement.
+
+• Simplification de la segmentation.
+
+26/5/94
+• Le nombre maxi de sources ouvert est porté à 16 (au lieu de 8).
+
+• Lors d'une compilation faite à partir d'un fichier précompilé, un dialogue
+	demande désormais l'emplacement des sources à compiler si ils ne figurent
+	pas dans le même dossier que le fichier précompilé.
+
+18/7/94
+• Correction du précompilateur: les fichiers à ne pas précompiler sont
+	désormais correctement détectés.
+
+20/7/94
+• Fin d'implémentation du Drag&Drop:
+	- désormais, le curseur clignote durant le 'drop',
+	- gérer les 'drag' à l'intérieur d'un même source,
+	- gestion de "Annuler" après la réception d'un 'drag'.
+	- détection du drag abandonné (sur la sélection de départ),
+
+30/9/94
+• Utilisation de BlockMoveData partout où cela était possible.
+
+9/12/94
+• Modification du compilateur:
+	- les dépassements de tableaux utilisant des indices "constants" sont détectés lors
+		de la compilation (ex: A$(20) alors que DIM A$(10)),
+	- le code généré pour les indices de tableau constant a été amélioré.
+	- le code généré pour les affectations a été optimisé (utilisation du registre D6).
+	
+6/3/95
+• Interpretteur: StrExprXcute et NumExprXcute détectent désormais les routines externes
+	manquantes et affichent une erreur lors de l'exécution.
+
+• Correction bug dans WAIT sur une zone contenant un élément de tableau numérique.
+
+
+
+DragsterBoot:
+------------
+
+3/11/92
+• Suppression du centrage du "Suivi des voies" sur écrans 9 pouces, ceci
+	permet de conserver les icônes du Finder visibles sur le côté droit.
+
+23/11/92
+• Ajout d'une tache interne supplémentaire (N°2000)
+	Cette tâche sert:
+	- à appeler les procédures d'arrêt,
+	- à faire les RestoreData sans passer par DragsterBoot
+
+3/12/92
+• Modif du Scheduler pour mettre HiHeapMark à 0 avant l'appel des taches.
+	Ceci permet d'utiliser SANE dans les routines externes, alors que celui-ci
+	verifie qu'il y a assez de place sur la pile (StackSpace).
+	
+4/1/93
+• Modif de PaqAsRead (InTask.p) pour ne plus avoir de dépassement de tableau
+	éventuel si l'on ne reçoit pas le car. de fin de paquet.
+	
+11/1/93
+• Ajout d'un FlushVol régulier dans FileTask pour conserver lintégrité des
+	volumes en ligne.
+	Ce flush se fait toutes les 30 secondes sur tous les volumes après une
+	requête quelconque à FileTask.
+
+20/1/93
+• Ajout reconnaisance trames ASM/HypteK dans MuxTask.p
+
+• Modif. dans ReadCars pour ASM: on peut lire un buffer en cours de réception
+	si ce n'est pas le dernier (InbuffSt<>InBuffEnd).
+	Ceci permet de lire des données alors qu'il y en a en cours de réception
+	dans MuxTask sur un autre buffer de cette même voie (utile quand on
+	reçoit beaucoup de données).
+	
+• Modif. de CountMuxASM lors du démarrage. Maintenant on va lire le premier
+	numéro de voie ASM ainsi que le nombre de voies ASM directement en config.
+	car les mux HypteK ne permettent pas d'auto-configuration.
+	
+• Modif. de DataPack dans MuxTask, la réception des paquets de données contenant
+	des car. DLE pour la transparence n'était pas au point.
+	
+21/1/93
+• Gestion de TRPRINT 2 pour envoyer des données "qualifiées" afin de gérer
+	le reroutage par X29 ou Vidéopad.
+	Ex: TRPRINT 2
+			PRINT CHR$(154);chr$(0)…
+			TRPRINT 0
+
+	Les messages X29 sont envoyés immédiatement, il n'y a pas de bufferisation.
+	
+• Modif. pour envoi en ASM/X avec gestion du bit M (données à suivre).
+
+22/1/93
+• Reconnaissance possible des Modems Hayes™: si un modem Hayes est branché sur le port
+	série, celui-ci est reconnu lors du comptage des modems Dragster.
+	Réglages: serSpeed , 8bits, 1 stop, pas de parité
+
+24/1/93
+• Modification de WAIT pour envoyer le 'Coff' en fin de zone sans bufferisation.
+
+• Modification de 'CallPack' dans MuxTask.p (X25/ASM), tous les caractères à
+	partir de l'espace sont acceptés dans les données d'appel (sauf les '/').
+	Seul les car. à partir du '0' étaient acceptés auparavant.
+
+25/1/93
+• Modification WAIT pour éviter que le N° de zone dépasse le nombre de zones.
+
+9/2/93
+• Modification de Waitconnect pour les modems Dragster, si le status lu est
+	vide, la connexion n'est plus prise en compte (ajout de Str1<>'')…
+
+24/2/93
+• Ajout d'un KillIO avant de fermer le driver série.
+	DragsterBoot restait bloqué quand on voulait Quitter lorsqu'on utilisait
+	un multiplexeur ASM/X (HypteK).
+
+23/4/93
+• Modif de PBCall/PBHCall pour conserver le refnum d'un ParamBlock durant
+	un appel à FileTask. En effet, les Read/Write/GetEof/SetEof remettait le
+	vrai refNum du fichier ouvert à la place du refNum interne de Dragster.
+	Ce bug empêchait FILECOPY de fonctionner correctement en compilé…
+
+25/5/93
+• Ajout de la suppression du Spyer quand on arrête le serveur.
+
+29/6/93
+• Modif du WaitConnect pour Minitel 2. Il y avait un problème avec les
+	RTIC/Philips.
+
+• Modif de MySerReset (Init2Proc) pour configurer le port local en 7bit/paire.
+
+30/6/93
+• Recompil globale avec MPW 3.3…
+
+21/7/93
+• Modif de SendMuxFrame: la transparence de l'ASM/X n'était pas faite sur les
+	trames avec bit M positionnée (NextDataFrame, NextX29Frame).
+	Le contrôle de flux ne se faisait pas sur les trames NextDataFrame, X29Frame,
+	NextX29Frame.
+
+17/8/93
+• RSEEK: remet ERROR à 0 si ok.
+	Attention: un RSEEK après la fin du fichier ne rend pas d'erreur, c'est le
+	prochain Read ou Write qui rendra une erreur.
+
+11/9/93
+• DragsterBootDémo: correction du décryptage du code compilé par DragsterEditDémo.
+
+22/9/93
+• DragsterBoot et BootDémo: modif du dialogue de confirmation d'arrêt du
+	serveur. Deux nouvelles options permettent d'attendre qu'il n'y ai plus
+	personne pour arrêter le serveur ou pour le relancer.
+	
+• Ajout d'une PICT (ID=259) dans le suivi des voies pour la version de démo.
+
+30/9/93
+• Modif de l'allocation mémoire de la tâche de fond. Le message du type
+	"Il manque 0Ko de mémoire…" devrait disparaître !
+
+23/11/93
+• Ajout de TRPRINT 3 -> permet de désactiver les répétitions de caractères
+	en conservant le transcodage des caractères accentués (pour impressions).
+
+25/1/94
+• Ajout de 5 beeps pour prévenir quand le serveur s'arrête quand plus
+	personne n'est connecté.
+
+• CONTROLSN rend toujours une erreur à 0.
+
+4/2/94
+• Mise à jour des CopyRights (déjà un mois que nous sommes en 1994).
+
+10/2/94
+• Correction décryptage des applications compilées avec DragsterEditDémo.
+	La fin du code n'était pas toujours décryptée.
+	
+• Les "beep" indiquant l'arrêt du serveur n'ont lieu que si le serveur
+	ne s'arrête pas immédiatement.
+
+16/2/94
+• Modifications pour l'ASM Transparent Namtel:
+	- CountMuxAsm détecte l'ASM/T en envoyant une trame ASM, un nouveau
+		type 'hardType' a été défini pour l'ASMT,
+	- SendMuxFrame a été modifié,
+	- MuxTask a été modifié.
+	
+18/2/94
+• Lorsque l'on relance le serveur, les menus étaient réinstallés.
+	Ce n'est plus le cas.
+
+• La lecture du nombre de voies X25 ne se faisait pas si AppleTalk ou ADSP
+	n'était pas disponible.
+
+• DragsterBoot ne fonctionne désormais que sous Système 7.
+	Une alerte s'affiche désormais si l'on démarre DragsterBoot sous Système 6.
+	Le code assurant la compatibilité avec le Système 6 a été retiré.
+
+22/2/94
+• CountMuxAsm détecte maintenant automatiquement les multiplexeurs NamTel
+	configurés en ASM/T (ASM Namtel "Transparent").
+
+8/3/94
+• Ajout protection pour librairie QuickBase.
+
+15/3/94
+• OpenSer/SerConfig: ajout du 'no handshake' dans le case. 
+
+12/4/94
+• Modif lecture clé EvE. Si la clé était configurée avec des liaisons 4D
+	mais aucune voie AppleTalk, DragsterBoot plantait.
+
+1/6/94
+• Correction bug: si la fenêtre de suivi des voies était fermée lorsque
+	l'on quittait DragsterBoot, un bus error aléatoire pouvait arriver !
+
+6/7/94
+• Suppression (temporaire) de la protection pour QuickBase.
+
+30/9/94
+• Modification de STATUS$.
+	Les tâches en ASM rendent "Tx.X25.", les tâches en ASM/T (NAMTEL) rendent
+	"Tx.X25T".
+
+• Utilisation de BlockMoveData partout où cela était possible.
+
+12/10/94
+• Modification dans MuxTask de CallPack qui décode les paquets d'appels.
+	Sur les boitiers NAMTEL, le champs PCV est vide et il manquait donc un '0'
+	dans le STATUS$. Désormais, les champs PCV et GFA sont remis à 0 si ils
+	sont vides.
+
+27/10/94
+• Ajout du support des ports série supplémentaires (Carte CSI).
+	Le champs SerPort de la ressource CONF peut donc accepter les valeurs suivantes:
+	> 0 = port modem
+	> 1 = port imprimante
+	> -1 = port modem + port imprimante
+	> 2 = port 'C'
+	> 3 = port 'D', etc…
+
+3/11/94
+• Correction gestion des ports série supplémentaires…
+	Le numéro de référence du Driver n'était pas recalculé durant la phase 2 du boot.
+
+23/11/94
+• Modification de la protection. Une installation automatique se fait après l'insertion
+	de la disquette originale.
+	La disquette ne sera désormais demandée qu'avec chaque mise à jour.
+
+25/11/94
+• Modification de l'affichage du status dans DragsterBoot.
+	L'affichage se fait en fonction de la taille de la fenetre.
+
+14/12/94
+• Modification des Input et Wait pour ne pas supprimer le dernier caractère des
+	informations reçues se terminant par un CR.
+	En effet si on envoyait 123<cr> on ne recevait que 12<cr> à cause du filtrage X3.
+
+06/03/95
+• Les préférences de DragsterBoot sont désormais enregistrées dans un fichier séparé.
+	Ce fichier est créé automatiquement, il contient la ressource 'CONF' qui sera
+	utilisée par DragsterBoot.
+	Le nom de ce fichier est le même que celui de DragsterBoot, suivi de " - prefs".
+
+• Modification du boot pour fonctionner avec un Minitel2 en serveur normal.
+	Une clé EvE doit être présente.
+	La config normale est donc 0/0/0.
+
+27/03/95
+• Modification de MuxTask pour ANCITEL, les données d'appel étaient décalées
+	d'un caractère vers la droite.
+
+30/03/95
+• Ajout d'un UseResFile(prefs) avant la phase de boot pour être sûr de charger
+	la ressource de configuration qui se trouve dans le fichier de prefs.
+
+• Modification de RENAME, un test est ajouté pour vérifier que le nouveau nom
+	est différent de l'ancien.
+
+6/4/95
+• Modification de CountModem, on envoie un ATE0 avant de scruter les modems Dragster
+	ceci évite à un modem Hayes de nous renvoyer en écho les messages de scrutation
+	des modems Dragster.
+
+• DragsterBoot accepte de fonctionner en mode "démo". Un contrôle du mode démo a été
+	ajouté pour les appels sur modem Hayes, sur modems Dragster et sur boitiers ASM.
+
+20/4/95
+• Modification de INPUTMODE.
+	Syntaxe: INPUTMODE flags,0
+	flags = somme des constantes suivantes
+		1 = pas de CursorOff après saisie
+		2 = remapping ligne 0 sur ligne 1 et pas d'effacement de la ligne 0
+				modifie CLS, LOCATE, CANEOL, MESSAGE, ZONE
+
+	Ex: INPUTMODE 2,0 -> plus d'utilisation de la ligne 0 par Dragster
+			INPUTMODE 0,0 -> retour au fonctionnement "normal" de Dragster
+
+24/4/95
+• InSilentFlag est repassé en Boolean au lieu d'un Byte. Ceci décalait les TCB.
+
+10/07/95
+• Correction du OPEN, si une erreur intervenait, le fileref du fichier était remis
+	à 0.
+	
+• Correction de OPEN, si le fichier était ouvert (err -49), il restait ouvert.
+	Maintenant il est refermé dans le OPEN.
+	
+2/01/96
+• Modification de l'envoi des trames X25 (SendMuxAsm).
+	Le bit M n'est positionné que si on a un paquet plein (128 octets).
+
+2/04/96
+• La touche correction sur les multiplexeurs ASM (Namtel et Hyptek) était
+	mal gérée lorsque la zone était vide.
+
+6/8/96
+• Correction de WAITCONNECT, EndTime était calculée aléatoirement.
+
+2/9/96
+• Correction de SETEOF: le fpos est repositionné à la fin du fichier
+	si il se trouvait après la nouvelle fin de fichier.
+	
+18/3/98
+• Modification de DATE$ et DATE2SECS pour l'an 2000.
+  DATE$(-2) renvoie une date au format JJ/MM/AAAA
+	DATE$(-3) renvoie une date au format AAAAMMJJ
+  DATE2SECS reconnait ces nouveaux formats ainsi que JJ/MM/AAAAhh:mm:ss
+
+24/4/98
+• Modif de CountMuxTask dans DragsterBoot pour détecter correctement la
+	nouvelle version des boitiers ModComp 64cv qui ne rendaient plus la même erreur.
+
+27/4/98
+• Nouvelle correction de CountMuxTask, le buffer de réception est désormais
+  complètement vidé avant la premier envoi de trame.
+
+28/4/98
+• Correction dans MuxTask, paqlen n'était pas décrémenté lors de chaque
+	appel à GetNext. Nouvelle version plus optimisée de GetNext.
+
+14/5/98
+• Sur PPC, passage de l'éxecution des taches de communication sans interruption.
+
+
+>>>>
+
+Modif protection pour utiliser des numéros de série
+
+16/8/99
+• Ajout de SerSetBuf après l'ouverture des drivers série dans INITProc1
+
+
+Pour toute information, suggestion ou rapport de bug, contactez:
+
+JCA S.A.
+Support Technique Dragster
+69/71 avenue Foch
+94100 St Maur des Fossés
+
+Tél: +33 1 43 97 34 34
+Fax: +33 1 43 97 17 17
+Email: support@jca.fr
+Web: http://www.jca.fr/
