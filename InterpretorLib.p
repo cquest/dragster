@@ -1,0 +1,1 @@
+UNIT InterpretorLib;INTERFACEUSES Types;TYPE	JT= ARRAY [0..300] OF RECORD		JumpInst: INTEGER;	{ $4EF9  JUMP }		JumpAddr: Ptr;	END;	JTPtr = ^JT;	VAR	JumpTable			: JTPtr;	lockExternal	: BOOLEAN;	{ indique si la routine externe doit être conservée }	PROCEDURE InitInterpretorLib;PROCEDURE CleanUpLib;IMPLEMENTATION{$I InterpretorLib.inc.p }END. { of UNIT }
