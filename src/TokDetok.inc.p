@@ -1,1 +1,3889 @@
-{$SETC DEBUG=TRUE}USES	TextUtils,			{$U $$Shell(PUtilities) }Utilities;TYPE	{ Types de caractères }	jeucar = (alpha,num,sep,special);	{ Types des unités syntaxique }	utype	 = (nom,nom_chaine,cst_chaine,cst_num,autre);CONST	{ on recupere les constantes des tokens }	{$I TkTokenCst.p}	zero=0;					     VAR		 			Error			: INTEGER;          SharedFlag: boolean;		     { Flag indiquant les var partagées }          fini	    : boolean;		     { Booleen de sortie }          i	    		: integer;		     { Variable de comptage }          u	    		: str255;		     		{ Unite syntaxique }          typu	    : utype;		     		{ Type de l'unite  }          typetrouve,			     					{ Type du mot réservé trouvé }          numtrouve : integer;		     	{ Numéro du mot réservé trouvé }					{ Resultats intermédiaires }          ResFactor,			   { Factor }          ResTerm,			     { Term }          ResExpr,			     { Expr }          ResSexpr,			     { Sexpr }          ResFunc,			     { FuncCall }          ResProc,			     { ProcCall }          ResEtiq,			     { EtiqCall }          ResCont   : TParamHandle;		   { ContStruct }          { Types intermédiaires }          tpfactor,			     { Factor }          tpterm,			     { Term }          tpsexpr,			     { Sexpr }          tpexpr,			     { Expr }          tpfunc,			     { FuncCall }          tpproc,			     { ProcCall }          tpetiq,			     { EtiqCall }          tpaffect  : integer;		     { Affectation }          NumVar,			     { Variables de travail }          TkVar	    : Integer;		     { venant de AddVar }          PileWf    : TContPile;	     { piles d'imbrications }					MotsTries	: ARRAY [0..MaxMots] OF INTEGER;	{ Tableau des tokens triés }					{==============================================================================}{			       F O R W A R D S				       }{==============================================================================}PROCEDURE expr; FORWARD;PROCEDURE ListeInst; FORWARD;PROCEDURE ListeDeTok(e: TparamPtr; VAR s: str255); FORWARD;{$S INIT}{==============================================================================}{$IFC DEBUG}PROCEDURE DebugNum(chaine: Str255; Num:INTEGER;Go:BOOLEAN);VAR Chaine2: Str255;BEGIN	NumToString(Num,Chaine2);	IF Go THEN Chaine2:=concat(Chaine2,';g');	DebugStr(concat(Chaine,Chaine2));END;{$ENDC}{ initialisation de la table des routines externes }PROCEDURE InitExtern;VAR				i,OldRes: INTEGER;		FileName: Str255;		Err: OsErr;		catpb: CInfoPBRec;		fcbpb: FCBPBRec;		theDir: LONGINT;		s: Str255;			PROCEDURE AddExtern(LeType:OsType);		VAR		i,j,k: INTEGER;		TheRes: Handle;		ResName: Str255;		TheID: INTEGER;		TheType: ResType;		TheCar: Char;		TheTest: BOOLEAN;		Num: INTEGER;		TheToken: str20;		L: INTEGER;		b:Boolean;	BEGIN		Num := Count1Resources(LeType);		FOR i := 1 TO Num DO BEGIN			TheRes := Get1IndResource(LeType,i);					{ on charge la routine externe }			IF TheRes = NIL THEN Cycle;			GetResInfo (theRes, theID, theType, ResName);	{ quel est son nom ? }			L:=Length(ResName)+1;			IF ODD(L) THEN L:=L+1;			ExtNames[NbTok-NbTokens] := GetHandleSize(ExtNamesH);			SetHSize(Handle(ExtNamesH),GetHandleSize(ExtNamesH)+L);			HLock(ExtNamesH);			BlockMoveData(@ResName[0],Ptr(Ord4(ExtNamesH^)+ExtNames[NbTok-NbTokens]),L);			HUnlock(ExtNamesH);						UpperString(ResName,TRUE);											{ nom en majuscules SVP }			IF ResName <> '' THEN BEGIN				j := 0;				REPEAT					j := j+1;					TheCar := ResName[j];					TheTest := (j>length(ResName));					b:=NOT((TheCar IN ['A'..'Z','_']) | ((j>1) & (TheCar IN ['0'..'9'])));					TheTest := TheTest | b;				UNTIL TheTest;				{ ici j contient le premier caractère qui ne fait pas partie du				  nom du token de la routine externe }				IF j = 1 THEN Cycle;	{ nom du token incorrect ! }								IF j>20 THEN					TheToken := Copy(ResName,1,20)	{ on ne garde que les 20 premiers car. }				ELSE					TheToken := Copy(ResName,1,j-1);								FOR k := 0 TO nbTok DO			{ token déjà existant ? }					IF mots^^[k].motRes = TheToken THEN					BEGIN						j:= 1; Leave;					END;				IF j=1 THEN Cycle;								nbTok := NbTok + 1;				SetHSize(Handle(mots),(NbTok+1)*SizeOf(TRes));								HLock(Handle(mots));				WITH mots^^[NbTok] DO BEGIN					MotRes := TheToken;	{ le nom du token }					tfunc := fProc;			{ type 'PROCEDURE' par défaut }					token := ExtToken;	{ c'est un externe }					nbParms := 0;				{ raz }					JumpCode := -1;					FlagAnalys := TRUE;					TheResC := TheRes;	{ Handle vers la resource externe }					HUnlock(TheResC);		{ on déverouille }					HPurge(TheResC);		{ et on libère   }					TypeExt := LeType;	{ type de l'externe }										{ analyse des paramètres }					WHILE (j<=length(ResName)) & (ResName[j]<>')') & (nbparms<maxparams) DO BEGIN						CASE ResName[j] OF							'(': IF tFunc = fProc THEN tFunc := fNum;														'$':	{ expression chaine (passage par adresse, non modifiable) }							BEGIN								IF j=length(MotRes)+1 THEN tfunc := fStr								ELSE BEGIN									nbParms := nbParms + 1;									tParms[nbParms] := fExpStr;								END;							END;									'%':	{ expression numérique (passage par valeur) }							BEGIN								nbParms := nbParms + 1;								tParms[nbparms] := fExpNum;							END;														'S':	{ variable chaine (passage par adresse) }							BEGIN								nbParms := nbParms + 1;								tParms[nbParms] := fVarStr;							END;														'N':	{ variable numérique (passage par adresse) }							BEGIN								nbParms := nbParms + 1;								tParms[nbParms] := fVarNum;							END;													END;	{CASE}						j := j+1;					END;	{WHILE}					IF tFunc = fStr THEN MotRes := concat(motres,'$');				END;	{WITH mots…}				HUnlock(Handle(Mots));			END;	{IF Resname<>'' THEN}		END;	{FOR i := 1 TO Count1Res… }	END;	{ AddExtern }	BEGIN	i := 1;	OldRes := CurResFile;	ExtNamesH := NewHandle(0);	NbExtFiles := -1;	REPEAT		SetResLoad(TRUE);		GetIndString(FileName,ExtFileName,i);		IF FileName <> '' THEN BEGIN			SetResLoad(FALSE);		{ on ne veut pas charger les resources }			Err := OpenResFile(FileName);			IF Err <> -1 THEN			BEGIN				NbExtFiles := NbExtFiles + 1;				ExtFiles[NbExtFiles] := Err;				AddExtern(ExtType1);	{ DEXT }				AddExtern(ExtType2);	{ DEXC }			END			ELSE			BEGIN		{ on regarde si c'est un dossier… }				WITH fcbPB DO	{ on récupère le vRefnum de l'appli }				BEGIN					iovRefNum := 0;					ioRefNum := gAppResRef;					ioFCBIndx := 0;					ioNamePtr := @s;					Err := PBGetFCBInfoSync(@fcbPB);				END;				WITH catpb DO				BEGIN					iovRefNum := 0;					ioDirID := 0;					ioNamePtr := @filename;					ioFDirIndex := 0;					Err := PBGetCatInfoSync(@catpb);					theDir := ioDrDirID;					IF (Err=NoErr) & BTst(ioFlAttrib,4) THEN		{ c'est un dossier ! }					BEGIN						ioFDirIndex := 1;						ioDirID := theDir;						WHILE PBGetCatInfoSync(@catpb)=NoErr DO						BEGIN							Err := HOpenResFile(fcbPB.ioFCBvRefNum,theDir,fileName,fsRdPerm);							IF Err<>-1 THEN							BEGIN								NbExtFiles := NbExtFiles + 1;								ExtFiles[NbExtFiles] := Err;								AddExtern(ExtType1);	{ DEXT }								AddExtern(ExtType2);	{ DEXC }							END;							ioFDirIndex := ioFDirIndex+1;	{ on passe au fichier suivant }							ioDirID := theDir;						{ on se remet dans le bon dossier }						END;					END;				END;			END;						i := i+1;		END;	UNTIL (FileName = '') OR (NbExtFiles=kMaxExtFiles);	UseResFile(OldRes);	AddExtern(ExtType1);		{ on ajoute les routines qui se trouve dans DragsterEdit }	AddExtern(ExtType2); 	SetResLoad(TRUE);END;PROCEDURE InitTokens; {call it once}     TYPE parHandle = ^ParPtr;          ParPtr    = ^ParRec;          ParRec    = ARRAY[0..2000] OF integer;     VAR i,j,NumI: integer;         temps: str255;         MyParms: ParHandle;		 TheType: ResType;BEGIN	Dbg:=False;	ResFactor:=TParamHandle(NewHandle(0));{ Factor }	HNoPurge(Handle(ResFactor));	ResTerm:=TParamHandle(NewHandle(0));  { Term }	HNoPurge(Handle(ResTerm));	ResExpr:=TParamHandle(NewHandle(0));  { Expr }	HNoPurge(Handle(ResExpr));	ResSexpr:=TParamHandle(NewHandle(0)); { Sexpr }	HNoPurge(Handle(ResSexpr));	ResFunc:=TParamHandle(NewHandle(0));  { FuncCall }	HNoPurge(Handle(ResFunc));	ResProc:=TParamHandle(NewHandle(0));  { ProcCall }	HNoPurge(Handle(ResProc));	ResEtiq:=TParamHandle(NewHandle(0));  { EtiqCall }	HNoPurge(Handle(ResEtiq));	ResCont:=TParamHandle(NewHandle(0));  { ContStruct }	HNoPurge(Handle(ResCont));	ResListe:=TParamHandle(NewHandle(0)); { Liste }	HNoPurge(Handle(ResListe));	MyParms:=ParHandle(GetResource('PARA',260));	HNoPurge(Handle(MyParms));	Mots:=HMRes(NewHandle(SizeOf(TRes)*(nbtokens+1)));	HNoPurge(Handle(Mots));	HLock(Handle(Mots));	NbTok := NbTokens;	NumI:=0;		FOR i:=0 TO nbtokens DO	WITH mots^^[i] DO	BEGIN		token:=i;		GetIndString(Temps,260,i+1);		MotRes:=Temps;		flagAnalys:=MyParms^^[NumI]=1;		JumpCode:=MyParms^^[NumI+1];		tfunc:=MyParms^^[NumI+2];		nbparms:=MyParms^^[NumI+3];		NumI:=NumI+4;		FOR j:=1 TO nbParms DO		BEGIN			tparms[j]:=MyParms^^[NumI];			NumI:=NumI+1;		END;		TheResC:=Nil;	END;		HunLock(Handle(Mots));	ReleaseResource(Handle(MyParms));	InitExtern;	{ Trier le tableau des TokensTriés pour recherche + rapides }	FOR i:=0 TO NbTok DO	BEGIN		MotsTries[i] := i;		j:=i-1;		WHILE (j>=0) & (Mots^^[i].motRes < Mots^^[MotsTries[j]].motRes) DO		BEGIN			MotsTries[j+1]:=MotsTries[j];			j:=j-1;		END;		MotsTries[j+1]:=i;	END;		HunLock(Handle(Mots));END;{==============================================================================}{			       UTILITAIRES pour TOKENIZE/DETOKENIZE			       }{==============================================================================}{ retrouve un token dans la table des 'mots' }PROCEDURE FindExtToken(e:TParamPtr);VAR	i: INTEGER;	BEGIN	FOR i := nbTokens+1 TO nbTok DO		IF mots^^[i].MotRes = e^.extInfos.ExtName THEN		BEGIN			e^.tk := i;			Leave;		END;END;{ Rend le token suivant }PROCEDURE NextToken(VAR e:TParamPtr;offset:LONGINT);BEGIN	e:= TParamPtr(Ord4(e)+offset);	END;{$S TOKENISEUR}{==============================================================================}{			     I N I T T A B L E S			       }{==============================================================================}PROCEDURE InitTables;BEGIN	NbCst:=0;	NbVar:=0;	SetHSize(Handle(VarTab),0);	SetHSize(Handle(CstTab),0);	NbWF:=0;	BaseIndex:=0;END;{==============================================================================}{			       T O K E N I Z E				       }{==============================================================================}PROCEDURE Tokenize;VAR i: integer; Start: integer; {Size: longint;}BEGIN	MoveHHi(Handle(Mots));	HLock(Handle(Mots));	Start:=Curs;	ListeInst;	BaseIndex:=BaseIndex+ResListe^^.LParam;	IF ErrFlag THEN	BEGIN		ErrPos:=Curs-Start;		GetIndString(ErrorStr,ErrorStrings,Error);	END;	HUnlock(Handle(Mots));		SetHSize(Handle(ResFactor),0);{ Factor }	SetHSize(Handle(ResTerm),0);  { Term }	SetHSize(Handle(ResExpr),0);  { Expr }	SetHSize(Handle(ResSexpr),0); { Sexpr }	SetHSize(Handle(ResFunc),0);  { FuncCall }	SetHSize(Handle(ResProc),0);  { ProcCall }	SetHSize(Handle(ResEtiq),0);  { EtiqCall }	SetHSize(Handle(ResCont),0);  { ContStruct }END;{==============================================================================}{			     U T I L I T A I R E S			       }{==============================================================================}FUNCTION typecar(c: char): jeucar;BEGIN { Rend le type du caractere }     IF (c IN ['A'..'Z','a'..'z','_']) THEN typecar:=alpha     ELSE IF (c IN ['0'..'9']) THEN typecar:=num     ELSE IF (c IN ['=','<','>','+','-','*','/','(',')','$',',',';','.','"',':']) THEN typecar:=special     ELSE typecar:=sep;END;FUNCTION alphad(c: char): boolean;BEGIN { Rend vrai si le caractere est alpha }     alphad:=(c IN ['A'..'Z','a'..'z','_']);END;FUNCTION alphanum(c: char): boolean;BEGIN{ Rend vrai si le caractere est alphanumérique }     alphanum:=(c IN ['A'..'Z','a'..'z','0'..'9','_']);END;FUNCTION numd(c: char): boolean;BEGIN { Rend vrai si le caractere est numérique }     numd:=(c IN ['0'..'9']);END;PROCEDURE Uppc(VAR temp: str255);     VAR i: integer;BEGIN { Met la chaine en Majuscules }     FOR i:=1 TO length(Temp) DO          IF (temp[i] IN ['a'..'z']) THEN temp[i]:=chr(ord(temp[i])-32);END;PROCEDURE CopyHandle(VAR h1,h2: TParamHandle);     { copie de h1 vers h2 }BEGIN	 IF GetHandleSize(Handle(h1))=0 THEN 	 BEGIN	 	SetHSize(Handle(h2),0);		EXIT(CopyHandle);	 END;     SetHSize(Handle(h2),h1^^.lparam);     BlockMoveData(Ptr(h1^),Ptr(h2^),h1^^.lparam);END;PROCEDURE AddCar2(VAR s:str255; c: char);VAR l: integer;BEGIN	{ incrementer le nombre d'octets }	L:=ORD(s[0]);	IF l<255 THEN	BEGIN		l := L+1;		s[0] := CHR(L);		s[L]:=c;	END;END;{==============================================================================}{			  T O K E N I S A T I O N			       }{==============================================================================}{==============================================================================}{== GetU: Recupere l'Unite Syntaxique suivante,          à partir de Curs dans TempIn.          En Sortie: U	 : unité syntaxique                     TypU: type de cette unité                     Curs: modifié==}PROCEDURE getu;     VAR fini: boolean; start,i: Longint;     FUNCTION Fdl: boolean;     BEGIN          Fdl:=(Tempin^[Curs]=chr(13));     END;BEGIN { Chope la prochaine Unité Syntaxique }     u:='';     { skip blanc, tabs, nl }     fini:=false;     WHILE (NOT Fdl) & (NOT fini) DO       BEGIN          fini:=NOT (typecar(Tempin^[curs])=sep);          IF NOT fini THEN curs:=curs+1;       END;     { sortie fin de ligne }     IF Fdl THEN EXIT(getu);     { recup de l'unite }     start:=curs;     CASE typecar(Tempin^[start]) OF       alpha: { on prend tout alpha }          BEGIN               typu:=nom;               fini:=false;               WHILE (NOT Fdl) & (NOT fini) DO                 BEGIN                    fini:=NOT Alphad(Tempin^[curs]);                    IF NOT fini THEN curs:=curs+1;                 END;               fini:=false;               WHILE (NOT Fdl) & (NOT fini) DO                 BEGIN                    fini:=NOT AlphaNum(Tempin^[curs]);                    IF NOT fini THEN curs:=curs+1;                 END;               IF NOT Fdl THEN                    IF Tempin^[curs]='$' THEN                       BEGIN curs:=curs+1;                             typu:=nom_chaine;                       END;          END;       num:   { on prend tout numerique }          BEGIN               typu:=cst_num;               fini:=false;               WHILE (NOT Fdl) & (NOT fini) DO                 BEGIN                    fini:=NOT Numd(Tempin^[curs]);                    IF NOT fini THEN curs:=curs+1;                 END;{******* on ne prend pas encore les virgules flottantes               If not Fdl then                    If Tempin^[curs]='.' then                       begin                         curs:=curs+1;                         fini:=false;                         While (not Fdl) & (not fini) do                           begin                              fini:=not Numd(Tempin^[curs]);                              if not fini then curs:=curs+1;                           end;                       end; *******}          END;       special:	   { caractere speciaux }          BEGIN	   { on va rechercher les doublons <=, >=, <> }               typu:=autre;               curs:=curs+1;               IF NOT Fdl THEN                  CASE tempin^[start] OF                     '<': IF (tempin^[curs]='>') | (tempin^[curs]='=')                             THEN curs:=curs+1;                     '>': IF tempin^[curs]='='                             THEN curs:=curs+1;                     '"': BEGIN                            typu:=cst_chaine;                            fini:=false;                            WHILE (NOT Fdl) & (NOT fini) DO                              BEGIN                                 fini:=Tempin^[curs]='"';                                 curs:=curs+1;                              END;                          END;                  END;          END;     END;		 IF curs > Start + 200 THEN curs := Start + 200;     { on rend le resultat tant attendu }		 u[0]:=Chr(curs-start);     BlockMoveData(@TempIn^[Start],@u[1],Curs-Start);		      { on met en majuscules si ce n'est pas une constante chaine }     IF (Typu IN [nom,nom_chaine,autre]) THEN Uppc(u);END;PROCEDURE AddFor;BEGIN     IF NbWF=MaxImb THEN        BEGIN          ErrFlag:=True;          Error:=ErrImbWf;          EXIT(AddFor);        END;     NbWf:=NbWf+1;     WITH PileWf[NbWf] DO       BEGIN          WhileFlag:=1;          WFIIndex:=BaseIndex+CurIndex;          WNEIndex:=0;          Brklist:= NIL;					ContList := NIL;       END;END;PROCEDURE AddWhile;BEGIN     IF NbWF=MaxImb THEN        BEGIN          ErrFlag:=True;          Error:=ErrImbWf;          EXIT(AddWhile);        END;     NbWf:=NbWf+1;     WITH PileWf[NbWf] DO       BEGIN          WhileFlag:=0;          WFIIndex:=BaseIndex+CurIndex;          WNEIndex:=0;          Brklist:= Nil;					ContList := NIL;       END;END;PROCEDURE AddWend;     VAR  AdrFor: TParamPtr;          i: integer;          Bl: HBrkLst;BEGIN     IF NbWF=0 THEN        BEGIN          ErrFlag:=True;          Error:=ErrWend;          EXIT(AddWend);        END;     WITH PileWf[NbWf] DO       BEGIN          IF WhileFlag<>0 THEN             BEGIN               ErrFlag:=True;               Error:=ErrWend;               EXIT(AddWend);             END;          WNEIndex:=BaseIndex+CurIndex;          RepIndex:=WFIIndex;          { on met a jour le WHILE et les BREAK correspondant }          AdrFor:=TParamPtr(Ord4(CodeHdle^)+WFIIndex);          { positionne sur 1er parametre }          AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);               AdrFor:=TParamPtr(Ord4(AdrFor)+AdrFor^.LParam);          { positionne sur offset du next }          AdrFor^.Num:=WNEIndex;          Bl:=BrkList;          WHILE (Bl<>Nil) DO            BEGIN               { positionnement sur le break }               AdrFor:=TParamPtr(Ord4(CodeHdle^)+Bl^^.BrkIndex);               AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);               AdrFor^.Num:=WNEIndex;               Brklist:=Bl;               Bl:=Bl^^.NextBrk;               DisposHandle(Handle(BrkList));            END;       END;     NbWf:=NbWf-1;END;PROCEDURE AddNext;     VAR  AdrFor: TParamPtr;          i: integer;          Bl: HBrkLst;BEGIN     IF NbWF=0 THEN        BEGIN          ErrFlag:=True;          Error:=ErrNext;          EXIT(AddNext);        END;     WITH PileWf[NbWf] DO       BEGIN          IF WhileFlag<>1 THEN             BEGIN               ErrFlag:=True;               Error:=ErrNext;               EXIT(AddNext);             END;          WNEIndex:=BaseIndex+CurIndex;          RepIndex:=WFIIndex;          { on met a jour le FOR et les BREAK correspondant }          AdrFor:=TParamPtr(Ord4(CodeHdle^)+WFIIndex);          { positionne sur 1er parametre }          AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);          FOR i:=1 TO 3 DO            BEGIN               AdrFor:=TParamPtr(Ord4(AdrFor)+AdrFor^.LParam);            END;          { positionne sur offset du next }          AdrFor^.Num:=WNEIndex;          Bl:=BrkList;          WHILE (Bl<>Nil) DO            BEGIN               { positionnement sur le break }               AdrFor:=TParamPtr(Ord4(CodeHdle^)+Bl^^.BrkIndex);               AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);               AdrFor^.Num:=WNEIndex;               Brklist:=Bl;               Bl:=Bl^^.NextBrk;               DisposHandle(Handle(BrkList));            END;       END;     NbWf:=NbWf-1;END;PROCEDURE AddBreak;VAR		Pt: HBrkLst;			NumWF: integer; Trouve: Boolean;BEGIN     { recherche du premier While/For}     NumWF:=NbWF; Trouve:=False;     WHILE (NumWF>0) & (NOT trouve) DO     BEGIN          trouve:=PileWf[NumWF].WhileFlag IN [0,1,3];	{ for/while/repeat }          IF NOT Trouve THEN NumWF:=NumWf-1;     END;     IF NumWF=0 THEN        BEGIN          ErrFlag:=True;          Error:=ErrBreak;          EXIT(AddBreak);        END;     WITH PileWf[NumWF] DO       BEGIN          { ajout du break en tete de liste }          Pt:=HBrkLst(NewHandle(SizeOf(TBrkLst)));          HNoPurge(Handle(Pt));          Pt^^.NextBrk:=BrkList;          Pt^^.BrkIndex:=BaseIndex+CurIndex;          BrkList:=Pt;       END;END;PROCEDURE AddContinue;VAR	Pt: HBrkLst;		NumWF: integer; Trouve: Boolean;BEGIN     { recherche du premier While/For}     NumWF:=NbWF; Trouve:=False;     WHILE (NumWF>0) & (NOT trouve) DO     BEGIN          trouve:=PileWf[NumWF].WhileFlag IN [0,1,3];	{ for/while/continue }          IF NOT Trouve THEN NumWF:=NumWf-1;     END;     IF NumWF=0 THEN        BEGIN          ErrFlag:=True;          Error:=ErrCont;          EXIT(AddContinue);        END;     WITH PileWf[NumWF] DO       IF WhileFlag=3 THEN	{ REPEAT/UNTIL }			 BEGIN          { ajout du CONTINUE en tete de liste }          Pt:=HBrkLst(NewHandle(SizeOf(TBrkLst)));          HNoPurge(Handle(Pt));          Pt^^.NextBrk:=BrkList;          Pt^^.BrkIndex:=BaseIndex+CurIndex;          ContList:=Pt;					RepIndex := 0;       END			 ELSE       BEGIN          RepIndex:=WFIIndex;       END;END;PROCEDURE AddIf;BEGIN     IF NbWf=MaxImb THEN        BEGIN          ErrFlag:=True;          Error:=ErrImbWf;          EXIT(AddIf);        END;     NbWf:=NbWf+1;     WITH PileWf[NbWf] DO       BEGIN          WhileFlag:=2;          WFIIndex:=BaseIndex+CurIndex;          WNEIndex:=0;          EndIndex:=0;       END;END;PROCEDURE AddElse;BEGIN     IF NbWf=0 THEN        BEGIN          ErrFlag:=True;          Error:=ErrElse;          EXIT(AddElse);        END;     WITH PileWf[NbWf] DO       BEGIN          IF WhileFlag<>2 THEN             BEGIN               ErrFlag:=True;               Error:=ErrNext;               EXIT(AddElse);             END;          WNEIndex:=BaseIndex+CurIndex;       END;END;PROCEDURE AddEndif;     VAR AdrFor: TParamPtr;BEGIN     IF NbWf=0 THEN        BEGIN          ErrFlag:=True;          Error:=ErrEndif;          EXIT(AddEndif);        END;     WITH PileWf[NbWf] DO       BEGIN          IF WhileFlag<>2 THEN             BEGIN               ErrFlag:=True;               Error:=ErrNext;               EXIT(AddEndif);             END;          EndIndex:=BaseIndex+CurIndex;          { on met a jour le IF et le ELSE correspondant }          AdrFor:=TParamPtr(Ord4(CodeHdle^)+WFIIndex);          { positionne sur 1er parametre }          AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);          { positionne sur 2e parametre }          AdrFor:=TParamPtr(Ord4(AdrFor)+AdrFor^.LParam);          { positionne sur offset du else }          AdrFor^.Num:=WNEIndex;          AdrFor:=TParamPtr(Ord4(AdrFor)+AdrFor^.LParam);          { positionne sur offset du endif }          AdrFor^.Num:=EndIndex;          { positionne le ELSE sur le ENDIF, si ELSE existe}          IF WNEIndex > 0 THEN             BEGIN               AdrFor:=TParamPtr(Ord4(CodeHdle^)+WNEIndex);               { positionne sur 1er parametre }               AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);               AdrFor^.Num:=EndIndex;             END;       END;     Nbwf:=Nbwf-1;END;PROCEDURE AddRepeat;BEGIN     IF NbWF=MaxImb THEN        BEGIN          ErrFlag:=True;          Error:=ErrImbWf;          EXIT(AddRepeat);        END;     NbWf:=NbWf+1;     WITH PileWf[NbWf] DO       BEGIN          WhileFlag:=3;	{ c'est un REPEAT }          WFIIndex:=BaseIndex+CurIndex;          WNEIndex:=0;          Brklist:= Nil;		{ liste des BREAK en attente de UNTIL }					ContList := NIL;	{ liste des CONTINUE en attente de UNTIL }       END;END;PROCEDURE AddUntil(e:TParamPtr);{ e est l'expression de condition de fin du UNTIL }VAR		AdrBreak: TParamPtr;			i: integer;			Bl: HBrkLst;			BEGIN	IF NbWF=0 THEN	BEGIN		ErrFlag:=True;		Error:=ErrUntil;		EXIT(AddUntil);	END;     WITH PileWf[NbWf] DO       BEGIN          IF WhileFlag<>3 THEN	{ on a bien un REPEAT en cours ? }             BEGIN               ErrFlag:=True;               Error:=ErrUntil;               EXIT(AddUntil);             END;          WNEIndex:=BaseIndex+CurIndex;          RepIndex:=WFIIndex;          { on met a jour les BREAK correspondant }          Bl:=BrkList;          WHILE (Bl<>Nil) DO            BEGIN               { positionnement sur le break }               AdrBreak:=TParamPtr(Ord4(CodeHdle^)+Bl^^.BrkIndex);               AdrBreak:=TParamPtr(Ord4(AdrBreak)+SizeOf(TDummy)+2);               AdrBreak^.Num:=WNEIndex+e^.lparam-(SizeOf(TDummy)+2);	{ BREAK saute après la condition }               Brklist:=Bl;               Bl:=Bl^^.NextBrk;               DisposHandle(Handle(BrkList));            END;          { on met a jour les CONTINUE correspondant }          Bl:=ContList;          WHILE (Bl<>Nil) DO            BEGIN               { positionnement sur le CONTINUE }               AdrBreak:=TParamPtr(Ord4(CodeHdle^)+Bl^^.BrkIndex);               AdrBreak:=TParamPtr(Ord4(AdrBreak)+SizeOf(TDummy)+2);               AdrBreak^.Num:=WNEIndex;	{ CONTINUE saute avant la condition }               ContList:=Bl;               Bl:=Bl^^.NextBrk;               DisposHandle(Handle(ContList));            END;       END;     NbWf:=NbWf-1;END;{==============================================================================}{== AddVar: Ajoute dans les tables d'identificateurs ou de constantes          la nouvelle valeur, si celle-ci n'existait pas déja.          Tient compte du Flag "SharedFlag".          Donne un message d'Erreur en cas d'incompatibilité de types          En Sortie: Num : Numéro de l'indirection (Position dans la table )                     Tk	 : Token pour cette indirection                     NbVar ou NbCst peuvent être incrémenté.==}PROCEDURE AddVar(s: str255; tp: integer; VAR Num,tk: Integer);     VAR trouve: boolean;          i: integer;BEGIN     IF tp=fcststr THEN       BEGIN	   	   	  	{ ####### on limite a 63 caracteres ####### }		  		IF length(s)>63 THEN s[0]:=chr(63);		            { recherche dans la table des constantes }          Tk:=TkSTRCST;          Trouve:=False; i:=0;          WHILE (NOT trouve) & (i<NbCst) DO          BEGIN               i:=i+1;               Trouve:=(CstTab^^[i]=s);          END;          IF trouve THEN            BEGIN { on rend la position }               Num:=i;            END          ELSE            BEGIN { on rajoute la constante }               NbCst:=NbCst+1;               Num:=NbCst;               SetHSize(Handle(CstTab),SizeOf(Str64)*Nbcst);               CstTab^^[NbCst]:=s;            END;       END       ELSE       BEGIN	   	  	{ ####### on limite a 20 caracteres ####### }		  		IF length(s)>20 THEN s[0]:=chr(20);		            { recherche dans la table des variables }          Trouve:=False; i:=0;          WHILE (NOT trouve) & (i<NbVar) DO          BEGIN               i:=i+1;               Trouve:=(VarTab^^[i].NomVar=s);          END;          IF trouve THEN            BEGIN { on rend la position et on verifie la coherence des types }               Num:=i;               WITH VarTab^^[i] DO                 BEGIN                    IF tpVar<>tp THEN                     IF NOT (((tpvar=fetiq) & (tp=fuetiq)) |                             ((tp=fetiq) & (tpvar=fuetiq))) THEN                     BEGIN                         ErrFlag:=True;                         Error:=ErrDef;                         EXIT(AddVar);                     END;                    IF (tp=fetiq) & defined THEN                     BEGIN                         ErrFlag:=True;                         Error:=ErrDDef;                         EXIT(AddVar);                     END;                    IF ((tp=fuetiq) | (tp=fetiq))                         THEN defined:=defined | (tp=fetiq)                         ELSE Shared:=Shared | SharedFlag;                     IF Tp=Fetiq THEN Indir:=BaseIndex+CurIndex;                 END;            END            ELSE            BEGIN { on rajoute l'identificateur }               NbVar:=NbVar+1;               Num:=NbVar;               SetHSize(Handle(VarTab),SizeOf(TVar)*NbVar);               WITH VarTab^^[NbVar] DO                 BEGIN                    NomVar:=s;                    tpVar:=tp;                    IF ((tpvar=fetiq) | (tp=fuetiq))                         THEN defined:=tp=fetiq                         ELSE Shared:=SharedFlag;                    IF Tp=Fetiq THEN Indir:=BaseIndex+CurIndex;                    DimVal:=0;                 END;            END;            { on rend le token approprié }            CASE tp OF              fvarnum:	 tk:=tkNUMVAR;              fvarstr:	 tk:=tkSTRVAR;              fetiq:	 tk:=tkUETIQ;              fuetiq:	 tk:=tkIUETIQ;              finumvar:	 tk:=tkINUMVAR;              fiStrvar:	 tk:=tkISTRVAR;            END;       END;END;{==============================================================================}PROCEDURE addparam(result,p: TParamHandle);BEGIN     SetHSize(Handle(Result),Result^^.lparam+p^^.lparam);     BlockMoveData(Ptr(p^),Ptr(Ord4(Result^)+Result^^.lparam),p^^.lparam);     WITH Result^^ DO     BEGIN          lparam:=lparam+p^^.lparam;          nbparam:=nbparam+1;     END;END;{==============================================================================}PROCEDURE InstStr(s:str255; token: integer; VAR result: TParamHandle);     VAR longueur: integer;BEGIN     Longueur:=length(s)+sizeof(Tdummy)+1;     IF Odd(Longueur) THEN Longueur:=Longueur+1;     SetHSize(Handle(Result),Longueur);     WITH result^^ DO     BEGIN          tk:=token;          BlockMoveData(@s,@Result^^.Param,length(s)+1); {param:=s;}          lparam:=Longueur;     END;END;{==============================================================================}PROCEDURE instnum( n:longint; token: integer; VAR result: TParamHandle);BEGIN     SetHSize(Handle(Result),sizeof(Tdummy)+4);     WITH result^^ DO     BEGIN          tk:=token;          num:=n;          lparam:=sizeof(Tdummy)+4;     END;END;{==============================================================================}PROCEDURE instind( n:integer; token: integer; VAR result: TParamHandle);BEGIN		SetHSize(Handle(Result),sizeof(Tdummy)+2);		WITH result^^ DO     BEGIN          tk:=token;          indir:=n;          lparam:=sizeof(Tdummy)+2;     END;END;{==============================================================================}PROCEDURE instExt(NumTok: INTEGER; VAR result: TParamHandle);BEGIN	SetHSize(Handle(Result),sizeof(Tdummy)+SizeOf(ExtRec));	WITH result^^,result^^.ExtInfos,Mots^^[NumTok] DO	BEGIN		lparam:=sizeof(TDummy)+SizeOf(ExtRec)-SizeOf(TNextI);		tk := ExtToken;		extNbParam := 0;		extType := tfunc;		extName := MotRes;	END;END;{==============================================================================}PROCEDURE inst0(token: integer; VAR result: TParamHandle);BEGIN     IF token = extToken THEN DebugStr('inst0: Token externe !!!');		 SetHSize(Handle(Result),sizeof(Tdummy)+2);     WITH result^^ DO     BEGIN          lparam:=2+sizeof(TDummy);          tk:=token;          nbparam:=0;     END;END;{==============================================================================}PROCEDURE inst1(inst: integer; VAR p1,result: TParamHandle);     VAR r:TParamHandle;BEGIN     r:=TParamHandle(NewHandle(0));     HNoPurge(Handle(r));     inst0(inst,r);     addparam(r,p1);     DisposHandle(Handle(Result));     result:=r;END;{==============================================================================}PROCEDURE inst2(inst: integer; VAR p1,p2,result: TParamHandle);     VAR r:TParamHandle;BEGIN     r:=TParamHandle(NewHandle(0));     HNoPurge(Handle(r));     inst0(inst,r);     addparam(r,p1);     addparam(r,p2);     DisposHandle(Handle(Result));     result:=r;END;{==============================================================================}FUNCTION NumCk(VAR s:str255): boolean;     VAR i:integer; Ck: boolean;BEGIN     Ck:=True;     FOR i:=1 TO length(s) DO          IF NOT (s[i] IN ['0'..'9','.']) THEN ck:=false;     NumCk:=Ck;END;{==============================================================================}FUNCTION tpck1(t1,t2: integer): boolean;BEGIN { t2 est le type accepte }     tpck1:=(((t2=fexp) |             ((t2=fvar) & ((t1=fvar) | (t1=fvarstr) | (t1=fvarnum)                                       | (t1=finumvar) | (t1=fistrvar))) |             ((t2=fexpstr) & ((t1=fstr) | (t1=fvarstr) | (t1=fcststr)                                                          | (t1=fistrvar))) |             ((t2=fexpnum) & ((t1=fnum) | (t1=fvarnum) | (t1=fcstnum)                                                          | (t1=finumvar))) |             ((t2=fvarstr) & ((t1=fvarstr) | (t1=fistrvar))) |             ((t2=fvarnum) & ((t1=fvarnum) | (t1=finumvar))) |             (t2=t1)            ) & (t1<>fundef));END;{==============================================================================}FUNCTION ckNum(t1: integer): boolean;BEGIN { t1 est le type concerne: cknum rend true si numerique }     cknum:=(t1=fnum) | (t1=fvarnum) | (t1=fcstnum) | (t1=finumvar);END;{==============================================================================}FUNCTION ckStr(t1: integer): boolean;BEGIN { t1 est le type concerne: ckStr rend true si str }     ckStr:=(t1=fStr) | (t1=fvarStr) | (t1=fcstStr) | (t1=fiStrvar);END;{==============================================================================}PROCEDURE FuncCall;     VAR i, tkfunc:integer; trouve:boolean; temp,tempB: TParamHandle; Num: Longint;         TempU: Str255; TempTypu: utype;				 dstart, dend, Test, TheTok: INTEGER;BEGIN	Temp:=TParamHandle(NewHandle(0));	HNoPurge(Handle(Temp));	typetrouve:=fundef;	IF (typu IN [nom,nom_chaine]) THEN	BEGIN		{ •••• recherche du mot reserve •••• }(*		Trouve:=false; i:=0;		While (i<=nbtok) & (not trouve) do		With mots^^[i] do		begin			trouve:= (u=MotRes) & FlagAnalys;			if not trouve then i:=i+1;		end;*)		{ Recherche dichotomique du mot réservé }		dStart := 0;		dEnd := NbTok;		Test := (dStart + dEnd) DIV 2;		TheTok := -1;		Trouve := FALSE;		i := 0;		(*		WHILE dStart < dEnd DO		BEGIN			test := (dStart+dEnd) DIV 2;			IF Mots^^[MotsTries[Test]].MotRes<u THEN dStart:= Test+1 ELSE dEnd := Test;		END;		IF Mots^^[MotsTries[Test]].MotRes=u THEN theTok:=MotsTries[test]		ELSE IF Mots^^[MotsTries[NbTok]].MotRes=u THEN theTok := MotsTries[NbTok];*)		REPEAT			WITH Mots^^[MotsTries[Test]] DO			BEGIN				IF MotRes=U THEN TheTok := MotsTries[Test]				ELSE IF MotRes<u THEN dStart:=Test+1 ELSE dEnd := Test;				Test := (dStart + dEnd) DIV 2;			END;		UNTIL (dStart >= dEnd) OR (TheTok<>-1);		IF (theTok <> -1) & (Mots^^[theTok].FlagAnalys) THEN		BEGIN			Trouve := TRUE;			i := TheTok;		END;				IF trouve THEN			BEGIN				typetrouve:=mots^^[i].tfunc;				numtrouve:=i;			END;					IF trouve THEN		{  mot reserve du BASIC }		WITH mots^^[i] DO			IF (tfunc IN [fnum,fstr]) THEN			{ fonction Numerique ou chaine }			BEGIN				getu;				IF nbparms>0 THEN				IF u<>'(' THEN                 BEGIN                    ErrFlag:=True;                    Error:=ErrCall;                    DisposHandle(Handle(Temp));                    EXIT(FuncCall);                 END                 ELSE BEGIN                         tpfunc:=tfunc;                         IF token <> ExtToken THEN												 		inst0(token,Temp)												 ELSE												 		instExt(i,Temp);														                         GetU;                         FOR i:=1 TO nbparms DO                         BEGIN						    { on choppe le parametre }                            expr;                            IF i<nbparms THEN                              BEGIN                               IF u<>',' THEN                                 BEGIN                                    ErrFlag:=True;                                    Error:=ErrMissing;                                    DisposHandle(Handle(Temp));                                    EXIT(FuncCall);                                 END                              END                              ELSE                               IF u<>')' THEN                                 BEGIN                                    ErrFlag:=True;                                    Error:=ErrMissing;                                    DisposHandle(Handle(Temp));                                    EXIT(FuncCall);                                 END;								 							{ check du type du parametre }                            IF NOT tpck1(tpexpr,tparms[i]) THEN                                 BEGIN                                    ErrFlag:=True;                                    Error:=ErrType;                                    DisposHandle(Handle(Temp));                                    EXIT(FuncCall);                                 END;                            IF ErrFlag THEN                                 BEGIN                                    DisposHandle(Handle(Temp));                                    EXIT(FuncCall);                                 END;                            getU;                            IF (tpexpr=fvarnum) | (tpexpr=fvarstr) THEN                               BEGIN                                 AddVar(ResExpr^^.Param,tpexpr,Numvar,TkVar);                                 IF ErrFlag THEN                                      BEGIN                                         DisposHandle(Handle(Temp));                                         EXIT(FuncCall);                                      END;                                 instind(NumVar,TkVar,ResExpr)                               END;                            addparam(temp,ResExpr);                          END;                          tpfunc:=tfunc;                        END              ELSE               BEGIN                    tpfunc:=tfunc;                    IF token <> ExtToken THEN											inst0(token,temp)										ELSE											instExt(i,Temp);               END;           END           ELSE           BEGIN                ErrFlag:=True;                Error:=ErrSyntax;                DisposHandle(Handle(Temp));                EXIT(FuncCall);           END      ELSE        BEGIN  { Typu= nom ou nom_chaine }               { on regarde si ce ne peut être un tableau }              TempU:=U;              TempTypu:=Typu;              GetU;              IF U='('              THEN                 BEGIN                         IF TempTypu=nom THEN                            BEGIN                              tpfunc:=finumvar;                            END ELSE                            BEGIN                              tpfunc:=fistrvar;                            END;                         TempU[0]:=Chr(length(TempU)+2);						 TempU[length(TempU)-1]:='(';						 TempU[length(TempU)]:=')';                         AddVar(TempU,tpfunc,NumVar,tkVar);                         IF ErrFlag THEN                              BEGIN                                 DisposHandle(Handle(Temp));                                 EXIT(FuncCall);                              END;                         inst0(tkVar,Temp);                         TempB:=TParamHandle(NewHandle(0));                         HNoPurge(Handle(TempB));                         instind(NumVar,TkVar,TempB);                         AddParam(Temp,TempB);                         DisposHandle(Handle(TempB));                         GetU;                         expr;                         IF u<>')' THEN                           BEGIN                              ErrFlag:=True;                              Error:=ErrSyntax;                              DisposHandle(Handle(Temp));                              EXIT(FuncCall);                           END;                         IF NOT cknum(tpexpr) THEN                              BEGIN                                 ErrFlag:=True;                                 Error:=ErrType;                                 DisposHandle(Handle(Temp));                                 EXIT(FuncCall);                              END;                         IF ErrFlag THEN                              BEGIN                                 DisposHandle(Handle(Temp));                                 EXIT(FuncCall);                              END;                         getU;                         IF (tpexpr=fvarnum) THEN                            BEGIN                              AddVar(ResExpr^^.Param,tpexpr,Numvar,TkVar);                              IF ErrFlag THEN                                   BEGIN                                      DisposHandle(Handle(Temp));                                      EXIT(FuncCall);                                   END;                              instind(NumVar,TkVar,ResExpr)                            END;                         addparam(temp,ResExpr);                         IF TempTypu=nom THEN tpfunc:=finumvar                                       ELSE tpfunc:=fistrvar;                 END              ELSE                BEGIN                   IF TempTypu=nom                   THEN                      BEGIN                        tpfunc:=fvarnum;                        tkfunc:=TkNUMVAR;                      END                   ELSE                      BEGIN                         tpfunc:=fvarstr;                         tkfunc:=TkSTRVAR;                      END;                   InstStr(TempU,tkfunc,temp);                END;        END     END      ELSE        BEGIN              IF Typu=nom THEN               BEGIN { nom de variable ou etiquette }                    tpfunc:=fvarnum;                    InstStr(u,TkNUMVAR,temp);               END              ELSE              IF Typu=nom_chaine THEN               BEGIN { nom de variable chaine }                    tpfunc:=fvarstr;                    InstStr(u,TkSTRVAR,temp);               END              ELSE              IF Typu=cst_Chaine THEN               BEGIN { constante chaine }                    tpfunc:=fcststr;                    Delete(u,1,1);                    Delete(u,length(u),1);                    AddVar(u,fcststr,Numvar,TkVar);                    IF ErrFlag THEN                         BEGIN                              DisposHandle(Handle(Temp));                              EXIT(FuncCall);                         END;                    instind(NumVar,TkSTRCST,temp);               END              ELSE              IF Typu=cst_num THEN							BEGIN								tpfunc:=fcstnum;								IF (Length(u) > 10) | ((Length(u)=10) & (u>'2147483647')) THEN								BEGIN									ErrFlag:=True;									Error:=ErrSyntax;									DisposHandle(Handle(Temp));									EXIT(FuncCall);								END;								StringToNum(u,Num);								InstNum(Num,TkNUMCST,temp);							END						 ELSE              IF Typu=autre THEN               BEGIN                    tpfunc:=fundef;                    InstStr(u,TkV,temp);               END;              GetU;        END;     CopyHandle(Temp,ResFunc);     DisposHandle(Handle(Temp));END;{==============================================================================}PROCEDURE factor;     VAR temp: TParamHandle;BEGIN     Temp:=TParamHandle(NewHandle(0));     HNoPurge(Handle(Temp));     IF u='NOT' THEN        BEGIN          getu;          IF u='' THEN           BEGIN               ErrFlag:=True;               Error:=ErrSyntax;               DisposHandle(Handle(Temp));               EXIT(Factor);           END;          factor;          IF ErrFlag THEN               BEGIN                    DisposHandle(Handle(Temp));                    EXIT(Factor);               END;          IF NOT cknum(tpfactor) THEN           BEGIN               ErrFlag:=True;               Error:=ErrConf;               DisposHandle(Handle(Temp));               EXIT(Factor);           END;          IF tpfactor=fvarnum THEN             BEGIN               AddVar(ResFactor^^.Param,fvarnum,Numvar,TkVar);               IF ErrFlag THEN                    BEGIN                         DisposHandle(Handle(Temp));                         EXIT(Factor);                    END;               instind(NumVar,TkVar,ResFactor)             END;          tpfactor:=fnum;          inst1(tknot,ResFactor,Temp);        END        ELSE {if u='NOT'}     IF u='(' THEN        BEGIN          getu;          IF u='' THEN           BEGIN               ErrFlag:=True;               Error:=ErrSyntax;               DisposHandle(Handle(Temp));               EXIT(Factor);           END;          expr;          IF u='' THEN           BEGIN               ErrFlag:=True;               Error:=ErrSyntax;               DisposHandle(Handle(Temp));               EXIT(Factor);           END;          IF NOT cknum(tpexpr) THEN           BEGIN               ErrFlag:=True;               Error:=ErrConf;               DisposHandle(Handle(Temp));               EXIT(Factor);           END;          IF tpExpr=fvarnum THEN             BEGIN               AddVar(ResExpr^^.Param,fvarnum,Numvar,TkVar);               IF ErrFlag THEN                    BEGIN                         DisposHandle(Handle(Temp));                         EXIT(Factor);                    END;               instind(NumVar,TkVar,ResExpr)             END;          tpfactor:=fnum;          inst1(tkpar,ResExpr,Temp);          IF u=')' THEN             BEGIN               getu;             END             ELSE             BEGIN                 ErrFlag:=True;                 Error:=ErrSyntax;                 DisposHandle(Handle(Temp));                 EXIT(Factor);             END;        END     ELSE        BEGIN          FuncCall;          IF ErrFlag THEN               BEGIN                    DisposHandle(Handle(Temp));                    EXIT(Factor);               END;          CopyHandle(ResFunc,Temp);          tpfactor:=tpfunc;        END;     CopyHandle(Temp,ResFactor);     DisposHandle(Handle(Temp));END;{==============================================================================}PROCEDURE term;     VAR temp: TParamHandle; fini: boolean;         tp1,tp2,tpres: integer; tkTerm: Integer;BEGIN     Temp:=TParamHandle(NewHandle(0));     HNoPurge(Handle(Temp));     factor;     IF ErrFlag THEN          BEGIN               DisposHandle(Handle(Temp));               EXIT(Term);          END;     CopyHandle(ResFactor,Temp);     tp1:=tpfactor;     tpres:=tp1;     REPEAT          fini:=false;          IF (u='*') | (u='/') | (u='AND') | (u='MOD') THEN             BEGIN                CASE u[1] OF                 '*': tkTerm:=TkMul;                 '/': tkTerm:=TkDiv;                 'A': tkTerm:=TkAnd;                 'M': tkTerm:=TkMod;                END;                getu;                IF u='' THEN                BEGIN                    ErrFlag:=True;                    Error:=ErrSyntax;                    DisposHandle(Handle(Temp));                    EXIT(Term);                END;                factor;                IF ErrFlag THEN                     BEGIN                          DisposHandle(Handle(Temp));                          EXIT(Term);                     END;                tp2:=tpfactor;                IF (tp1=fvarnum) THEN                    BEGIN                         AddVar(temp^^.Param,tp1,Numvar,TkVar);                         IF ErrFlag THEN                              BEGIN                                   DisposHandle(Handle(Temp));                                   EXIT(Term);                              END;                         instind(NumVar,TkVar,temp);                         tp1:=fnum;                    END;                IF (tp2=fvarnum) THEN                    BEGIN                         AddVar(ResFactor^^.Param,tp2,Numvar,TkVar);                         IF ErrFlag THEN                              BEGIN                                   DisposHandle(Handle(Temp));                                   EXIT(Term);                              END;                         instind(NumVar,TkVar,ResFactor);                         tp2:=fnum;                    END;                inst2(tkTerm,temp,ResFactor,temp);                IF NOT cknum(tp1) THEN                BEGIN                    ErrFlag:=True;                    Error:=ErrConf;                    DisposHandle(Handle(Temp));                    EXIT(Term);                END;                IF NOT cknum(tp2) THEN                BEGIN                    ErrFlag:=True;                    Error:=ErrConf;                    DisposHandle(Handle(Temp));                    EXIT(Term);                END;                tpres:=fnum;             END          ELSE fini:=true;     UNTIL fini | ErrFlag;     CopyHandle(Temp,ResTerm);     DisposHandle(Handle(Temp));     tpterm:=tpres;END;{==============================================================================}PROCEDURE s_expr;     VAR signe: boolean; temp: TParamHandle; fini: boolean; tp1,tp2,tpres: integer;     TkSExpr: integer;BEGIN     Temp:=TParamHandle(NewHandle(0));     HNoPurge(Handle(Temp));     signe:=false;     IF (u='+') | (u='-')          THEN BEGIN                    signe:=u='-';                    getu;               END;     IF u='' THEN          BEGIN               ErrFlag:=true;               Error:=ErrSyntax;               DisposHandle(Handle(Temp));               EXIT(s_expr);          END;     term;     IF ErrFlag THEN          BEGIN               DisposHandle(Handle(Temp));               EXIT(s_expr);          END;     tp1:=tpterm;     IF signe & ckStr(tp1) THEN          BEGIN               ErrFlag:=true;               Error:=ErrConf;               DisposHandle(Handle(Temp));               EXIT(s_expr);          END;     IF signe THEN          BEGIN               IF (tp1=fvarnum) THEN                    BEGIN                         AddVar(ResTerm^^.Param,tp1,Numvar,TkVar);                         IF ErrFlag THEN                              BEGIN                                   DisposHandle(Handle(Temp));                                   EXIT(s_expr);                              END;                         instind(NumVar,TkVar,ResTerm)                    END;               tp1:=fnum;               inst1(tkneg,ResTerm,temp);          END              ELSE          BEGIN               CopyHandle(ResTerm,Temp);          END;     tpres:=tp1;     REPEAT          fini:=false;          IF (u='+') | (u='-') | (u='OR') THEN             BEGIN                CASE u[1] OF                 '+': tkSExpr:=TkPlus;                 '-': tkSExpr:=TkMoins;                 'O': tkSExpr:=TkOr;                END;                getu;                IF u='' THEN                    BEGIN                         ErrFlag:=True;                         Error:=ErrSyntax;                         DisposHandle(Handle(Temp));                         EXIT(S_Expr);                    END;                term;                IF ErrFlag THEN                     BEGIN                          DisposHandle(Handle(Temp));                          EXIT(s_expr);                     END;                tp2:=tpterm;                IF ckNum(tp1) & (NOT ckNum(tp2)) THEN                    BEGIN                         ErrFlag:=True;                         Error:=ErrConf;                         DisposHandle(Handle(Temp));                         EXIT(S_Expr);                    END;                IF TkSExpr=TkPlus THEN                   IF ckStr(tp1) & (NOT ckStr(tp2)) THEN                    BEGIN                         ErrFlag:=True;                         Error:=ErrConf;                         DisposHandle(Handle(Temp));                         EXIT(S_Expr);                    END;                IF (tp1=fvarnum) | (tp1=fvarstr) THEN                    BEGIN                         AddVar(temp^^.Param,tp1,Numvar,TkVar);                         IF ErrFlag THEN                              BEGIN                                   DisposHandle(Handle(Temp));                                   EXIT(s_expr);                              END;                         instind(NumVar,TkVar,temp);                         IF tp1=fvarnum THEN tp1:=fnum ELSE tp1:=fstr;                    END;                IF (tp2=fvarnum) | (tp2=fvarstr) THEN                    BEGIN                         AddVar(ResTerm^^.Param,tp2,Numvar,TkVar);                         IF ErrFlag THEN                              BEGIN                                   DisposHandle(Handle(Temp));                                   EXIT(s_expr);                              END;                         instind(NumVar,TkVar,ResTerm);                         IF tp2=fvarnum THEN tp2:=fnum ELSE tp2:=fstr;                    END;                IF ckNum(tp1) THEN                    tpres:=fnum                    ELSE tpres:=fstr;                IF tpres=fstr THEN                    tkSExpr:=tkPlusStr;                inst2(tkSExpr,temp,ResTerm,temp);             END          ELSE fini:=true;     UNTIL fini | ErrFlag;     CopyHandle(Temp,ResSExpr);     DisposHandle(Handle(Temp));     tpsexpr:=tpres;END;{==============================================================================}PROCEDURE expr;     VAR temp: TParamHandle; tp1,tp2,tpres,tempaffect, TkExpr: integer;BEGIN     Temp:=TParamHandle(NewHandle(0));     HNoPurge(Handle(Temp));     s_expr;     IF ErrFlag THEN          BEGIN               DisposHandle(Handle(Temp));               EXIT(expr);          END;     CopyHandle(ressexpr,Temp);     tp1:=tpsexpr;     tempaffect:=fundef;     tpres:=tp1;     IF (u='=') | (u='<') | (u='>') | (u='<=') | (u='>=') | (u='<>') THEN        BEGIN           IF u='=' THEN TkExpr:=TkEq           ELSE           IF u='>' THEN TkExpr:=TkSup           ELSE           IF u='<' THEN TkExpr:=TkInf           ELSE           IF u='<=' THEN TkExpr:=TkEqInf           ELSE           IF u='>=' THEN TkExpr:=TkEqSup           ELSE           IF u='<>' THEN TkExpr:=TkDiff;           getu;           IF u='' THEN               BEGIN                    ErrFlag:=True;                    Error:=ErrSyntax;                    DisposHandle(Handle(Temp));                    EXIT(Expr);               END;           s_expr;           IF ErrFlag THEN                BEGIN                     DisposHandle(Handle(Temp));                     EXIT(expr);                END;           tp2:=tpsexpr;           IF ckNum(tp1) & (NOT cknum(tp2)) THEN               BEGIN                    ErrFlag:=True;                    Error:=ErrConf;                    DisposHandle(Handle(Temp));                    EXIT(Expr);               END;           IF ckStr(tp1) & (NOT ckstr(tp2)) THEN               BEGIN                    ErrFlag:=True;                    Error:=ErrConf;                    DisposHandle(Handle(Temp));                    EXIT(Expr);               END;           IF (tp1=fvarnum) | (tp1=fvarstr) THEN               BEGIN                    AddVar(temp^^.Param,tp1,Numvar,TkVar);                    IF ErrFlag THEN                         BEGIN                              DisposHandle(Handle(Temp));                              EXIT(expr);                         END;                    instind(NumVar,TkVar,temp)               END;           IF (tp2=fvarnum) | (tp2=fvarstr) THEN               BEGIN                    AddVar(ResSexpr^^.Param,tp2,Numvar,TkVar);                    IF ErrFlag THEN                         BEGIN                              DisposHandle(Handle(Temp));                              EXIT(expr);                         END;                    instind(NumVar,TkVar,ResSexpr)               END;           inst2(tkExpr,temp,ResSexpr,temp);           IF TkExpr=TkEq THEN tempaffect:=tp1;           tpres:=fnum;        END;     CopyHandle(Temp,ResExpr);     DisposHandle(Handle(Temp));     tpexpr:=tpres;     tpaffect:=tempaffect;END;{==============================================================================}PROCEDURE Etiq;BEGIN     IF (typetrouve=fundef) & (tpexpr=fvarnum) THEN        ErrFlag:=(u<>':')        ELSE ErrFlag:=True;     IF NOT ErrFlag THEN        BEGIN          AddVar(ResExpr^^.Param,fetiq,Numvar,TkVar);          instind(NumVar,TkVar,ResExpr);          CopyHandle(ResExpr,ResEtiq);        END        ELSE        BEGIN          EXIT(Etiq);        END;     tpetiq:=fetiq;END;{==============================================================================}PROCEDURE ProcCall;     VAR  temp: TParamHandle; fini: boolean;          i:integer; trouve:boolean; nbtemp: integer;          PrintFlag: Boolean;BEGIN     IF typetrouve<>fproc THEN          BEGIN               ErrFlag:=true;               EXIT(ProcCall);          END;     Temp:=TParamHandle(NewHandle(0));     HNoPurge(Handle(Temp));     ErrFlag:=false;     IF (u=mots^^[TkPrint].MotRes) | (u=mots^^[TkTrace].MotRes) THEN        BEGIN          PrintFlag:=(u=mots^^[TkPrint].MotRes);          getu;          IF (u<>'') & (u<>':') THEN               BEGIN                    expr;                    ErrFlag:=ErrFlag | (tpExpr=fundef);                    IF ErrFlag THEN                       BEGIN                         DisposHandle(Handle(Temp));                         EXIT(ProcCall);                       END;                    IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN                        BEGIN                             AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                             IF ErrFlag THEN                                BEGIN                                  DisposHandle(Handle(Temp));                                  EXIT(ProcCall);                                END;                             instind(NumVar,TkVar,ResExpr)                        END;                    IF PrintFlag THEN inst1(tkPrint,ResExpr,Temp)                                 ELSE inst1(tkTrace,ResExpr,Temp);                    REPEAT                         fini:=false;                         IF (u=',') | (u=';') THEN                              BEGIN							  							  	   IF u=',' THEN								   	inst0(TkV,ResExpr)									ELSE								   	inst0(TkPV,ResExpr);                                   addparam(temp,ResExpr);									                                   Getu;								   { retire, on peut terminer par , ou ; }                                   IF (u='') | (u=':') THEN								   	fini:=true								   ELSE                                   BEGIN                                   	expr;                                   	ErrFlag:=ErrFlag | (tpExpr=fundef);                                   	IF ErrFlag THEN                                   	BEGIN                                        DisposHandle(Handle(Temp));                                        EXIT(ProcCall);                                   	END;                                   	IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN                                       BEGIN                                            AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                                            IF ErrFlag THEN                                             BEGIN                                                  DisposHandle(Handle(Temp));                                                  EXIT(ProcCall);                                             END;                                            instind(NumVar,TkVar,ResExpr)                                       END;                                   	addparam(temp,ResExpr);                                   END;                              END                         ELSE fini:=true;                    UNTIL fini;               END               ELSE               BEGIN                    IF PrintFlag THEN inst0(tkPrint,Temp)                                 ELSE inst0(tkTrace,Temp);               END        END		{ PRINT ou TRACE }        ELSE     IF (u=mots^^[TkFPrint].MotRes) THEN        BEGIN          getu;          IF (u<>'') & (u<>':') THEN               BEGIN                    expr;                    IF ErrFlag THEN                    BEGIN                        DisposHandle(Handle(Temp));                        EXIT(ProcCall);                    END;                    IF NOT cknum(tpexpr) THEN                    BEGIN                         ErrFlag:=True;                         Error:=ErrType;                         DisposHandle(Handle(Temp));                         EXIT(ProcCall);                    END;					IF (tpExpr=fvarnum) THEN					   BEGIN							AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);							IF ErrFlag THEN							BEGIN								 DisposHandle(Handle(Temp));								 EXIT(ProcCall);							END;							instind(NumVar,TkVar,ResExpr)					   END;					                       inst1(tkFPrint,ResExpr,Temp);                    REPEAT                         fini:=false;                         IF (u=',') | (u=';') THEN                              BEGIN							  							  	   IF u=',' THEN								   	inst0(TkV,ResExpr)									ELSE								   	inst0(TkPV,ResExpr);                                   addparam(temp,ResExpr);									                                   Getu;                                   { retire, on peut terminer par , ou ; }								   IF (u='') | (u=':') THEN                                        fini:=True								   ELSE								   BEGIN                                  	expr;                                   	ErrFlag:=ErrFlag | (tpExpr=fundef);                                   	IF ErrFlag THEN                                   	BEGIN                                        DisposHandle(Handle(Temp));                                        EXIT(ProcCall);                                   	END;                                   	IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN                                       BEGIN                                            AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                                            IF ErrFlag THEN                                            BEGIN                                                 DisposHandle(Handle(Temp));                                                 EXIT(ProcCall);                                            END;                                            instind(NumVar,TkVar,ResExpr)                                       END;                                   	addparam(temp,ResExpr);								   END;                              END                         ELSE fini:=true;                    UNTIL fini;               END               ELSE               BEGIN                    ErrFlag:=True;                    Error:=ErrMissing;                    DisposHandle(Handle(Temp));                    EXIT(ProcCall);               END        END	{ PRINT }        ELSE     IF (u=mots^^[TkWrite].MotRes) THEN        BEGIN          getu;          IF (u<>'') & (u<>':') THEN               BEGIN                    expr;                    IF ErrFlag THEN                    BEGIN                        DisposHandle(Handle(Temp));                        EXIT(ProcCall);                    END;                    IF NOT cknum(tpexpr) THEN                    BEGIN                         ErrFlag:=True;                         Error:=ErrType;                         DisposHandle(Handle(Temp));                         EXIT(ProcCall);                    END;					IF (tpExpr=fvarnum) THEN					   BEGIN							AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);							IF ErrFlag THEN							BEGIN								 DisposHandle(Handle(Temp));								 EXIT(ProcCall);							END;							instind(NumVar,TkVar,ResExpr)					   END;                    inst1(tkWrite,ResExpr,Temp);                    REPEAT                         fini:=false;                         IF u=',' THEN                              BEGIN                                   Getu;                                   IF u='' THEN                                   BEGIN                                        ErrFlag:=True;                                        Error:=ErrSyntax;                                        DisposHandle(Handle(Temp));                                        EXIT(ProcCall);                                   END;                                   expr;                                   ErrFlag:=ErrFlag | (tpExpr=fundef);                                   IF ErrFlag THEN                                   BEGIN                                        DisposHandle(Handle(Temp));                                        EXIT(ProcCall);                                   END;                                   IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN                                       BEGIN                                            AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                                            IF ErrFlag THEN                                            BEGIN                                                 DisposHandle(Handle(Temp));                                                 EXIT(ProcCall);                                            END;                                            instind(NumVar,TkVar,ResExpr)                                       END;                                   addparam(temp,ResExpr);                              END                         ELSE fini:=true;                    UNTIL fini;               END               ELSE               BEGIN                    ErrFlag:=True;                    Error:=ErrMissing;                    DisposHandle(Handle(Temp));                    EXIT(ProcCall);               END        END	{ WRITE }        ELSE     IF u=mots^^[TkRead].MotRes THEN        BEGIN          getu;          IF (u<>'') & (u<>':') THEN               BEGIN                    expr;                    IF ErrFlag THEN                    BEGIN                         DisposHandle(Handle(Temp));                         EXIT(ProcCall);                    END;                    IF NOT ckNum(tpexpr) THEN                    BEGIN                         ErrFlag:=True;                         Error:=ErrType;                         DisposHandle(Handle(Temp));                         EXIT(ProcCall);                    END;					IF (tpExpr=fvarnum) THEN					   BEGIN							AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);							IF ErrFlag THEN							BEGIN								 DisposHandle(Handle(Temp));								 EXIT(ProcCall);							END;							instind(NumVar,TkVar,ResExpr)					   END;                    inst1(tkRead,ResExpr,Temp);                    REPEAT                         fini:=false;                         IF u=',' THEN                              BEGIN                                   Getu;                                   IF u='' THEN                                   BEGIN                                        ErrFlag:=True;                                        Error:=ErrSyntax;                                        DisposHandle(Handle(Temp));                                        EXIT(ProcCall);                                   END;                                   expr;                                   IF ErrFlag THEN                                   BEGIN                                        DisposHandle(Handle(Temp));                                        EXIT(ProcCall);                                   END;                                   IF NOT tpck1(tpexpr,fvar) THEN                                   BEGIN                                        ErrFlag:=True;                                        Error:=ErrType;                                        DisposHandle(Handle(Temp));                                        EXIT(ProcCall);                                   END;                                   IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN                                       BEGIN                                            AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                                            IF ErrFlag THEN                                            BEGIN                                                 DisposHandle(Handle(Temp));                                                 EXIT(ProcCall);                                            END;                                            instind(NumVar,TkVar,ResExpr)                                       END;                                   addparam(temp,ResExpr);                              END                         ELSE fini:=true;                    UNTIL fini;               END               ELSE               BEGIN                    ErrFlag:=True;                    Error:=ErrMissing;                    DisposHandle(Handle(Temp));                    EXIT(ProcCall);               END        END	{ READ }        ELSE     IF u=mots^^[TkInput].MotRes THEN        BEGIN { input [prompt;]variable }          inst0(tkinput,temp);          getu;          IF (u='') | (u=':') THEN               BEGIN                    ErrFlag:=True;                    Error:=ErrMissing;                    DisposHandle(Handle(Temp));                    EXIT(ProcCall);               END;          expr;          IF ErrFlag THEN          BEGIN               DisposHandle(Handle(Temp));               EXIT(ProcCall);          END;          IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN              BEGIN                   AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                   IF ErrFlag THEN                   BEGIN                        DisposHandle(Handle(Temp));                        EXIT(ProcCall);                   END;                   instind(NumVar,TkVar,ResExpr)              END;          IF ckStr(tpexpr) THEN             IF u=',' THEN                BEGIN                    addparam(temp,Resexpr);                    getu;                    IF (u='') | (u=':') THEN                         BEGIN                              ErrFlag:=True;                              Error:=ErrMissing;                              DisposHandle(Handle(Temp));                              EXIT(ProcCall);                         END;                    expr;                    IF ErrFlag THEN                    BEGIN                         DisposHandle(Handle(Temp));                         EXIT(ProcCall);                    END;                    IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN                        BEGIN                             AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                             IF ErrFlag THEN                             BEGIN                                  DisposHandle(Handle(Temp));                                  EXIT(ProcCall);                             END;                             instind(NumVar,TkVar,ResExpr)                        END;                END                ELSE                IF (u<>':') & (u<>'') THEN                BEGIN                     ErrFlag:=True;                     Error:=ErrSyntax;                     DisposHandle(Handle(Temp));                     EXIT(ProcCall);                END;          IF (tpexpr=fvarnum) | (tpexpr=fvarstr) THEN               BEGIN                    addparam(temp,Resexpr);               END               ELSE               BEGIN                    ErrFlag:=True;                    Error:=ErrType;                    DisposHandle(Handle(Temp));                    EXIT(ProcCall);               END;        END	{ INPUT }        ELSE        BEGIN             WITH mots^^[numtrouve] DO                IF nbparms>0 THEN                 BEGIN                    SharedFlag:=(mots^^[numtrouve].token IN                                 [tkpost,tkpend,tkrequest]);                    { a la peche des parametres ... }                    IF token <> ExtToken THEN											Inst0(token,temp)										ELSE											InstExt(NumTrouve,temp);                    GetU;                    FOR i:=1 TO nbparms DO                    BEGIN                       expr;                       IF ErrFlag THEN                       BEGIN                            DisposHandle(Handle(Temp));                            SharedFlag:=False;                            EXIT(ProcCall);                       END;                       IF i<nbparms THEN                         BEGIN                          IF u<>',' THEN                             BEGIN                                 ErrFlag:=True;                                 Error:=ErrMissing;                                 DisposHandle(Handle(Temp));                                 SharedFlag:=False;                                 EXIT(ProcCall);                             END;                          getU;                         END                         ELSE                          IF (u<>'') & (u<>':') THEN                             BEGIN                                 ErrFlag:=True;                                 Error:=ErrSyntax;                                 DisposHandle(Handle(Temp));                                 SharedFlag:=False;                                 EXIT(ProcCall);                             END;                       IF NOT tpck1(tpexpr,tparms[i]) THEN                          BEGIN                              ErrFlag:=True;                              Error:=ErrConf;                              DisposHandle(Handle(Temp));                              SharedFlag:=False;                              EXIT(ProcCall);                          END;                       IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN                           BEGIN                                AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                                IF ErrFlag THEN                                BEGIN                                     DisposHandle(Handle(Temp));                                     SharedFlag:=False;                                     EXIT(ProcCall);                                END;                                instind(NumVar,TkVar,ResExpr)                           END;                       addparam(temp,resExpr);                     END;                    SharedFlag:=False;                 END                 ELSE                 BEGIN                    IF token <> ExtToken THEN											Inst0(token,temp)				{ token normal }										ELSE											InstExt(NumTrouve,temp);		{ token externe ! }										getu;                 END;        END;     CopyHandle(Temp,ResProc);     DisposHandle(Handle(Temp));END;{==============================================================================}PROCEDURE ContStruct;     VAR temp, tempB: TParamHandle; fini: boolean; TempStr: str255;         e: TParamPtr;BEGIN     IF typeTrouve<>fcont THEN        BEGIN          ErrFlag:=true;          EXIT(Contstruct);        END;     Temp:=TParamHandle(NewHandle(0));     TempB:=TParamHandle(NewHandle(0));     HNoPurge(Handle(Temp));     HNoPurge(Handle(TempB));     ErrFlag:=false;     IF u=mots^^[TkFor].MotRes THEN	{ •••• FOR •••• }        BEGIN {for affectation varnum to exprnum [step exprnum]}          getu;          expr;          IF ErrFlag THEN               BEGIN                    DisposHandle(Handle(Temp));                    DisposHandle(Handle(TempB));                    EXIT(ContStruct);               END;          IF u<>mots^^[Tkto].MotRes THEN	{ TO }             BEGIN                 ErrFlag:=True;                 Error:=ErrSyntax;                 DisposHandle(Handle(Temp));                 DisposHandle(Handle(TempB));                 EXIT(ContStruct);             END;          { controle affectation sur variable numerique }          IF (tpaffect<>fvarnum) & (tpaffect<>finumvar) THEN             BEGIN                 ErrFlag:=True;                 Error:=ErrSyntax;                 DisposHandle(Handle(Temp));                 DisposHandle(Handle(TempB));                 EXIT(ContStruct);             END;          inst1(tkfor,ResExpr,temp);          getu;          expr;          IF ErrFlag THEN               BEGIN                    DisposHandle(Handle(Temp));                    DisposHandle(Handle(TempB));                    EXIT(ContStruct);               END;          { controle expression numerique }          IF NOT cknum(tpexpr) THEN             BEGIN                 ErrFlag:=True;                 Error:=ErrSyntax;                 DisposHandle(Handle(Temp));                 DisposHandle(Handle(TempB));                 EXIT(ContStruct);             END;          IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN              BEGIN                   AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                   IF ErrFlag THEN                        BEGIN                             DisposHandle(Handle(Temp));                             DisposHandle(Handle(TempB));                             EXIT(ContStruct);                        END;                   instind(NumVar,TkVar,ResExpr)              END;          addparam(temp,ResExpr);          IF u=mots^^[TkStep].MotRes THEN	{ STEP }             BEGIN               getu;               expr;               IF ErrFlag THEN                    BEGIN                         DisposHandle(Handle(Temp));                         DisposHandle(Handle(TempB));                         EXIT(ContStruct);                    END;               { controle expression numerique }               IF NOT cknum(tpexpr) THEN                  BEGIN                      ErrFlag:=True;                      Error:=ErrSyntax;                      DisposHandle(Handle(Temp));                      DisposHandle(Handle(TempB));                      EXIT(ContStruct);                  END;               IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN                   BEGIN                        AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                        IF ErrFlag THEN                             BEGIN                                  DisposHandle(Handle(Temp));                                  DisposHandle(Handle(TempB));                                  EXIT(ContStruct);                             END;                        instind(NumVar,TkVar,ResExpr)                   END;               addparam(temp,ResExpr);             END             ELSE             BEGIN               InstNum(1,TkNumCst,tempB);    { step 1 }               addparam(temp,tempB);             END;           AddFor;           InstNum(0,TkNumCst,tempB);    { element bidon }           addparam(temp,tempB);      { indirection Next  }        END        ELSE     IF u=mots^^[TkNext].MotRes THEN		{ •••• NEXT •••• }        BEGIN { next }          inst0(tkNext,Temp);          AddNext;          InstNum(RepIndex,TkNumCst,tempB);	  { element bidon }          addparam(temp,tempB);	    { indirection wend  }          getu;        END        ELSE     IF u=mots^^[TkIf].MotRes THEN		{ •••• IF •••• }        BEGIN {if expnum then instructions [else instructions] endif}              {if expnum goto etiquette	   [else instructions] endif}              getu;              expr;              IF ErrFlag THEN                   BEGIN                        DisposHandle(Handle(Temp));                        DisposHandle(Handle(TempB));                        EXIT(ContStruct);                   END;              IF NOT cknum(tpexpr) THEN                 BEGIN                     ErrFlag:=True;                     Error:=ErrSyntax;                     DisposHandle(Handle(Temp));                     DisposHandle(Handle(TempB));                     EXIT(ContStruct);                 END;              IF (tpExpr=fvarnum) THEN                  BEGIN                       AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                       IF ErrFlag THEN                            BEGIN                                 DisposHandle(Handle(Temp));                                 DisposHandle(Handle(TempB));                                 EXIT(ContStruct);                            END;                       instind(NumVar,TkVar,ResExpr)                  END;              inst1(tkif,ResExpr,temp);              AddIf;              InstNum(0,TkNumCst,tempB);    { element bidon }              addparam(temp,tempB);     		{ indirection else  }              addparam(temp,tempB);     		{ indirection endif }        END        ELSE     IF u=mots^^[TkElse].MotRes THEN		{ •••• ELSE •••• }        BEGIN            inst0(tkElse,Temp);            AddElse;            InstNum(0,TkNumCst,tempB);    { element bidon }            addparam(temp,tempB);     		{ indirection ENDIF  }            getu;        END      ELSE     IF u=mots^^[TkEndif].MotRes THEN	{ •••• ENDIF •••• }        BEGIN            inst0(tkEndif,Temp);            AddEndif;            getu;        END      ELSE     IF u=mots^^[TkWhile].MotRes THEN	{ •••• WHILE •••• }        BEGIN { while expnum }              getu;              expr;              IF ErrFlag THEN                   BEGIN                        DisposHandle(Handle(Temp));                        DisposHandle(Handle(TempB));                        EXIT(ContStruct);                   END;              IF NOT cknum(tpexpr) THEN                  BEGIN                      ErrFlag:=True;                      Error:=ErrSyntax;                      DisposHandle(Handle(Temp));                      DisposHandle(Handle(TempB));                      EXIT(ContStruct);                  END;              IF (tpExpr=fvarnum) THEN                  BEGIN                       AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                       IF ErrFlag THEN                            BEGIN                                 DisposHandle(Handle(Temp));                                 DisposHandle(Handle(TempB));                                 EXIT(ContStruct);                            END;                       instind(NumVar,TkVar,ResExpr)                  END;              inst1(tkWhile,ResExpr,temp);              AddWhile;              InstNum(0,TkNumCst,tempB);    { element bidon }              addparam(temp,tempB);     { indirection wend  }        END        ELSE     IF u=mots^^[TkWEnd].MotRes THEN		{ •••• WEND •••• }        BEGIN { wend }            inst0(tkWend,Temp);            AddWend;            InstNum(RepIndex,TkNumCst,tempB);    { element bidon }            addparam(temp,tempB);     { indirection wend  }            getu;        END        ELSE     IF u=mots^^[TkREPEAT].MotRes THEN		{ •••• REPEAT •••• }        BEGIN { REPEAT }            inst0(TkREPEAT,Temp);            AddREPEAT;            getu;        END        ELSE     IF u=mots^^[TkUNTIL].MotRes THEN	{ •••• UNTIL •••• }        BEGIN { UNTIL }              getu;              expr;              IF ErrFlag THEN							BEGIN								DisposHandle(Handle(Temp));								DisposHandle(Handle(TempB));								EXIT(ContStruct);							END;              IF NOT cknum(tpexpr) THEN							BEGIN								ErrFlag:=True;								Error:=ErrSyntax;								DisposHandle(Handle(Temp));								DisposHandle(Handle(TempB));								EXIT(ContStruct);							END;              IF (tpExpr=fvarnum) THEN							BEGIN								AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);								IF ErrFlag THEN								BEGIN									DisposHandle(Handle(Temp));									DisposHandle(Handle(TempB));									EXIT(ContStruct);								END;								instind(NumVar,TkVar,ResExpr)							END;              inst1(tkUNTIL,ResExpr,temp);              AddUNTIL(temp^);              InstNum(RepIndex,TkNumCst,tempB);		{ element bidon pour retourner sur le REPEAT }              addparam(temp,tempB);     					{ indirection UNTIL }        END        ELSE     IF u=mots^^[TkDim].MotRes THEN		{ •••• DIM •••• }        BEGIN { Dim }              getu;              IF (u<>'') & (u<>':') THEN                   BEGIN                        expr;                        IF ErrFlag THEN                           BEGIN                              DisposHandle(Handle(Temp));                              DisposHandle(Handle(TempB));                              EXIT(ContStruct);                           END;                        IF (tpexpr<>finumvar) & (tpexpr<>fistrvar) THEN                           BEGIN                               ErrFlag:=True;                               Error:=ErrType;                               DisposHandle(Handle(Temp));                               DisposHandle(Handle(TempB));                               EXIT(ContStruct);                           END;                        { on regarde si l'indice est bien une constante }                        e:=ResExpr^;                        NextToken(e,sizeof(Tdummy)+2);                        NumVar:=e^.indir;                        NextToken(e,e^.lparam);                        IF e^.tk<>tkNUMCST THEN                           BEGIN                              ErrFlag:=True;                              Error:=ErrSyntax;                              DisposHandle(Handle(Temp));                              DisposHandle(Handle(TempB));                              EXIT(ContStruct);                           END;                        IF VarTab^^[NumVar].DimVal=0                             THEN VarTab^^[NumVar].DimVal:=e^.num;                        inst1(tkDim,ResExpr,temp);                        REPEAT                             fini:=false;                             IF u=',' THEN                                  BEGIN                                       Getu;                                       IF u='' THEN                                          BEGIN                                              ErrFlag:=True;                                              Error:=ErrSyntax;                                              DisposHandle(Handle(Temp));                                              DisposHandle(Handle(TempB));                                              EXIT(ContStruct);                                          END;                                       expr;                                       IF ErrFlag THEN                                          BEGIN                                             DisposHandle(Handle(Temp));                                             DisposHandle(Handle(TempB));                                             EXIT(ContStruct);                                          END;                                       IF (tpexpr<>finumvar) & (tpexpr<>fistrvar) THEN                                          BEGIN                                              ErrFlag:=True;                                              Error:=ErrSyntax;                                              DisposHandle(Handle(Temp));                                              DisposHandle(Handle(TempB));                                              EXIT(ContStruct);                                          END;                                       { on regarde si l'indice est bien une constante }                                       e:=ResExpr^;                                       NextToken(e,sizeof(Tdummy)+2);                                       NumVar:=e^.Indir;                                       NextToken(e,e^.lparam);                                       IF e^.tk<>tkNUMCST THEN                                          BEGIN                                             ErrFlag:=True;                                             Error:=ErrSyntax;                                             DisposHandle(Handle(Temp));                                             DisposHandle(Handle(TempB));                                             EXIT(ContStruct);                                          END;                                       IF VarTab^^[NumVar].DimVal=0                                            THEN VarTab^^[NumVar].DimVal:=e^.num;                                       addparam(temp,ResExpr);                                  END                             ELSE fini:=true;                        UNTIL fini;                   END                   ELSE                   BEGIN                       ErrFlag:=True;                       Error:=ErrSyntax;                       DisposHandle(Handle(Temp));                       DisposHandle(Handle(TempB));                       EXIT(ContStruct);                   END;        END        ELSE     IF u=mots^^[TkShared].MotRes THEN        BEGIN              SharedFlag:=True;              (* liste de noms de variables *)              getu;              IF (u<>'') & (u<>':') THEN                   BEGIN                        expr;                        IF ErrFlag THEN                           BEGIN                              SharedFlag:=False;                              DisposHandle(Handle(Temp));                              DisposHandle(Handle(TempB));                              EXIT(ContStruct);                           END;                        IF (tpexpr<>fvarnum) & (tpexpr<>fvarstr) &                           (tpexpr<>finumvar) & (tpexpr<>fistrvar) THEN                           BEGIN                               ErrFlag:=True;                               Error:=ErrSyntax;                               SharedFlag:=False;                               DisposHandle(Handle(Temp));                               DisposHandle(Handle(TempB));                               EXIT(ContStruct);                           END;                        IF (tpexpr=fvarnum) | (tpexpr=fvarstr) THEN                        BEGIN                            AddVar(ResExpr^^.Param,tpexpr,Numvar,TkVar);                            IF ErrFlag THEN                               BEGIN                                  SharedFlag:=False;                                  DisposHandle(Handle(Temp));                                  DisposHandle(Handle(TempB));                                  EXIT(ContStruct);                               END;                            instind(NumVar,TkVar,ResExpr);                        END;                        inst1(tkShared,ResExpr,temp);                        REPEAT                             fini:=false;                             IF u=',' THEN                                  BEGIN                                       Getu;                                       IF u='' THEN                                          BEGIN                                              ErrFlag:=True;                                              Error:=ErrSyntax;                                              SharedFlag:=False;                                              DisposHandle(Handle(Temp));                                              DisposHandle(Handle(TempB));                                              EXIT(ContStruct);                                          END;                                       expr;                                       IF ErrFlag THEN                                          BEGIN                                             SharedFlag:=False;                                             DisposHandle(Handle(Temp));                                             DisposHandle(Handle(TempB));                                             EXIT(ContStruct);                                          END;                                       IF (tpexpr<>fvarnum) &                                          (tpexpr<>fvarstr) &                                          (tpexpr<>finumvar) &                                          (tpexpr<>fistrvar) THEN                                          BEGIN                                              ErrFlag:=True;                                              Error:=ErrSyntax;                                              SharedFlag:=False;                                              DisposHandle(Handle(Temp));                                              DisposHandle(Handle(TempB));                                              EXIT(ContStruct);                                          END;                                       IF (tpexpr=fvarnum) | (tpexpr=fvarstr) THEN                                       BEGIN                                           AddVar(ResExpr^^.Param,tpexpr,Numvar,TkVar);                                           IF ErrFlag THEN                                              BEGIN                                                 SharedFlag:=False;                                                 DisposHandle(Handle(Temp));                                                 DisposHandle(Handle(TempB));                                                 EXIT(ContStruct);                                              END;                                           instind(NumVar,TkVar,ResExpr);                                       END;                                       addparam(temp,ResExpr);                                  END                             ELSE fini:=true;                        UNTIL fini;                   END                   ELSE                   BEGIN                       ErrFlag:=True;                       Error:=ErrSyntax;                       SharedFlag:=False;                       DisposHandle(Handle(Temp));                       DisposHandle(Handle(TempB));                       EXIT(ContStruct);                   END;              SharedFlag:=False;        END        ELSE     IF u=mots^^[TkOn].MotRes THEN        BEGIN              { on expnum goto etiquettes}              { on expnum gosub etiquettes}              getu;              expr;              IF ErrFlag THEN                   BEGIN                        DisposHandle(Handle(Temp));                        DisposHandle(Handle(TempB));                        EXIT(ContStruct);                   END;              IF NOT cknum(tpexpr) THEN                 BEGIN                    ErrFlag:=True;                    Error:=ErrSyntax;                    DisposHandle(Handle(Temp));                    DisposHandle(Handle(TempB));                    EXIT(ContStruct);                 END;              IF (tpExpr=fvarnum) THEN                  BEGIN                       AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);                       IF ErrFlag THEN                            BEGIN                                 DisposHandle(Handle(Temp));                                 DisposHandle(Handle(TempB));                                 EXIT(ContStruct);                            END;                       instind(NumVar,TkVar,ResExpr)                  END;              inst1(tkon,ResExpr,temp);              IF (u<>mots^^[TkGoto].MotRes) & (u<>mots^^[TkGosub].MotRes) THEN                 BEGIN                    ErrFlag:=True;                    Error:=ErrSyntax;                    DisposHandle(Handle(Temp));                    DisposHandle(Handle(TempB));                    EXIT(ContStruct);                 END;              { goto ou gosub }              IF (u=mots^^[TkGoto].MotRes) THEN Inst0(tkGoto,TempB) ELSE Inst0(tkGosub,TempB);              addparam(temp,TempB);              { liste d'etiquettes }              getu;              IF (u<>'') & (u<>':') THEN                   BEGIN                        expr;                        IF ErrFlag THEN                             BEGIN                                  DisposHandle(Handle(Temp));                                  DisposHandle(Handle(TempB));                                  EXIT(ContStruct);                             END;                        IF tpexpr<>fvarnum THEN                           BEGIN                              ErrFlag:=True;                              Error:=ErrSyntax;                              DisposHandle(Handle(Temp));                              DisposHandle(Handle(TempB));                              EXIT(ContStruct);                           END;                        ResExpr^^.Tk:=TkUEtiq;                        AddVar(ResExpr^^.Param,fuetiq,Numvar,TkVar);                        IF ErrFlag THEN                             BEGIN                                  DisposHandle(Handle(Temp));                                  DisposHandle(Handle(TempB));                                  EXIT(ContStruct);                             END;                        instind(NumVar,TkVar,ResExpr);                        addparam(temp,ResExpr);                        REPEAT                             fini:=false;                             IF u=',' THEN                                  BEGIN                                       Getu;                                       IF u='' THEN                                          BEGIN                                             ErrFlag:=True;                                             Error:=ErrSyntax;                                             DisposHandle(Handle(Temp));                                             DisposHandle(Handle(TempB));                                             EXIT(ContStruct);                                          END;                                       expr;                                       IF ErrFlag THEN                                        BEGIN                                             DisposHandle(Handle(Temp));                                             DisposHandle(Handle(TempB));                                             EXIT(ContStruct);                                        END;                                       IF tpexpr<>fvarnum THEN                                          BEGIN                                             ErrFlag:=True;                                             Error:=ErrSyntax;                                             DisposHandle(Handle(Temp));                                             DisposHandle(Handle(TempB));                                             EXIT(ContStruct);                                          END;                                       ResExpr^^.Tk:=TkUEtiq;                                       AddVar(ResExpr^^.Param,fuetiq,Numvar,TkVar);                                        IF ErrFlag THEN                                             BEGIN                                                  DisposHandle(Handle(Temp));                                                  DisposHandle(Handle(TempB));                                                  EXIT(ContStruct);                                        END;                                       instind(NumVar,TkVar,ResExpr);                                       addparam(temp,ResExpr);                                  END                             ELSE fini:=true;                        UNTIL fini;                   END                   ELSE                   BEGIN                      ErrFlag:=True;                      Error:=ErrSyntax;                      DisposHandle(Handle(Temp));                      DisposHandle(Handle(TempB));                      EXIT(ContStruct);                   END;        END        ELSE     IF u=mots^^[TkGoto].MotRes THEN        BEGIN { goto etiquette }             GetU;             expr;             IF ErrFlag THEN                  BEGIN                       DisposHandle(Handle(Temp));                       DisposHandle(Handle(TempB));                       EXIT(ContStruct);                  END;             IF (tpexpr<>fvarnum) THEN                 BEGIN                    ErrFlag:=True;                    Error:=ErrSyntax;                    DisposHandle(Handle(Temp));                    DisposHandle(Handle(TempB));                    EXIT(ContStruct);                 END;             ResExpr^^.Tk:=TkUEtiq;             AddVar(ResExpr^^.Param,fuetiq,Numvar,TkVar);             IF ErrFlag THEN                  BEGIN                       DisposHandle(Handle(Temp));                       DisposHandle(Handle(TempB));                       EXIT(ContStruct);                  END;             instind(NumVar,TkVar,ResExpr);             inst1(tkGoto,ResExpr,temp);        END        ELSE     IF u=mots^^[TkGosub].MotRes THEN        BEGIN { gosub etiquette }             GetU;             expr;             IF ErrFlag THEN                  BEGIN                       DisposHandle(Handle(Temp));                       DisposHandle(Handle(TempB));                       EXIT(ContStruct);                  END;             IF (tpexpr<>fvarnum) THEN                 BEGIN                    ErrFlag:=True;                    Error:=ErrSyntax;                    DisposHandle(Handle(Temp));                    DisposHandle(Handle(TempB));                    EXIT(ContStruct);                 END;             ResExpr^^.Tk:=TkUEtiq;             AddVar(ResExpr^^.Param,fuetiq,Numvar,TkVar);             IF ErrFlag THEN                  BEGIN                       DisposHandle(Handle(Temp));                       DisposHandle(Handle(TempB));                       EXIT(ContStruct);                  END;             instind(NumVar,TkVar,ResExpr);             inst1(tkGosub,ResExpr,temp);        END        ELSE     IF u=mots^^[TkReturn].MotRes THEN        BEGIN { return }            inst0(tkReturn,Temp);            getu;        END        ELSE     IF u=mots^^[TkBreak].MotRes THEN        BEGIN { break }            inst0(tkBreak,Temp);            AddBreak;            InstNum(0,TkNumCst,tempB);    { element bidon }            addparam(temp,tempB);     { indirection wend  }            getu;        END        ELSE     IF u=mots^^[TkContinue].MotRes THEN        BEGIN { continue }            inst0(tkContinue,Temp);            AddContinue;            InstNum(RepIndex,TkNumCst,tempB);    { element bidon }            addparam(temp,tempB);     { indirection wend  }            getu;        END        ELSE     IF u=mots^^[TkRem].MotRes THEN        BEGIN { Rem }            inst0(tkRem,Temp);            { on chope jusqu'a la fin de la ligne }            TempStr:='';            WHILE Tempin^[Curs]<>chr($0D) DO               BEGIN                    AddCar2(TempStr,Tempin^[Curs]);                    Curs:=Curs+1;               END;            InstStr(TempStr,TkRemStr,tempB);    { element bidon }            addparam(temp,tempB);     { rem ...	 }            getu;        END        ELSE        BEGIN           ErrFlag:=True;           Error:=ErrSyntax;           DisposHandle(Handle(Temp));           DisposHandle(Handle(TempB));           EXIT(ContStruct);        END;     CopyHandle(Temp,ResCont);     DisposHandle(Handle(Temp));     DisposHandle(Handle(TempB));END;{==============================================================================}PROCEDURE ListeInst;     LABEL 0;     VAR temp: TParamHandle;         StartCurs: integer;         LigneEtiq: boolean;         XCodeLen : Longint;BEGIN     Temp:=TParamHandle(NewHandle(0));     HNoPurge(Handle(Temp));     XCodeLen:=GetHandleSize(Handle(CodeHdle));     LigneEtiq:=False;     StartCurs:=Curs;     SharedFlag:=False;     { Curs doit etre initialise a la bonne valeur, comme CodeHdle et Tempin }     Getu;     ErrFlag:=False;     instind(Curs-StartCurs-Length(u),tkliste,temp);     Inst1(tkliste,temp,temp);     0:;		 IF (u<>'') & LigneEtiq THEN          BEGIN               ErrFlag:=True;               Error:=ErrSyntax;               EXIT(ListeInst);          END;     LigneEtiq:=False;     CurIndex:=temp^^.Lparam;     { recopie dans le code }     SetHSize(Handle(CodeHdle),XCodeLen+temp^^.Lparam);     BlockMoveData(Ptr(Ord4(temp^)),Ptr(Ord4(CodeHdle^)+XCodeLen),temp^^.Lparam);     IF (u<>'') & (NOT ErrFlag) THEN       BEGIN         expr;         IF NOT ErrFlag THEN                        BEGIN                             IF tpExpr=fnum                             THEN                               IF (tpaffect=fvarnum) |                                  (tpaffect=fvarstr) |                                  (tpaffect=finumVar) |                                  (tpaffect=fiStrVar) THEN                                   BEGIN { affectation }                                      BlockMoveData(Ptr(Ord4(CodeHdle^)+XCodeLen),                                                Ptr(Ord4(Temp^)),                                                Temp^^.Lparam);                                      addparam(Temp,ResExpr);                                   END                                   ELSE                                   BEGIN { affectation bizarre ... }                                      ErrFlag:=True;                                      Error:=ErrSyntax;                                      DisposHandle(Handle(Temp));                                      EXIT(ListeInst);                                   END                             ELSE                               BEGIN { on va essayer autre chose ... }                                  ErrFlag:=True;                                  Error:=ErrSyntax;                               END                        END;         IF ErrFlag THEN                        BEGIN                             { declaration d'etiquette ? }                             Etiq;                             IF NOT ErrFlag THEN                                BEGIN                                  BlockMoveData(Ptr(Ord4(CodeHdle^)+XCodeLen),                                            Ptr(Ord4(Temp^)),                                            Temp^^.Lparam);                                  addparam(Temp,ResEtiq);                                  LigneEtiq:=True;                                END                                  ELSE                                  BEGIN                                    { nom de procedure ? }                                    ProcCall;                                    IF NOT ErrFlag THEN                                       BEGIN                                        BlockMoveData(Ptr(Ord4(CodeHdle^)+XCodeLen),                                                  Ptr(Ord4(Temp^)),                                                  Temp^^.Lparam);                                        addparam(Temp,ResProc);                                       END                                       ELSE                                       BEGIN                                         { structure de controle ? }                                         ContStruct;                                         IF NOT ErrFlag THEN                                             BEGIN                                              BlockMoveData(Ptr(Ord4(CodeHdle^)+XCodeLen),                                                        Ptr(Ord4(Temp^)),                                                        Temp^^.Lparam);                                              addparam(Temp,ResCont);                                             END;                                       END;                                  END;                        END;         IF u=':' THEN BEGIN                         GetU;                         GOTO 0;                       END;         IF (u<>'') THEN          BEGIN               ErrFlag:=True;               Error:=ErrSyntax;               EXIT(ListeInst);          END;       END;     CopyHandle(Temp,ResListe);     DisposHandle(Handle(Temp));     Curs:=Curs+1;     { recopie dans le code }     SetHSize(Handle(CodeHdle),XCodeLen+ResListe^^.Lparam);     BlockMoveData(Ptr(Ord4(ResListe^)),               Ptr(Ord4(CodeHdle^)+XCodeLen),               ResListe^^.Lparam);END;{ DETOKENISEUR }{$S DETOKENISEUR}{==============================================================================}{			      D E T O K E N I Z E			       }{==============================================================================}PROCEDURE DeTokenize;VAR	flags : SignedByte;BEGIN     MoveHHi(Handle(Mots));		 Hlock(Handle(Mots));     flags := HGetState(Handle(ResListe));		 HLock(Handle(ResListe));		 Listedetok(ResListe^,TempOut);		 HSetState(Handle(ResListe),flags);     HUnlock(Handle(Mots));END;PROCEDURE AddCar(VAR s: str255; c: char);VAR l: integer;BEGIN	{ incrementer le nombre d'octets }	L:=ORD(s[0]);	IF l<255 THEN		BEGIN			s[0] := CHR(L+1);			s[length(s)]:=c;		END;END;PROCEDURE SupCar(VAR s: str255);VAR l: integer;BEGIN     { decrementer le nombre d'octets }     L:=ORD(s[0]);     IF L>0 THEN s[0]:=chr(l-1);END;PROCEDURE AddStr(VAR s1,s2: str255);BEGIN     s1 := concat(s1,s2);END;PROCEDURE AddStr20(VAR s1: str255; s2: str20);BEGIN     s1 := concat(s1,s2);END;PROCEDURE AddStr64(VAR s1: str255; VAR s2: str64);BEGIN     s1 := concat(s1,s2);END;{==============================================================================}PROCEDURE ListeDeTok(e: TparamPtr; VAR s: str255);VAR temp: Str255; nb,len,i: integer;BEGIN { detokeniser de e dans s }	temp:='';	nb:=e^.nbparam;	NextToken(e,sizeof(Tdummy)+2);	FOR i:=1 TO e^.indir DO AddCar(Temp,' ');	NextToken(e,e^.lparam);	FOR i:=2 TO nb DO	BEGIN		 RoutDeTok(e,s);		 AddStr(Temp,s);		 IF i<>nb THEN				BEGIN						AddCar(Temp,':');						AddCar(Temp,' ');				END;		 len:=e^.lparam;		 NextToken(e,len);	END;	s:=temp;END;PROCEDURE ExtDetok(e: TParamPtr; VAR s:Str255);VAR	temp: Str255;	nb,len,i: integer;	TheTk: integer;	Infos: ExtRec;BEGIN { detokeniser de e dans s }	TheTk:=e^.tk;	infos := e^.extInfos;	nb:= infos.extnbparam;	temp:= infos.extName;	NextToken(e,sizeof(Tdummy)+SizeOf(ExtRec)-SizeOf(TNextI));	IF nb>0 THEN	BEGIN		IF Infos.extType = fProc THEN AddCar(Temp,' ') ELSE AddCar(Temp,'(');		FOR i:=1 TO nb DO		BEGIN			RoutDeTok(e,s);			AddStr(temp,s);			IF i<>nb THEN AddCar(Temp,',');			len:=e^.lparam;			NextToken(e,len);		END;		IF Infos.extType <> fproc THEN AddCar(Temp,')');	END;	s:=temp;END;{==============================================================================}PROCEDURE procdetok(e:TParamPtr; VAR s: str255);VAR temp: Str255; nb,len,i: integer; TheTk: integer;BEGIN { detokeniser de e dans s }	TheTk:=e^.tk;	nb:= e^.nbparam;	temp:=mots^^[e^.tk].MotRes;	NextToken(e,sizeof(Tdummy)+2);	IF nb>0 THEN AddCar(Temp,' ');	FOR i:=1 TO nb DO	BEGIN		RoutDeTok(e,s);		AddStr(Temp,s);		IF (NOT (TheTk IN [TkPrint,TkTrace,TkFPrint])) & (i<>nb) THEN AddCar(Temp,',');		len:=e^.lparam;		NextToken(e,len);	END;	s:=temp;END;{==============================================================================}PROCEDURE contdetok(e:TParamPtr; VAR s: str255);VAR temp: Str255; nb,i,len: integer;BEGIN     temp:=mots^^[e^.tk].MotRes;     CASE e^.tk OF          tkif,tkwhile,tkgoto,tkgosub,TkUNTIL:               BEGIN                    NextToken(e,sizeof(Tdummy)+2);                    RoutDeTok(e,S);                    AddCar(Temp,' ');                    AddStr(Temp,S);               END;          tkrem:               BEGIN                    NextToken(e,sizeof(Tdummy)+2);                    RoutDeTok(e,S);                    AddStr(Temp,S);               END;          tkdim,tkShared:               BEGIN                    nb:=e^.nbparam;                    NextToken(e,sizeof(Tdummy)+2);                    AddCar(Temp,' ');                    FOR i:=1 TO nb DO                    BEGIN                       RoutDeTok(e,S);                       AddStr(Temp,S);                       IF i<>nb THEN AddCar(Temp,',');                       len:=e^.lparam;                       NextToken(e,len);                    END;               END;          tkon:               BEGIN                    nb:=e^.nbparam-2;                    NextToken(e,sizeof(Tdummy)+2);                    RoutDeTok(e,s);                    AddCar(Temp,' ');                    AddStr(Temp,S);                    len:=e^.lparam;                    NextToken(e,len);                    AddCar(Temp,' ');                    AddStr20(Temp,mots^^[e^.tk].MotRes);                    len:=e^.lparam;                    NextToken(e,len);                    FOR i:=1 TO nb DO                    BEGIN                       RoutDeTok(e,s);                       AddCar(Temp,' ');                       AddStr(Temp,S);                       IF i<>nb THEN AddCar(Temp,',');                       len:=e^.lparam;                       NextToken(e,len);                    END;               END;          tkfor:               BEGIN                    nb:=e^.nbparam;                    NextToken(e,sizeof(Tdummy)+2);                    RoutDeTok(e,s);                    AddCar(Temp,' ');                    AddStr(Temp,S);                    AddCar(Temp,' ');                    AddStr20(Temp,mots^^[tkTo].MotRes);                    AddCar(Temp,' ');                    len:=e^.lparam;                    NextToken(e,len);                    RoutDeTok(e,S);                    AddStr(Temp,S);                    len:=e^.lparam;                    NextToken(e,len);                    RoutDeTok(e,S);                    AddCar(Temp,' ');                    AddStr20(Temp,mots^^[tkStep].MotRes);                    AddCar(Temp,' ');                    AddStr(Temp,S);               END;     END;     S:=temp;END;{==============================================================================}PROCEDURE exprdetok(e:TParamPtr; VAR s: str255);VAR temp: Str255; xtk,nb,len,i: integer;BEGIN     xtk:=e^.tk;     IF (mots^^[xtk].tfunc=fcnum) | (mots^^[xtk].tfunc=fcstr) THEN          BEGIN             NextToken(e,sizeof(Tdummy)+2);             RoutDeTok(e,s);             IF (xtk<>tkpar) & (xtk<>tkneg) & (xtk<>tkNot) THEN                BEGIN                   Temp:=s;                   AddCar(Temp,' ');                   AddStr20(Temp,mots^^[xtk].MotRes);                   AddCar(Temp,' ');                   NextToken(e,e^.lparam);                   RoutDeTok(e,s);                   AddStr(Temp,s);                   s:=temp;                END                ELSE             IF (xtk<>tkpar) THEN                  BEGIN                     IF xtk=tkNeg THEN Temp:='-' ELSE Temp:='NOT ';                     AddStr(Temp,s);                     s:=temp;                  END                ELSE                  BEGIN                     temp:='(';                     AddStr(Temp,s);                     AddCar(Temp,')');                     s:=temp;                  END          END     ELSE          BEGIN             Temp:=mots^^[xtk].MotRes;             nb:=e^.nbparam;             IF nb>0 THEN                BEGIN                   AddCar(Temp,'(');                   NextToken(e,sizeof(Tdummy)+2);                   FOR i:=1 TO nb DO                   BEGIN                      RoutDeTok(e,s);                      AddStr(Temp,s);                      IF i<>nb THEN AddCar(Temp,',');                      len:=e^.lparam;                      NextToken(e,len);                   END;                END;             s:=Temp;             IF nb>0 THEN AddCar(s,')');          END;END;{==============================================================================}PROCEDURE strdetok(e:TParamPtr; VAR s: str255);BEGIN     s:=VarTab^^[e^.indir].NomVar;END;{==============================================================================}PROCEDURE idetok(e:TParamPtr; VAR s: str255);VAR temp: Str255;BEGIN     NextToken(e,sizeof(Tdummy)+2);     { 1er parametre: numero de variable }     temp:=VarTab^^[e^.indir].NomVar;     SupCar(Temp);     { 2e parametre: indice }     NextToken(e,e^.lparam);     RoutDetok(e,s);     AddStr(Temp,S);     AddCar(Temp,')');     S:=Temp;END;{==============================================================================}PROCEDURE Cstdetok(e:TParamPtr; VAR s: str255);BEGIN     s:='"';     AddStr64(s,CstTab^^[e^.indir]);     AddCar(s,'"');END;{==============================================================================}PROCEDURE Numdetok(e:TParamPtr; VAR s: str255);BEGIN     NumToString(e^.Num,S);END;{==============================================================================}PROCEDURE Remdetok(e:TParamPtr; VAR s: str255);BEGIN     s:=e^.param;END;{==============================================================================}PROCEDURE etiqdetok(e:TParamPtr; VAR s: str255);BEGIN     strDeTok(e,s);     AddCar(s,':');END;{==============================================================================}PROCEDURE pardetok(e:TParamPtr; VAR s: str255);VAR temp: Str255;BEGIN     NextToken(e,sizeof(Tdummy)+2);     RoutDeTok(e,s);     Temp:='(';     AddStr(Temp,s);     AddCar(Temp,')');     s:=temp;END;{==============================================================================}PROCEDURE routdetok(e:TParamPtr; VAR s: str255);BEGIN	IF e^.tk = ExtToken THEN		ExtDetok(e,s)	ELSE	CASE mots^^[e^.tk].tfunc OF		fproc: ProcDetok(e,s);		fcont: ContDetok(e,s);		fliste: listeDetok(e,s);		fuetiq: etiqDetok(e,s);		fiuetiq: strDetok(e,s);		fpar: parDetok(e,s);		fnum,fstr,fcnum,fcstr: exprDetok(e,s);		finumvar,fistrvar: idetok(e,s);		fvarnum,fvarstr: strDetok(e,s);		fcstnum: numdetok(e,s);		fcststr: cstdetok(e,s);		frem: remdetok(e,s);		fnop: s:=mots^^[e^.tk].MotRes;		OTHERWISE s:='autre';	END; { CASE }	(*		tpf:=mots^^[e^.tk].tfunc;		IF tpf=fproc THEN procdetok(e,s)		ELSE		IF tpf=fcont THEN contdetok(e,s)		ELSE		IF tpf=fliste THEN listedetok(e,s)		ELSE		IF tpf=fuetiq THEN etiqdetok(e,s)		ELSE		IF tpf=fiuetiq THEN strdetok(e,s)		ELSE		IF tpf=fpar THEN pardetok(e,s)		ELSE		IF (tpf=fnum) | (tpf=fstr) |			(tpf=fcnum) | (tpf=fcstr) THEN exprdetok(e,s)		ELSE		IF (tpf=finumvar) | (tpf=fistrvar) THEN idetok(e,s)		ELSE		IF (tpf=fvarnum) | (tpf=fvarstr) THEN strdetok(e,s)		ELSE		IF (tpf=fcstnum) THEN numdetok(e,s)		ELSE		IF (tpf=fcststr) THEN cstdetok(e,s)		ELSE		IF (tpf=frem) THEN remdetok(e,s)		ELSE		IF tpf=fnop THEN s:=mots^^[e^.tk].MotRes		ELSE s:='autre'; END;*)END;
+{$SETC DEBUG=TRUE}
+
+USES	TextUtils,
+			{$U $$Shell(PUtilities) }Utilities;
+
+TYPE
+	{ Types de caract√®res }
+	jeucar = (alpha,num,sep,special);
+
+	{ Types des unit√©s syntaxique }
+	utype	 = (nom,nom_chaine,cst_chaine,cst_num,autre);
+
+
+CONST
+	{ on recupere les constantes des tokens }
+	{$I TkTokenCst.p}
+	zero=0;
+					
+     VAR
+		 			Error			: INTEGER;
+          SharedFlag: boolean;		     { Flag indiquant les var partag√©es }
+
+          fini	    : boolean;		     { Booleen de sortie }
+          i	    		: integer;		     { Variable de comptage }
+
+          u	    		: str255;		     		{ Unite syntaxique }
+          typu	    : utype;		     		{ Type de l'unite  }
+
+          typetrouve,			     					{ Type du mot r√©serv√© trouv√© }
+          numtrouve : integer;		     	{ Num√©ro du mot r√©serv√© trouv√© }
+
+					{ Resultats interm√©diaires }
+          ResFactor,			   { Factor }
+          ResTerm,			     { Term }
+          ResExpr,			     { Expr }
+          ResSexpr,			     { Sexpr }
+          ResFunc,			     { FuncCall }
+          ResProc,			     { ProcCall }
+          ResEtiq,			     { EtiqCall }
+          ResCont   : TParamHandle;		   { ContStruct }
+
+          { Types interm√©diaires }
+          tpfactor,			     { Factor }
+          tpterm,			     { Term }
+          tpsexpr,			     { Sexpr }
+          tpexpr,			     { Expr }
+          tpfunc,			     { FuncCall }
+          tpproc,			     { ProcCall }
+          tpetiq,			     { EtiqCall }
+          tpaffect  : integer;		     { Affectation }
+
+          NumVar,			     { Variables de travail }
+          TkVar	    : Integer;		     { venant de AddVar }
+
+          PileWf    : TContPile;	     { piles d'imbrications }
+
+					MotsTries	: ARRAY [0..MaxMots] OF INTEGER;	{ Tableau des tokens tri√©s¬†}
+					
+{==============================================================================}
+{			       F O R W A R D S				       }
+{==============================================================================}
+
+PROCEDURE expr; FORWARD;
+PROCEDURE ListeInst; FORWARD;
+PROCEDURE ListeDeTok(e: TparamPtr; VAR s: str255); FORWARD;
+
+
+{$S INIT}
+{==============================================================================}
+{$IFC DEBUG}
+PROCEDURE DebugNum(chaine: Str255; Num:INTEGER;Go:BOOLEAN);
+
+VAR Chaine2: Str255;
+
+BEGIN
+	NumToString(Num,Chaine2);
+	IF Go THEN Chaine2:=concat(Chaine2,';g');
+	DebugStr(concat(Chaine,Chaine2));
+END;
+{$ENDC}
+
+{ initialisation de la table des routines externes }
+
+PROCEDURE InitExtern;
+
+VAR		
+		i,OldRes: INTEGER;
+		FileName: Str255;
+		Err: OsErr;
+		catpb: CInfoPBRec;
+		fcbpb: FCBPBRec;
+		theDir: LONGINT;
+		s: Str255;
+		
+	PROCEDURE AddExtern(LeType:OsType);
+	
+	VAR
+		i,j,k: INTEGER;
+		TheRes: Handle;
+		ResName: Str255;
+		TheID: INTEGER;
+		TheType: ResType;
+		TheCar: Char;
+		TheTest: BOOLEAN;
+		Num: INTEGER;
+		TheToken: str20;
+		L: INTEGER;
+		b:Boolean;
+
+	BEGIN
+		Num := Count1Resources(LeType);
+		FOR i := 1 TO Num DO BEGIN
+			TheRes := Get1IndResource(LeType,i);					{ on charge la routine externe }
+			IF TheRes = NIL THEN Cycle;
+			GetResInfo (theRes, theID, theType, ResName);	{ quel est son nom ? }
+
+			L:=Length(ResName)+1;
+			IF ODD(L) THEN L:=L+1;
+			ExtNames[NbTok-NbTokens] := GetHandleSize(ExtNamesH);
+			SetHSize(Handle(ExtNamesH),GetHandleSize(ExtNamesH)+L);
+			HLock(ExtNamesH);
+			BlockMoveData(@ResName[0],Ptr(Ord4(ExtNamesH^)+ExtNames[NbTok-NbTokens]),L);
+			HUnlock(ExtNamesH);
+			
+			UpperString(ResName,TRUE);											{ nom en majuscules SVP }
+			IF ResName <> '' THEN BEGIN
+				j := 0;
+				REPEAT
+					j := j+1;
+					TheCar := ResName[j];
+					TheTest := (j>length(ResName));
+					b:=NOT((TheCar IN ['A'..'Z','_']) | ((j>1) & (TheCar IN ['0'..'9'])));
+					TheTest := TheTest | b;
+				UNTIL TheTest;
+				{ ici j contient le premier caract√®re qui ne fait pas partie du
+				  nom du token de la routine externe }
+				IF j = 1 THEN Cycle;	{ nom du token incorrect ! }
+				
+				IF j>20 THEN
+					TheToken := Copy(ResName,1,20)	{¬†on ne garde que les 20 premiers car. }
+				ELSE
+					TheToken := Copy(ResName,1,j-1);
+				
+				FOR k := 0 TO nbTok DO			{ token d√©j√† existant ? }
+					IF mots^^[k].motRes = TheToken THEN
+					BEGIN
+						j:= 1; Leave;
+					END;
+				IF j=1 THEN Cycle;
+				
+				nbTok := NbTok + 1;
+				SetHSize(Handle(mots),(NbTok+1)*SizeOf(TRes));
+				
+				HLock(Handle(mots));
+				WITH mots^^[NbTok] DO BEGIN
+					MotRes := TheToken;	{ le nom du token }
+					tfunc := fProc;			{ type 'PROCEDURE' par d√©faut }
+					token := ExtToken;	{ c'est un externe }
+					nbParms := 0;				{ raz }
+					JumpCode := -1;
+					FlagAnalys := TRUE;
+					TheResC := TheRes;	{ Handle vers la resource externe }
+					HUnlock(TheResC);		{ on d√©verouille }
+					HPurge(TheResC);		{ et on lib√®re   }
+					TypeExt := LeType;	{ type de l'externe }
+					
+					{ analyse des param√®tres }
+					WHILE (j<=length(ResName)) & (ResName[j]<>')') & (nbparms<maxparams) DO BEGIN
+						CASE ResName[j] OF
+							'(': IF tFunc = fProc THEN tFunc := fNum;
+							
+							'$':	{ expression chaine (passage par adresse, non modifiable) }
+							BEGIN
+								IF j=length(MotRes)+1 THEN tfunc := fStr
+								ELSE BEGIN
+									nbParms := nbParms + 1;
+									tParms[nbParms] := fExpStr;
+								END;
+							END;
+		
+							'%':	{ expression num√©rique (passage par valeur) }
+							BEGIN
+								nbParms := nbParms + 1;
+								tParms[nbparms] := fExpNum;
+							END;
+							
+							'S':	{ variable chaine (passage par adresse) }
+							BEGIN
+								nbParms := nbParms + 1;
+								tParms[nbParms] := fVarStr;
+							END;
+							
+							'N':	{ variable num√©rique (passage par adresse) }
+							BEGIN
+								nbParms := nbParms + 1;
+								tParms[nbParms] := fVarNum;
+							END;
+							
+						END;	{CASE}
+						j := j+1;
+					END;	{WHILE}
+					IF tFunc = fStr THEN MotRes := concat(motres,'$');
+				END;	{WITH mots‚Ä¶}
+				HUnlock(Handle(Mots));
+			END;	{IF Resname<>'' THEN}
+		END;	{FOR i := 1 TO Count1Res‚Ä¶ }
+	END;	{ AddExtern }
+	
+BEGIN
+	i := 1;
+	OldRes := CurResFile;
+	ExtNamesH := NewHandle(0);
+	NbExtFiles := -1;
+	REPEAT
+		SetResLoad(TRUE);
+		GetIndString(FileName,ExtFileName,i);
+		IF FileName <> '' THEN BEGIN
+			SetResLoad(FALSE);		{ on ne veut pas charger les resources }
+			Err := OpenResFile(FileName);
+			IF Err <> -1 THEN
+			BEGIN
+				NbExtFiles := NbExtFiles + 1;
+				ExtFiles[NbExtFiles] := Err;
+				AddExtern(ExtType1);	{ DEXT }
+				AddExtern(ExtType2);	{ DEXC¬†}
+			END
+			ELSE
+			BEGIN		{¬†on regarde si c'est un dossier‚Ä¶¬†}
+				WITH fcbPB DO	{¬†on r√©cup√®re le vRefnum de l'appli }
+				BEGIN
+					iovRefNum := 0;
+					ioRefNum := gAppResRef;
+					ioFCBIndx := 0;
+					ioNamePtr := @s;
+					Err := PBGetFCBInfoSync(@fcbPB);
+				END;
+				WITH catpb DO
+				BEGIN
+					iovRefNum := 0;
+					ioDirID := 0;
+					ioNamePtr := @filename;
+					ioFDirIndex := 0;
+					Err := PBGetCatInfoSync(@catpb);
+					theDir := ioDrDirID;
+					IF (Err=NoErr) & BTst(ioFlAttrib,4) THEN		{¬†c'est un dossier ! }
+					BEGIN
+						ioFDirIndex := 1;
+						ioDirID := theDir;
+						WHILE PBGetCatInfoSync(@catpb)=NoErr DO
+						BEGIN
+							Err := HOpenResFile(fcbPB.ioFCBvRefNum,theDir,fileName,fsRdPerm);
+							IF Err<>-1 THEN
+							BEGIN
+								NbExtFiles := NbExtFiles + 1;
+								ExtFiles[NbExtFiles] := Err;
+								AddExtern(ExtType1);	{ DEXT }
+								AddExtern(ExtType2);	{ DEXC¬†}
+							END;
+							ioFDirIndex := ioFDirIndex+1;	{¬†on passe au fichier suivant }
+							ioDirID := theDir;						{¬†on se remet dans le bon dossier }
+						END;
+					END;
+				END;
+			END;
+			
+			i := i+1;
+		END;
+	UNTIL (FileName = '') OR (NbExtFiles=kMaxExtFiles);
+	UseResFile(OldRes);
+	AddExtern(ExtType1);		{ on ajoute les routines qui se trouve dans DragsterEdit }
+	AddExtern(ExtType2); 
+	SetResLoad(TRUE);
+END;
+
+
+PROCEDURE InitTokens; {call it once}
+     TYPE parHandle = ^ParPtr;
+          ParPtr    = ^ParRec;
+          ParRec    = ARRAY[0..2000] OF integer;
+     VAR i,j,NumI: integer;
+         temps: str255;
+         MyParms: ParHandle;
+		 TheType: ResType;
+
+BEGIN
+	Dbg:=False;
+	ResFactor:=TParamHandle(NewHandle(0));{ Factor }
+	HNoPurge(Handle(ResFactor));
+	ResTerm:=TParamHandle(NewHandle(0));  { Term }
+	HNoPurge(Handle(ResTerm));
+	ResExpr:=TParamHandle(NewHandle(0));  { Expr }
+	HNoPurge(Handle(ResExpr));
+	ResSexpr:=TParamHandle(NewHandle(0)); { Sexpr }
+	HNoPurge(Handle(ResSexpr));
+	ResFunc:=TParamHandle(NewHandle(0));  { FuncCall }
+	HNoPurge(Handle(ResFunc));
+	ResProc:=TParamHandle(NewHandle(0));  { ProcCall }
+	HNoPurge(Handle(ResProc));
+	ResEtiq:=TParamHandle(NewHandle(0));  { EtiqCall }
+	HNoPurge(Handle(ResEtiq));
+	ResCont:=TParamHandle(NewHandle(0));  { ContStruct }
+	HNoPurge(Handle(ResCont));
+	ResListe:=TParamHandle(NewHandle(0)); { Liste }
+	HNoPurge(Handle(ResListe));
+	MyParms:=ParHandle(GetResource('PARA',260));
+	HNoPurge(Handle(MyParms));
+
+	Mots:=HMRes(NewHandle(SizeOf(TRes)*(nbtokens+1)));
+	HNoPurge(Handle(Mots));
+	HLock(Handle(Mots));
+
+	NbTok := NbTokens;
+	NumI:=0;
+	
+	FOR i:=0 TO nbtokens DO
+	WITH mots^^[i] DO
+	BEGIN
+		token:=i;
+		GetIndString(Temps,260,i+1);
+		MotRes:=Temps;
+		flagAnalys:=MyParms^^[NumI]=1;
+		JumpCode:=MyParms^^[NumI+1];
+		tfunc:=MyParms^^[NumI+2];
+		nbparms:=MyParms^^[NumI+3];
+		NumI:=NumI+4;
+		FOR j:=1 TO nbParms DO
+		BEGIN
+			tparms[j]:=MyParms^^[NumI];
+			NumI:=NumI+1;
+		END;
+		TheResC:=Nil;
+	END;
+	
+	HunLock(Handle(Mots));
+	ReleaseResource(Handle(MyParms));
+	InitExtern;
+
+	{ Trier le tableau des TokensTri√©s pour recherche + rapides }
+
+	FOR i:=0 TO NbTok DO
+	BEGIN
+		MotsTries[i] := i;
+		j:=i-1;
+		WHILE (j>=0) & (Mots^^[i].motRes < Mots^^[MotsTries[j]].motRes) DO
+		BEGIN
+			MotsTries[j+1]:=MotsTries[j];
+			j:=j-1;
+		END;
+		MotsTries[j+1]:=i;
+	END;
+	
+	HunLock(Handle(Mots));
+END;
+
+{==============================================================================}
+{			       UTILITAIRES pour TOKENIZE/DETOKENIZE			       }
+{==============================================================================}
+
+{ retrouve un token dans la table des 'mots' }
+
+PROCEDURE FindExtToken(e:TParamPtr);
+
+VAR
+	i: INTEGER;
+	
+BEGIN
+	FOR i := nbTokens+1 TO nbTok DO
+		IF mots^^[i].MotRes = e^.extInfos.ExtName THEN
+		BEGIN
+			e^.tk := i;
+			Leave;
+		END;
+END;
+
+
+{ Rend le token suivant }
+
+PROCEDURE NextToken(VAR e:TParamPtr;offset:LONGINT);
+
+BEGIN
+	e:= TParamPtr(Ord4(e)+offset);
+	
+END;
+
+
+
+{$S TOKENISEUR}
+{==============================================================================}
+{			     I N I T T A B L E S			       }
+{==============================================================================}
+
+PROCEDURE InitTables;
+BEGIN
+	NbCst:=0;
+	NbVar:=0;
+	SetHSize(Handle(VarTab),0);
+	SetHSize(Handle(CstTab),0);
+	NbWF:=0;
+	BaseIndex:=0;
+END;
+
+{==============================================================================}
+{			       T O K E N I Z E				       }
+{==============================================================================}
+
+PROCEDURE Tokenize;
+
+VAR i: integer; Start: integer; {Size: longint;}
+
+BEGIN
+	MoveHHi(Handle(Mots));
+	HLock(Handle(Mots));
+	Start:=Curs;
+	ListeInst;
+	BaseIndex:=BaseIndex+ResListe^^.LParam;
+	IF ErrFlag THEN
+	BEGIN
+		ErrPos:=Curs-Start;
+		GetIndString(ErrorStr,ErrorStrings,Error);
+	END;
+	HUnlock(Handle(Mots));
+	
+	SetHSize(Handle(ResFactor),0);{ Factor }
+	SetHSize(Handle(ResTerm),0);  { Term }
+	SetHSize(Handle(ResExpr),0);  { Expr }
+	SetHSize(Handle(ResSexpr),0); { Sexpr }
+	SetHSize(Handle(ResFunc),0);  { FuncCall }
+	SetHSize(Handle(ResProc),0);  { ProcCall }
+	SetHSize(Handle(ResEtiq),0);  { EtiqCall }
+	SetHSize(Handle(ResCont),0);  { ContStruct }
+END;
+
+{==============================================================================}
+{			     U T I L I T A I R E S			       }
+{==============================================================================}
+
+FUNCTION typecar(c: char): jeucar;
+BEGIN { Rend le type du caractere }
+     IF (c IN ['A'..'Z','a'..'z','_']) THEN typecar:=alpha
+     ELSE IF (c IN ['0'..'9']) THEN typecar:=num
+     ELSE IF (c IN ['=','<','>','+','-','*','/','(',')','$',',',';','.','"',':']) THEN typecar:=special
+     ELSE typecar:=sep;
+END;
+
+FUNCTION alphad(c: char): boolean;
+BEGIN { Rend vrai si le caractere est alpha }
+     alphad:=(c IN ['A'..'Z','a'..'z','_']);
+END;
+
+FUNCTION alphanum(c: char): boolean;
+BEGIN{ Rend vrai si le caractere est alphanum√©rique }
+     alphanum:=(c IN ['A'..'Z','a'..'z','0'..'9','_']);
+END;
+
+FUNCTION numd(c: char): boolean;
+BEGIN { Rend vrai si le caractere est num√©rique }
+     numd:=(c IN ['0'..'9']);
+END;
+
+PROCEDURE Uppc(VAR temp: str255);
+     VAR i: integer;
+BEGIN { Met la chaine en Majuscules }
+     FOR i:=1 TO length(Temp) DO
+          IF (temp[i] IN ['a'..'z']) THEN temp[i]:=chr(ord(temp[i])-32);
+END;
+
+
+PROCEDURE CopyHandle(VAR h1,h2: TParamHandle);
+     { copie de h1 vers h2 }
+BEGIN
+	 IF GetHandleSize(Handle(h1))=0 THEN 
+	 BEGIN
+	 	SetHSize(Handle(h2),0);
+		EXIT(CopyHandle);
+	 END;
+     SetHSize(Handle(h2),h1^^.lparam);
+     BlockMoveData(Ptr(h1^),Ptr(h2^),h1^^.lparam);
+END;
+
+
+PROCEDURE AddCar2(VAR s:str255; c: char);
+
+VAR l: integer;
+
+BEGIN
+	{ incrementer le nombre d'octets }
+	L:=ORD(s[0]);
+	IF l<255 THEN
+	BEGIN
+		l := L+1;
+		s[0] := CHR(L);
+		s[L]:=c;
+	END;
+END;
+
+
+{==============================================================================}
+{			  T O K E N I S A T I O N			       }
+{==============================================================================}
+
+{==============================================================================}
+{== GetU: Recupere l'Unite Syntaxique suivante,
+          √† partir de Curs dans TempIn.
+
+          En Sortie: U	 : unit√© syntaxique
+                     TypU: type de cette unit√©
+                     Curs: modifi√©
+==}
+
+PROCEDURE getu;
+     VAR fini: boolean; start,i: Longint;
+
+     FUNCTION Fdl: boolean;
+     BEGIN
+          Fdl:=(Tempin^[Curs]=chr(13));
+     END;
+
+
+BEGIN { Chope la prochaine Unit√© Syntaxique }
+
+     u:='';
+
+     { skip blanc, tabs, nl }
+     fini:=false;
+     WHILE (NOT Fdl) & (NOT fini) DO
+       BEGIN
+          fini:=NOT (typecar(Tempin^[curs])=sep);
+          IF NOT fini THEN curs:=curs+1;
+       END;
+
+     { sortie fin de ligne }
+     IF Fdl THEN EXIT(getu);
+
+     { recup de l'unite }
+     start:=curs;
+     CASE typecar(Tempin^[start]) OF
+
+       alpha: { on prend tout alpha }
+          BEGIN
+               typu:=nom;
+               fini:=false;
+               WHILE (NOT Fdl) & (NOT fini) DO
+                 BEGIN
+                    fini:=NOT Alphad(Tempin^[curs]);
+                    IF NOT fini THEN curs:=curs+1;
+                 END;
+               fini:=false;
+               WHILE (NOT Fdl) & (NOT fini) DO
+                 BEGIN
+                    fini:=NOT AlphaNum(Tempin^[curs]);
+                    IF NOT fini THEN curs:=curs+1;
+                 END;
+               IF NOT Fdl THEN
+                    IF Tempin^[curs]='$' THEN
+                       BEGIN curs:=curs+1;
+                             typu:=nom_chaine;
+                       END;
+          END;
+
+       num:   { on prend tout numerique }
+          BEGIN
+               typu:=cst_num;
+               fini:=false;
+               WHILE (NOT Fdl) & (NOT fini) DO
+                 BEGIN
+                    fini:=NOT Numd(Tempin^[curs]);
+                    IF NOT fini THEN curs:=curs+1;
+                 END;
+{******* on ne prend pas encore les virgules flottantes
+               If not Fdl then
+                    If Tempin^[curs]='.' then
+                       begin
+                         curs:=curs+1;
+                         fini:=false;
+                         While (not Fdl) & (not fini) do
+                           begin
+                              fini:=not Numd(Tempin^[curs]);
+                              if not fini then curs:=curs+1;
+                           end;
+                       end;
+ *******}
+          END;
+
+       special:	   { caractere speciaux }
+          BEGIN	   { on va rechercher les doublons <=, >=, <> }
+               typu:=autre;
+               curs:=curs+1;
+               IF NOT Fdl THEN
+                  CASE tempin^[start] OF
+                     '<': IF (tempin^[curs]='>') | (tempin^[curs]='=')
+                             THEN curs:=curs+1;
+                     '>': IF tempin^[curs]='='
+                             THEN curs:=curs+1;
+                     '"': BEGIN
+                            typu:=cst_chaine;
+                            fini:=false;
+                            WHILE (NOT Fdl) & (NOT fini) DO
+                              BEGIN
+                                 fini:=Tempin^[curs]='"';
+                                 curs:=curs+1;
+                              END;
+                          END;
+                  END;
+          END;
+     END;
+
+		 IF curs > Start + 200 THEN curs := Start + 200;
+     { on rend le resultat tant attendu }
+		 u[0]:=Chr(curs-start);
+     BlockMoveData(@TempIn^[Start],@u[1],Curs-Start);
+		 
+     { on met en majuscules si ce n'est pas une constante chaine }
+     IF (Typu IN [nom,nom_chaine,autre]) THEN Uppc(u);
+END;
+
+
+PROCEDURE AddFor;
+BEGIN
+     IF NbWF=MaxImb THEN
+        BEGIN
+          ErrFlag:=True;
+          Error:=ErrImbWf;
+          EXIT(AddFor);
+        END;
+
+     NbWf:=NbWf+1;
+     WITH PileWf[NbWf] DO
+       BEGIN
+          WhileFlag:=1;
+          WFIIndex:=BaseIndex+CurIndex;
+          WNEIndex:=0;
+          Brklist:= NIL;
+					ContList := NIL;
+       END;
+END;
+
+PROCEDURE AddWhile;
+BEGIN
+     IF NbWF=MaxImb THEN
+        BEGIN
+          ErrFlag:=True;
+          Error:=ErrImbWf;
+          EXIT(AddWhile);
+        END;
+
+     NbWf:=NbWf+1;
+     WITH PileWf[NbWf] DO
+       BEGIN
+          WhileFlag:=0;
+          WFIIndex:=BaseIndex+CurIndex;
+          WNEIndex:=0;
+          Brklist:= Nil;
+					ContList := NIL;
+       END;
+END;
+
+
+PROCEDURE AddWend;
+     VAR  AdrFor: TParamPtr;
+          i: integer;
+          Bl: HBrkLst;
+BEGIN
+     IF NbWF=0 THEN
+        BEGIN
+          ErrFlag:=True;
+          Error:=ErrWend;
+          EXIT(AddWend);
+        END;
+
+     WITH PileWf[NbWf] DO
+       BEGIN
+          IF WhileFlag<>0 THEN
+             BEGIN
+               ErrFlag:=True;
+               Error:=ErrWend;
+               EXIT(AddWend);
+             END;
+          WNEIndex:=BaseIndex+CurIndex;
+          RepIndex:=WFIIndex;
+
+          { on met a jour le WHILE et les BREAK correspondant }
+          AdrFor:=TParamPtr(Ord4(CodeHdle^)+WFIIndex);
+          { positionne sur 1er parametre }
+          AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);
+               AdrFor:=TParamPtr(Ord4(AdrFor)+AdrFor^.LParam);
+          { positionne sur offset du next }
+          AdrFor^.Num:=WNEIndex;
+
+          Bl:=BrkList;
+          WHILE (Bl<>Nil) DO
+            BEGIN
+               { positionnement sur le break }
+               AdrFor:=TParamPtr(Ord4(CodeHdle^)+Bl^^.BrkIndex);
+               AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);
+               AdrFor^.Num:=WNEIndex;
+               Brklist:=Bl;
+               Bl:=Bl^^.NextBrk;
+               DisposHandle(Handle(BrkList));
+            END;
+       END;
+
+     NbWf:=NbWf-1;
+END;
+
+PROCEDURE AddNext;
+     VAR  AdrFor: TParamPtr;
+          i: integer;
+          Bl: HBrkLst;
+BEGIN
+     IF NbWF=0 THEN
+        BEGIN
+          ErrFlag:=True;
+          Error:=ErrNext;
+          EXIT(AddNext);
+        END;
+
+     WITH PileWf[NbWf] DO
+       BEGIN
+          IF WhileFlag<>1 THEN
+             BEGIN
+               ErrFlag:=True;
+               Error:=ErrNext;
+               EXIT(AddNext);
+             END;
+          WNEIndex:=BaseIndex+CurIndex;
+          RepIndex:=WFIIndex;
+
+          { on met a jour le FOR et les BREAK correspondant }
+          AdrFor:=TParamPtr(Ord4(CodeHdle^)+WFIIndex);
+
+          { positionne sur 1er parametre }
+          AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);
+          FOR i:=1 TO 3 DO
+            BEGIN
+               AdrFor:=TParamPtr(Ord4(AdrFor)+AdrFor^.LParam);
+            END;
+
+          { positionne sur offset du next }
+          AdrFor^.Num:=WNEIndex;
+
+          Bl:=BrkList;
+          WHILE (Bl<>Nil) DO
+            BEGIN
+               { positionnement sur le break }
+               AdrFor:=TParamPtr(Ord4(CodeHdle^)+Bl^^.BrkIndex);
+               AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);
+               AdrFor^.Num:=WNEIndex;
+               Brklist:=Bl;
+               Bl:=Bl^^.NextBrk;
+               DisposHandle(Handle(BrkList));
+            END;
+       END;
+
+     NbWf:=NbWf-1;
+END;
+
+
+PROCEDURE AddBreak;
+
+VAR		Pt: HBrkLst;
+			NumWF: integer; Trouve: Boolean;
+
+BEGIN
+     { recherche du premier While/For}
+     NumWF:=NbWF; Trouve:=False;
+     WHILE (NumWF>0) & (NOT trouve) DO
+     BEGIN
+          trouve:=PileWf[NumWF].WhileFlag IN [0,1,3];	{ for/while/repeat }
+          IF NOT Trouve THEN NumWF:=NumWf-1;
+     END;
+
+     IF NumWF=0 THEN
+        BEGIN
+          ErrFlag:=True;
+          Error:=ErrBreak;
+          EXIT(AddBreak);
+        END;
+
+     WITH PileWf[NumWF] DO
+       BEGIN
+          { ajout du break en tete de liste }
+          Pt:=HBrkLst(NewHandle(SizeOf(TBrkLst)));
+          HNoPurge(Handle(Pt));
+          Pt^^.NextBrk:=BrkList;
+          Pt^^.BrkIndex:=BaseIndex+CurIndex;
+          BrkList:=Pt;
+       END;
+END;
+
+PROCEDURE AddContinue;
+
+VAR	Pt: HBrkLst;
+		NumWF: integer; Trouve: Boolean;
+
+BEGIN
+     { recherche du premier While/For}
+     NumWF:=NbWF; Trouve:=False;
+     WHILE (NumWF>0) & (NOT trouve) DO
+     BEGIN
+          trouve:=PileWf[NumWF].WhileFlag IN [0,1,3];	{ for/while/continue }
+          IF NOT Trouve THEN NumWF:=NumWf-1;
+     END;
+
+     IF NumWF=0 THEN
+        BEGIN
+          ErrFlag:=True;
+          Error:=ErrCont;
+          EXIT(AddContinue);
+        END;
+
+     WITH PileWf[NumWF] DO
+       IF WhileFlag=3 THEN	{ REPEAT/UNTIL }
+			 BEGIN
+          { ajout du CONTINUE en tete de liste }
+          Pt:=HBrkLst(NewHandle(SizeOf(TBrkLst)));
+          HNoPurge(Handle(Pt));
+          Pt^^.NextBrk:=BrkList;
+          Pt^^.BrkIndex:=BaseIndex+CurIndex;
+          ContList:=Pt;
+					RepIndex := 0;
+       END
+			 ELSE
+       BEGIN
+          RepIndex:=WFIIndex;
+       END;
+END;
+
+PROCEDURE AddIf;
+BEGIN
+     IF NbWf=MaxImb THEN
+        BEGIN
+          ErrFlag:=True;
+          Error:=ErrImbWf;
+          EXIT(AddIf);
+        END;
+
+     NbWf:=NbWf+1;
+     WITH PileWf[NbWf] DO
+       BEGIN
+          WhileFlag:=2;
+          WFIIndex:=BaseIndex+CurIndex;
+          WNEIndex:=0;
+          EndIndex:=0;
+       END;
+END;
+
+PROCEDURE AddElse;
+BEGIN
+     IF NbWf=0 THEN
+        BEGIN
+          ErrFlag:=True;
+          Error:=ErrElse;
+          EXIT(AddElse);
+        END;
+
+     WITH PileWf[NbWf] DO
+       BEGIN
+          IF WhileFlag<>2 THEN
+             BEGIN
+               ErrFlag:=True;
+               Error:=ErrNext;
+               EXIT(AddElse);
+             END;
+          WNEIndex:=BaseIndex+CurIndex;
+       END;
+END;
+
+PROCEDURE AddEndif;
+     VAR AdrFor: TParamPtr;
+BEGIN
+     IF NbWf=0 THEN
+        BEGIN
+          ErrFlag:=True;
+          Error:=ErrEndif;
+          EXIT(AddEndif);
+        END;
+
+     WITH PileWf[NbWf] DO
+       BEGIN
+          IF WhileFlag<>2 THEN
+             BEGIN
+               ErrFlag:=True;
+               Error:=ErrNext;
+               EXIT(AddEndif);
+             END;
+          EndIndex:=BaseIndex+CurIndex;
+
+          { on met a jour le IF et le ELSE correspondant }
+          AdrFor:=TParamPtr(Ord4(CodeHdle^)+WFIIndex);
+          { positionne sur 1er parametre }
+          AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);
+          { positionne sur 2e parametre }
+          AdrFor:=TParamPtr(Ord4(AdrFor)+AdrFor^.LParam);
+          { positionne sur offset du else }
+          AdrFor^.Num:=WNEIndex;
+          AdrFor:=TParamPtr(Ord4(AdrFor)+AdrFor^.LParam);
+          { positionne sur offset du endif }
+          AdrFor^.Num:=EndIndex;
+
+          { positionne le ELSE sur le ENDIF, si ELSE existe}
+          IF WNEIndex > 0 THEN
+             BEGIN
+               AdrFor:=TParamPtr(Ord4(CodeHdle^)+WNEIndex);
+               { positionne sur 1er parametre }
+               AdrFor:=TParamPtr(Ord4(AdrFor)+SizeOf(TDummy)+2);
+               AdrFor^.Num:=EndIndex;
+             END;
+       END;
+
+     Nbwf:=Nbwf-1;
+END;
+
+
+PROCEDURE AddRepeat;
+BEGIN
+     IF NbWF=MaxImb THEN
+        BEGIN
+          ErrFlag:=True;
+          Error:=ErrImbWf;
+          EXIT(AddRepeat);
+        END;
+
+     NbWf:=NbWf+1;
+     WITH PileWf[NbWf] DO
+       BEGIN
+          WhileFlag:=3;	{¬†c'est un REPEAT }
+          WFIIndex:=BaseIndex+CurIndex;
+          WNEIndex:=0;
+          Brklist:= Nil;		{ liste des BREAK en attente de UNTIL¬†}
+					ContList := NIL;	{ liste des CONTINUE en attente de UNTIL¬†}
+       END;
+END;
+
+
+PROCEDURE AddUntil(e:TParamPtr);
+{ e est l'expression de condition de fin du UNTIL }
+
+VAR		AdrBreak: TParamPtr;
+			i: integer;
+			Bl: HBrkLst;
+			
+BEGIN
+	IF NbWF=0 THEN
+	BEGIN
+		ErrFlag:=True;
+		Error:=ErrUntil;
+		EXIT(AddUntil);
+	END;
+
+     WITH PileWf[NbWf] DO
+       BEGIN
+          IF WhileFlag<>3 THEN	{¬†on a bien un REPEAT en cours ? }
+             BEGIN
+               ErrFlag:=True;
+               Error:=ErrUntil;
+               EXIT(AddUntil);
+             END;
+          WNEIndex:=BaseIndex+CurIndex;
+          RepIndex:=WFIIndex;
+
+          { on met a jour les BREAK correspondant }
+          Bl:=BrkList;
+          WHILE (Bl<>Nil) DO
+            BEGIN
+               { positionnement sur le break }
+               AdrBreak:=TParamPtr(Ord4(CodeHdle^)+Bl^^.BrkIndex);
+               AdrBreak:=TParamPtr(Ord4(AdrBreak)+SizeOf(TDummy)+2);
+               AdrBreak^.Num:=WNEIndex+e^.lparam-(SizeOf(TDummy)+2);	{¬†BREAK saute apr√®s la condition }
+               Brklist:=Bl;
+               Bl:=Bl^^.NextBrk;
+               DisposHandle(Handle(BrkList));
+            END;
+
+          { on met a jour les CONTINUE correspondant }
+          Bl:=ContList;
+          WHILE (Bl<>Nil) DO
+            BEGIN
+               { positionnement sur le CONTINUE }
+               AdrBreak:=TParamPtr(Ord4(CodeHdle^)+Bl^^.BrkIndex);
+               AdrBreak:=TParamPtr(Ord4(AdrBreak)+SizeOf(TDummy)+2);
+               AdrBreak^.Num:=WNEIndex;	{¬†CONTINUE saute avant la condition }
+               ContList:=Bl;
+               Bl:=Bl^^.NextBrk;
+               DisposHandle(Handle(ContList));
+            END;
+       END;
+
+     NbWf:=NbWf-1;
+END;
+
+{==============================================================================}
+{== AddVar: Ajoute dans les tables d'identificateurs ou de constantes
+          la nouvelle valeur, si celle-ci n'existait pas d√©ja.
+
+          Tient compte du Flag "SharedFlag".
+
+          Donne un message d'Erreur en cas d'incompatibilit√© de types
+
+          En Sortie: Num : Num√©ro de l'indirection (Position dans la table )
+                     Tk	 : Token pour cette indirection
+                     NbVar ou NbCst peuvent √™tre incr√©ment√©.
+==}
+
+PROCEDURE AddVar(s: str255; tp: integer; VAR Num,tk: Integer);
+     VAR trouve: boolean;
+          i: integer;
+BEGIN
+     IF tp=fcststr THEN
+       BEGIN
+	   
+	   	  	{ ####### on limite a 63 caracteres ####### }
+		  		IF length(s)>63 THEN s[0]:=chr(63);
+		  
+          { recherche dans la table des constantes }
+          Tk:=TkSTRCST;
+
+          Trouve:=False; i:=0;
+          WHILE (NOT trouve) & (i<NbCst) DO
+          BEGIN
+               i:=i+1;
+               Trouve:=(CstTab^^[i]=s);
+          END;
+
+          IF trouve THEN
+            BEGIN { on rend la position }
+               Num:=i;
+            END
+          ELSE
+            BEGIN { on rajoute la constante }
+               NbCst:=NbCst+1;
+               Num:=NbCst;
+               SetHSize(Handle(CstTab),SizeOf(Str64)*Nbcst);
+               CstTab^^[NbCst]:=s;
+            END;
+
+       END
+       ELSE
+       BEGIN
+	   	  	{ ####### on limite a 20 caracteres ####### }
+		  		IF length(s)>20 THEN s[0]:=chr(20);
+		  
+          { recherche dans la table des variables }
+          Trouve:=False; i:=0;
+          WHILE (NOT trouve) & (i<NbVar) DO
+          BEGIN
+               i:=i+1;
+               Trouve:=(VarTab^^[i].NomVar=s);
+          END;
+
+          IF trouve THEN
+            BEGIN { on rend la position et on verifie la coherence des types }
+               Num:=i;
+               WITH VarTab^^[i] DO
+                 BEGIN
+
+                    IF tpVar<>tp THEN
+                     IF NOT (((tpvar=fetiq) & (tp=fuetiq)) |
+                             ((tp=fetiq) & (tpvar=fuetiq))) THEN
+                     BEGIN
+                         ErrFlag:=True;
+                         Error:=ErrDef;
+                         EXIT(AddVar);
+                     END;
+
+                    IF (tp=fetiq) & defined THEN
+                     BEGIN
+                         ErrFlag:=True;
+                         Error:=ErrDDef;
+                         EXIT(AddVar);
+                     END;
+
+                    IF ((tp=fuetiq) | (tp=fetiq))
+                         THEN defined:=defined | (tp=fetiq)
+                         ELSE Shared:=Shared | SharedFlag;
+
+                     IF Tp=Fetiq THEN Indir:=BaseIndex+CurIndex;
+                 END;
+            END
+            ELSE
+            BEGIN { on rajoute l'identificateur }
+               NbVar:=NbVar+1;
+               Num:=NbVar;
+               SetHSize(Handle(VarTab),SizeOf(TVar)*NbVar);
+               WITH VarTab^^[NbVar] DO
+                 BEGIN
+                    NomVar:=s;
+                    tpVar:=tp;
+                    IF ((tpvar=fetiq) | (tp=fuetiq))
+                         THEN defined:=tp=fetiq
+                         ELSE Shared:=SharedFlag;
+                    IF Tp=Fetiq THEN Indir:=BaseIndex+CurIndex;
+                    DimVal:=0;
+                 END;
+            END;
+
+            { on rend le token appropri√© }
+            CASE tp OF
+              fvarnum:	 tk:=tkNUMVAR;
+              fvarstr:	 tk:=tkSTRVAR;
+              fetiq:	 tk:=tkUETIQ;
+              fuetiq:	 tk:=tkIUETIQ;
+              finumvar:	 tk:=tkINUMVAR;
+              fiStrvar:	 tk:=tkISTRVAR;
+            END;
+       END;
+
+END;
+
+
+{==============================================================================}
+PROCEDURE addparam(result,p: TParamHandle);
+BEGIN
+     SetHSize(Handle(Result),Result^^.lparam+p^^.lparam);
+     BlockMoveData(Ptr(p^),Ptr(Ord4(Result^)+Result^^.lparam),p^^.lparam);
+     WITH Result^^ DO
+     BEGIN
+          lparam:=lparam+p^^.lparam;
+          nbparam:=nbparam+1;
+     END;
+END;
+
+{==============================================================================}
+PROCEDURE InstStr(s:str255; token: integer; VAR result: TParamHandle);
+     VAR longueur: integer;
+BEGIN
+     Longueur:=length(s)+sizeof(Tdummy)+1;
+     IF Odd(Longueur) THEN Longueur:=Longueur+1;
+     SetHSize(Handle(Result),Longueur);
+     WITH result^^ DO
+     BEGIN
+          tk:=token;
+          BlockMoveData(@s,@Result^^.Param,length(s)+1); {param:=s;}
+          lparam:=Longueur;
+     END;
+END;
+
+{==============================================================================}
+PROCEDURE instnum( n:longint; token: integer; VAR result: TParamHandle);
+BEGIN
+     SetHSize(Handle(Result),sizeof(Tdummy)+4);
+     WITH result^^ DO
+     BEGIN
+          tk:=token;
+          num:=n;
+          lparam:=sizeof(Tdummy)+4;
+     END;
+END;
+
+{==============================================================================}
+PROCEDURE instind( n:integer; token: integer; VAR result: TParamHandle);
+BEGIN
+		SetHSize(Handle(Result),sizeof(Tdummy)+2);
+		WITH result^^ DO
+     BEGIN
+          tk:=token;
+          indir:=n;
+          lparam:=sizeof(Tdummy)+2;
+     END;
+END;
+
+{==============================================================================}
+PROCEDURE instExt(NumTok: INTEGER; VAR result: TParamHandle);
+
+BEGIN
+	SetHSize(Handle(Result),sizeof(Tdummy)+SizeOf(ExtRec));
+	WITH result^^,result^^.ExtInfos,Mots^^[NumTok] DO
+	BEGIN
+		lparam:=sizeof(TDummy)+SizeOf(ExtRec)-SizeOf(TNextI);
+		tk := ExtToken;
+		extNbParam := 0;
+		extType := tfunc;
+		extName := MotRes;
+	END;
+END;
+
+{==============================================================================}
+PROCEDURE inst0(token: integer; VAR result: TParamHandle);
+BEGIN
+     IF token = extToken THEN DebugStr('inst0: Token externe !!!');
+		 SetHSize(Handle(Result),sizeof(Tdummy)+2);
+     WITH result^^ DO
+     BEGIN
+          lparam:=2+sizeof(TDummy);
+          tk:=token;
+          nbparam:=0;
+     END;
+END;
+
+{==============================================================================}
+PROCEDURE inst1(inst: integer; VAR p1,result: TParamHandle);
+     VAR r:TParamHandle;
+BEGIN
+     r:=TParamHandle(NewHandle(0));
+     HNoPurge(Handle(r));
+     inst0(inst,r);
+     addparam(r,p1);
+     DisposHandle(Handle(Result));
+     result:=r;
+END;
+
+{==============================================================================}
+PROCEDURE inst2(inst: integer; VAR p1,p2,result: TParamHandle);
+     VAR r:TParamHandle;
+BEGIN
+     r:=TParamHandle(NewHandle(0));
+     HNoPurge(Handle(r));
+     inst0(inst,r);
+     addparam(r,p1);
+     addparam(r,p2);
+     DisposHandle(Handle(Result));
+     result:=r;
+END;
+
+{==============================================================================}
+FUNCTION NumCk(VAR s:str255): boolean;
+     VAR i:integer; Ck: boolean;
+BEGIN
+     Ck:=True;
+     FOR i:=1 TO length(s) DO
+          IF NOT (s[i] IN ['0'..'9','.']) THEN ck:=false;
+     NumCk:=Ck;
+END;
+
+{==============================================================================}
+FUNCTION tpck1(t1,t2: integer): boolean;
+BEGIN { t2 est le type accepte }
+     tpck1:=(((t2=fexp) |
+             ((t2=fvar) & ((t1=fvar) | (t1=fvarstr) | (t1=fvarnum)
+                                       | (t1=finumvar) | (t1=fistrvar))) |
+             ((t2=fexpstr) & ((t1=fstr) | (t1=fvarstr) | (t1=fcststr)
+                                                          | (t1=fistrvar))) |
+             ((t2=fexpnum) & ((t1=fnum) | (t1=fvarnum) | (t1=fcstnum)
+                                                          | (t1=finumvar))) |
+             ((t2=fvarstr) & ((t1=fvarstr) | (t1=fistrvar))) |
+             ((t2=fvarnum) & ((t1=fvarnum) | (t1=finumvar))) |
+             (t2=t1)
+            ) & (t1<>fundef));
+END;
+
+{==============================================================================}
+FUNCTION ckNum(t1: integer): boolean;
+BEGIN { t1 est le type concerne: cknum rend true si numerique }
+     cknum:=(t1=fnum) | (t1=fvarnum) | (t1=fcstnum) | (t1=finumvar);
+END;
+
+{==============================================================================}
+FUNCTION ckStr(t1: integer): boolean;
+BEGIN { t1 est le type concerne: ckStr rend true si str }
+     ckStr:=(t1=fStr) | (t1=fvarStr) | (t1=fcstStr) | (t1=fiStrvar);
+END;
+
+{==============================================================================}
+PROCEDURE FuncCall;
+     VAR i, tkfunc:integer; trouve:boolean; temp,tempB: TParamHandle; Num: Longint;
+         TempU: Str255; TempTypu: utype;
+				 dstart, dend, Test, TheTok: INTEGER;
+BEGIN
+	Temp:=TParamHandle(NewHandle(0));
+	HNoPurge(Handle(Temp));
+
+	typetrouve:=fundef;
+	IF (typu IN [nom,nom_chaine]) THEN
+	BEGIN
+		{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ recherche du mot reserve ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ }
+(*
+		Trouve:=false; i:=0;
+		While (i<=nbtok) & (not trouve) do
+		With mots^^[i] do
+		begin
+			trouve:= (u=MotRes) & FlagAnalys;
+			if not trouve then i:=i+1;
+		end;
+*)
+
+		{ Recherche dichotomique du mot r√©serv√© }
+		dStart := 0;
+		dEnd := NbTok;
+		Test := (dStart + dEnd) DIV 2;
+		TheTok := -1;
+		Trouve := FALSE;
+		i := 0;
+		
+(*
+		WHILE dStart < dEnd DO
+		BEGIN
+			test := (dStart+dEnd) DIV 2;
+			IF Mots^^[MotsTries[Test]].MotRes<u THEN dStart:= Test+1 ELSE dEnd := Test;
+		END;
+		IF Mots^^[MotsTries[Test]].MotRes=u THEN theTok:=MotsTries[test]
+		ELSE IF Mots^^[MotsTries[NbTok]].MotRes=u THEN theTok := MotsTries[NbTok];
+*)
+
+		REPEAT
+			WITH Mots^^[MotsTries[Test]] DO
+			BEGIN
+				IF MotRes=U THEN TheTok := MotsTries[Test]
+				ELSE IF MotRes<u THEN dStart:=Test+1 ELSE dEnd := Test;
+				Test := (dStart + dEnd) DIV 2;
+			END;
+		UNTIL (dStart >= dEnd) OR (TheTok<>-1);
+
+
+		IF (theTok <> -1) & (Mots^^[theTok].FlagAnalys) THEN
+		BEGIN
+			Trouve := TRUE;
+			i := TheTok;
+		END;
+		
+		IF trouve THEN
+			BEGIN
+				typetrouve:=mots^^[i].tfunc;
+				numtrouve:=i;
+			END;
+			
+		IF trouve THEN
+		{  mot reserve du BASIC }
+		WITH mots^^[i] DO
+			IF (tfunc IN [fnum,fstr]) THEN
+			{ fonction Numerique ou chaine }
+			BEGIN
+				getu;
+				IF nbparms>0 THEN
+				IF u<>'(' THEN
+                 BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrCall;
+                    DisposHandle(Handle(Temp));
+                    EXIT(FuncCall);
+                 END
+                 ELSE BEGIN
+                         tpfunc:=tfunc;
+                         IF token <> ExtToken THEN
+												 		inst0(token,Temp)
+												 ELSE
+												 		instExt(i,Temp);
+														
+                         GetU;
+                         FOR i:=1 TO nbparms DO
+                         BEGIN
+						    { on choppe le parametre }
+                            expr;
+                            IF i<nbparms THEN
+                              BEGIN
+                               IF u<>',' THEN
+                                 BEGIN
+                                    ErrFlag:=True;
+                                    Error:=ErrMissing;
+                                    DisposHandle(Handle(Temp));
+                                    EXIT(FuncCall);
+                                 END
+                              END
+                              ELSE
+                               IF u<>')' THEN
+                                 BEGIN
+                                    ErrFlag:=True;
+                                    Error:=ErrMissing;
+                                    DisposHandle(Handle(Temp));
+                                    EXIT(FuncCall);
+                                 END;
+								 
+							{ check du type du parametre }
+                            IF NOT tpck1(tpexpr,tparms[i]) THEN
+                                 BEGIN
+                                    ErrFlag:=True;
+                                    Error:=ErrType;
+                                    DisposHandle(Handle(Temp));
+                                    EXIT(FuncCall);
+                                 END;
+                            IF ErrFlag THEN
+                                 BEGIN
+                                    DisposHandle(Handle(Temp));
+                                    EXIT(FuncCall);
+                                 END;
+                            getU;
+                            IF (tpexpr=fvarnum) | (tpexpr=fvarstr) THEN
+                               BEGIN
+                                 AddVar(ResExpr^^.Param,tpexpr,Numvar,TkVar);
+                                 IF ErrFlag THEN
+                                      BEGIN
+                                         DisposHandle(Handle(Temp));
+                                         EXIT(FuncCall);
+                                      END;
+                                 instind(NumVar,TkVar,ResExpr)
+                               END;
+                            addparam(temp,ResExpr);
+                          END;
+                          tpfunc:=tfunc;
+                        END
+              ELSE
+               BEGIN
+                    tpfunc:=tfunc;
+                    IF token <> ExtToken THEN
+											inst0(token,temp)
+										ELSE
+											instExt(i,Temp);
+               END;
+           END
+           ELSE
+           BEGIN
+                ErrFlag:=True;
+                Error:=ErrSyntax;
+                DisposHandle(Handle(Temp));
+                EXIT(FuncCall);
+           END
+      ELSE
+        BEGIN  { Typu= nom ou nom_chaine }
+               { on regarde si ce ne peut √™tre un tableau }
+              TempU:=U;
+              TempTypu:=Typu;
+              GetU;
+              IF U='('
+              THEN
+                 BEGIN
+                         IF TempTypu=nom THEN
+                            BEGIN
+                              tpfunc:=finumvar;
+                            END ELSE
+                            BEGIN
+                              tpfunc:=fistrvar;
+                            END;
+
+                         TempU[0]:=Chr(length(TempU)+2);
+						 TempU[length(TempU)-1]:='(';
+						 TempU[length(TempU)]:=')';
+                         AddVar(TempU,tpfunc,NumVar,tkVar);
+                         IF ErrFlag THEN
+                              BEGIN
+                                 DisposHandle(Handle(Temp));
+                                 EXIT(FuncCall);
+                              END;
+
+                         inst0(tkVar,Temp);
+
+                         TempB:=TParamHandle(NewHandle(0));
+                         HNoPurge(Handle(TempB));
+
+                         instind(NumVar,TkVar,TempB);
+                         AddParam(Temp,TempB);
+
+                         DisposHandle(Handle(TempB));
+
+                         GetU;
+
+                         expr;
+
+                         IF u<>')' THEN
+                           BEGIN
+                              ErrFlag:=True;
+                              Error:=ErrSyntax;
+                              DisposHandle(Handle(Temp));
+                              EXIT(FuncCall);
+                           END;
+
+                         IF NOT cknum(tpexpr) THEN
+                              BEGIN
+                                 ErrFlag:=True;
+                                 Error:=ErrType;
+                                 DisposHandle(Handle(Temp));
+                                 EXIT(FuncCall);
+                              END;
+
+                         IF ErrFlag THEN
+                              BEGIN
+                                 DisposHandle(Handle(Temp));
+                                 EXIT(FuncCall);
+                              END;
+
+                         getU;
+
+                         IF (tpexpr=fvarnum) THEN
+                            BEGIN
+                              AddVar(ResExpr^^.Param,tpexpr,Numvar,TkVar);
+                              IF ErrFlag THEN
+                                   BEGIN
+                                      DisposHandle(Handle(Temp));
+                                      EXIT(FuncCall);
+                                   END;
+                              instind(NumVar,TkVar,ResExpr)
+                            END;
+                         addparam(temp,ResExpr);
+
+                         IF TempTypu=nom THEN tpfunc:=finumvar
+                                       ELSE tpfunc:=fistrvar;
+                 END
+              ELSE
+                BEGIN
+                   IF TempTypu=nom
+                   THEN
+                      BEGIN
+                        tpfunc:=fvarnum;
+                        tkfunc:=TkNUMVAR;
+                      END
+                   ELSE
+                      BEGIN
+                         tpfunc:=fvarstr;
+                         tkfunc:=TkSTRVAR;
+                      END;
+                   InstStr(TempU,tkfunc,temp);
+                END;
+        END
+     END
+      ELSE
+        BEGIN
+              IF Typu=nom THEN
+               BEGIN { nom de variable ou etiquette }
+                    tpfunc:=fvarnum;
+                    InstStr(u,TkNUMVAR,temp);
+               END
+              ELSE
+              IF Typu=nom_chaine THEN
+               BEGIN { nom de variable chaine }
+                    tpfunc:=fvarstr;
+                    InstStr(u,TkSTRVAR,temp);
+               END
+              ELSE
+              IF Typu=cst_Chaine THEN
+               BEGIN { constante chaine }
+                    tpfunc:=fcststr;
+                    Delete(u,1,1);
+                    Delete(u,length(u),1);
+                    AddVar(u,fcststr,Numvar,TkVar);
+                    IF ErrFlag THEN
+                         BEGIN
+                              DisposHandle(Handle(Temp));
+                              EXIT(FuncCall);
+                         END;
+                    instind(NumVar,TkSTRCST,temp);
+               END
+              ELSE
+              IF Typu=cst_num THEN
+							BEGIN
+								tpfunc:=fcstnum;
+								IF (Length(u) > 10) | ((Length(u)=10) & (u>'2147483647')) THEN
+								BEGIN
+									ErrFlag:=True;
+									Error:=ErrSyntax;
+									DisposHandle(Handle(Temp));
+									EXIT(FuncCall);
+								END;
+								StringToNum(u,Num);
+								InstNum(Num,TkNUMCST,temp);
+							END
+						 ELSE
+              IF Typu=autre THEN
+               BEGIN
+                    tpfunc:=fundef;
+                    InstStr(u,TkV,temp);
+               END;
+              GetU;
+        END;
+
+     CopyHandle(Temp,ResFunc);
+     DisposHandle(Handle(Temp));
+END;
+
+{==============================================================================}
+PROCEDURE factor;
+     VAR temp: TParamHandle;
+BEGIN
+     Temp:=TParamHandle(NewHandle(0));
+     HNoPurge(Handle(Temp));
+
+     IF u='NOT' THEN
+        BEGIN
+
+          getu;
+          IF u='' THEN
+           BEGIN
+               ErrFlag:=True;
+               Error:=ErrSyntax;
+               DisposHandle(Handle(Temp));
+               EXIT(Factor);
+           END;
+
+          factor;
+          IF ErrFlag THEN
+               BEGIN
+                    DisposHandle(Handle(Temp));
+                    EXIT(Factor);
+               END;
+
+          IF NOT cknum(tpfactor) THEN
+           BEGIN
+               ErrFlag:=True;
+               Error:=ErrConf;
+               DisposHandle(Handle(Temp));
+               EXIT(Factor);
+           END;
+
+          IF tpfactor=fvarnum THEN
+             BEGIN
+               AddVar(ResFactor^^.Param,fvarnum,Numvar,TkVar);
+               IF ErrFlag THEN
+                    BEGIN
+                         DisposHandle(Handle(Temp));
+                         EXIT(Factor);
+                    END;
+               instind(NumVar,TkVar,ResFactor)
+             END;
+
+          tpfactor:=fnum;
+          inst1(tknot,ResFactor,Temp);
+
+        END
+
+        ELSE {if u='NOT'}
+     IF u='(' THEN
+        BEGIN
+
+          getu;
+          IF u='' THEN
+           BEGIN
+               ErrFlag:=True;
+               Error:=ErrSyntax;
+               DisposHandle(Handle(Temp));
+               EXIT(Factor);
+           END;
+
+          expr;
+          IF u='' THEN
+           BEGIN
+               ErrFlag:=True;
+               Error:=ErrSyntax;
+               DisposHandle(Handle(Temp));
+               EXIT(Factor);
+           END;
+
+          IF NOT cknum(tpexpr) THEN
+           BEGIN
+               ErrFlag:=True;
+               Error:=ErrConf;
+               DisposHandle(Handle(Temp));
+               EXIT(Factor);
+           END;
+
+          IF tpExpr=fvarnum THEN
+             BEGIN
+               AddVar(ResExpr^^.Param,fvarnum,Numvar,TkVar);
+               IF ErrFlag THEN
+                    BEGIN
+                         DisposHandle(Handle(Temp));
+                         EXIT(Factor);
+                    END;
+               instind(NumVar,TkVar,ResExpr)
+             END;
+
+          tpfactor:=fnum;
+          inst1(tkpar,ResExpr,Temp);
+
+          IF u=')' THEN
+             BEGIN
+               getu;
+             END
+             ELSE
+             BEGIN
+                 ErrFlag:=True;
+                 Error:=ErrSyntax;
+                 DisposHandle(Handle(Temp));
+                 EXIT(Factor);
+             END;
+        END
+     ELSE
+        BEGIN
+          FuncCall;
+          IF ErrFlag THEN
+               BEGIN
+                    DisposHandle(Handle(Temp));
+                    EXIT(Factor);
+               END;
+          CopyHandle(ResFunc,Temp);
+          tpfactor:=tpfunc;
+        END;
+
+     CopyHandle(Temp,ResFactor);
+     DisposHandle(Handle(Temp));
+END;
+
+{==============================================================================}
+PROCEDURE term;
+     VAR temp: TParamHandle; fini: boolean;
+         tp1,tp2,tpres: integer; tkTerm: Integer;
+BEGIN
+     Temp:=TParamHandle(NewHandle(0));
+     HNoPurge(Handle(Temp));
+
+     factor;
+     IF ErrFlag THEN
+          BEGIN
+               DisposHandle(Handle(Temp));
+               EXIT(Term);
+          END;
+     CopyHandle(ResFactor,Temp);
+     tp1:=tpfactor;
+     tpres:=tp1;
+
+     REPEAT
+
+          fini:=false;
+          IF (u='*') | (u='/') | (u='AND') | (u='MOD') THEN
+             BEGIN
+                CASE u[1] OF
+                 '*': tkTerm:=TkMul;
+                 '/': tkTerm:=TkDiv;
+                 'A': tkTerm:=TkAnd;
+                 'M': tkTerm:=TkMod;
+                END;
+
+                getu;
+                IF u='' THEN
+                BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrSyntax;
+                    DisposHandle(Handle(Temp));
+                    EXIT(Term);
+                END;
+
+                factor;
+                IF ErrFlag THEN
+                     BEGIN
+                          DisposHandle(Handle(Temp));
+                          EXIT(Term);
+                     END;
+
+                tp2:=tpfactor;
+
+                IF (tp1=fvarnum) THEN
+                    BEGIN
+                         AddVar(temp^^.Param,tp1,Numvar,TkVar);
+                         IF ErrFlag THEN
+                              BEGIN
+                                   DisposHandle(Handle(Temp));
+                                   EXIT(Term);
+                              END;
+                         instind(NumVar,TkVar,temp);
+                         tp1:=fnum;
+                    END;
+
+                IF (tp2=fvarnum) THEN
+                    BEGIN
+                         AddVar(ResFactor^^.Param,tp2,Numvar,TkVar);
+                         IF ErrFlag THEN
+                              BEGIN
+                                   DisposHandle(Handle(Temp));
+                                   EXIT(Term);
+                              END;
+                         instind(NumVar,TkVar,ResFactor);
+                         tp2:=fnum;
+                    END;
+
+                inst2(tkTerm,temp,ResFactor,temp);
+
+                IF NOT cknum(tp1) THEN
+                BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrConf;
+                    DisposHandle(Handle(Temp));
+                    EXIT(Term);
+                END;
+
+                IF NOT cknum(tp2) THEN
+                BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrConf;
+                    DisposHandle(Handle(Temp));
+                    EXIT(Term);
+                END;
+
+                tpres:=fnum;
+             END
+          ELSE fini:=true;
+
+     UNTIL fini | ErrFlag;
+
+     CopyHandle(Temp,ResTerm);
+     DisposHandle(Handle(Temp));
+     tpterm:=tpres;
+END;
+
+{==============================================================================}
+PROCEDURE s_expr;
+     VAR signe: boolean; temp: TParamHandle; fini: boolean; tp1,tp2,tpres: integer;
+     TkSExpr: integer;
+BEGIN
+     Temp:=TParamHandle(NewHandle(0));
+     HNoPurge(Handle(Temp));
+
+     signe:=false;
+     IF (u='+') | (u='-')
+          THEN BEGIN
+                    signe:=u='-';
+                    getu;
+               END;
+
+     IF u='' THEN
+          BEGIN
+               ErrFlag:=true;
+               Error:=ErrSyntax;
+               DisposHandle(Handle(Temp));
+               EXIT(s_expr);
+          END;
+
+     term;
+     IF ErrFlag THEN
+          BEGIN
+               DisposHandle(Handle(Temp));
+               EXIT(s_expr);
+          END;
+     tp1:=tpterm;
+
+     IF signe & ckStr(tp1) THEN
+          BEGIN
+               ErrFlag:=true;
+               Error:=ErrConf;
+               DisposHandle(Handle(Temp));
+               EXIT(s_expr);
+          END;
+
+     IF signe THEN
+          BEGIN
+               IF (tp1=fvarnum) THEN
+                    BEGIN
+                         AddVar(ResTerm^^.Param,tp1,Numvar,TkVar);
+                         IF ErrFlag THEN
+                              BEGIN
+                                   DisposHandle(Handle(Temp));
+                                   EXIT(s_expr);
+                              END;
+                         instind(NumVar,TkVar,ResTerm)
+                    END;
+               tp1:=fnum;
+               inst1(tkneg,ResTerm,temp);
+          END
+              ELSE
+          BEGIN
+               CopyHandle(ResTerm,Temp);
+          END;
+
+     tpres:=tp1;
+
+     REPEAT
+
+          fini:=false;
+          IF (u='+') | (u='-') | (u='OR') THEN
+             BEGIN
+                CASE u[1] OF
+                 '+': tkSExpr:=TkPlus;
+                 '-': tkSExpr:=TkMoins;
+                 'O': tkSExpr:=TkOr;
+                END;
+
+                getu;
+                IF u='' THEN
+                    BEGIN
+                         ErrFlag:=True;
+                         Error:=ErrSyntax;
+                         DisposHandle(Handle(Temp));
+                         EXIT(S_Expr);
+                    END;
+
+                term;
+                IF ErrFlag THEN
+                     BEGIN
+                          DisposHandle(Handle(Temp));
+                          EXIT(s_expr);
+                     END;
+
+                tp2:=tpterm;
+
+                IF ckNum(tp1) & (NOT ckNum(tp2)) THEN
+                    BEGIN
+                         ErrFlag:=True;
+                         Error:=ErrConf;
+                         DisposHandle(Handle(Temp));
+                         EXIT(S_Expr);
+                    END;
+
+                IF TkSExpr=TkPlus THEN
+                   IF ckStr(tp1) & (NOT ckStr(tp2)) THEN
+                    BEGIN
+                         ErrFlag:=True;
+                         Error:=ErrConf;
+                         DisposHandle(Handle(Temp));
+                         EXIT(S_Expr);
+                    END;
+
+                IF (tp1=fvarnum) | (tp1=fvarstr) THEN
+                    BEGIN
+                         AddVar(temp^^.Param,tp1,Numvar,TkVar);
+                         IF ErrFlag THEN
+                              BEGIN
+                                   DisposHandle(Handle(Temp));
+                                   EXIT(s_expr);
+                              END;
+                         instind(NumVar,TkVar,temp);
+                         IF tp1=fvarnum THEN tp1:=fnum ELSE tp1:=fstr;
+                    END;
+
+                IF (tp2=fvarnum) | (tp2=fvarstr) THEN
+                    BEGIN
+                         AddVar(ResTerm^^.Param,tp2,Numvar,TkVar);
+                         IF ErrFlag THEN
+                              BEGIN
+                                   DisposHandle(Handle(Temp));
+                                   EXIT(s_expr);
+                              END;
+                         instind(NumVar,TkVar,ResTerm);
+                         IF tp2=fvarnum THEN tp2:=fnum ELSE tp2:=fstr;
+                    END;
+
+                IF ckNum(tp1) THEN
+                    tpres:=fnum
+                    ELSE tpres:=fstr;
+
+                IF tpres=fstr THEN
+                    tkSExpr:=tkPlusStr;
+
+                inst2(tkSExpr,temp,ResTerm,temp);
+             END
+          ELSE fini:=true;
+
+     UNTIL fini | ErrFlag;
+
+     CopyHandle(Temp,ResSExpr);
+     DisposHandle(Handle(Temp));
+     tpsexpr:=tpres;
+END;
+
+{==============================================================================}
+PROCEDURE expr;
+     VAR temp: TParamHandle; tp1,tp2,tpres,tempaffect, TkExpr: integer;
+BEGIN
+     Temp:=TParamHandle(NewHandle(0));
+     HNoPurge(Handle(Temp));
+
+     s_expr;
+     IF ErrFlag THEN
+          BEGIN
+               DisposHandle(Handle(Temp));
+               EXIT(expr);
+          END;
+
+     CopyHandle(ressexpr,Temp);
+     tp1:=tpsexpr;
+     tempaffect:=fundef;
+     tpres:=tp1;
+
+     IF (u='=') | (u='<') | (u='>') | (u='<=') | (u='>=') | (u='<>') THEN
+        BEGIN
+           IF u='=' THEN TkExpr:=TkEq
+           ELSE
+           IF u='>' THEN TkExpr:=TkSup
+           ELSE
+           IF u='<' THEN TkExpr:=TkInf
+           ELSE
+           IF u='<=' THEN TkExpr:=TkEqInf
+           ELSE
+           IF u='>=' THEN TkExpr:=TkEqSup
+           ELSE
+           IF u='<>' THEN TkExpr:=TkDiff;
+
+           getu;
+           IF u='' THEN
+               BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrSyntax;
+                    DisposHandle(Handle(Temp));
+                    EXIT(Expr);
+               END;
+
+           s_expr;
+           IF ErrFlag THEN
+                BEGIN
+                     DisposHandle(Handle(Temp));
+                     EXIT(expr);
+                END;
+
+           tp2:=tpsexpr;
+           IF ckNum(tp1) & (NOT cknum(tp2)) THEN
+               BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrConf;
+                    DisposHandle(Handle(Temp));
+                    EXIT(Expr);
+               END;
+
+           IF ckStr(tp1) & (NOT ckstr(tp2)) THEN
+               BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrConf;
+                    DisposHandle(Handle(Temp));
+                    EXIT(Expr);
+               END;
+
+           IF (tp1=fvarnum) | (tp1=fvarstr) THEN
+               BEGIN
+                    AddVar(temp^^.Param,tp1,Numvar,TkVar);
+                    IF ErrFlag THEN
+                         BEGIN
+                              DisposHandle(Handle(Temp));
+                              EXIT(expr);
+                         END;
+                    instind(NumVar,TkVar,temp)
+               END;
+
+           IF (tp2=fvarnum) | (tp2=fvarstr) THEN
+               BEGIN
+                    AddVar(ResSexpr^^.Param,tp2,Numvar,TkVar);
+                    IF ErrFlag THEN
+                         BEGIN
+                              DisposHandle(Handle(Temp));
+                              EXIT(expr);
+                         END;
+                    instind(NumVar,TkVar,ResSexpr)
+               END;
+
+           inst2(tkExpr,temp,ResSexpr,temp);
+
+           IF TkExpr=TkEq THEN tempaffect:=tp1;
+           tpres:=fnum;
+        END;
+
+     CopyHandle(Temp,ResExpr);
+     DisposHandle(Handle(Temp));
+     tpexpr:=tpres;
+     tpaffect:=tempaffect;
+END;
+
+{==============================================================================}
+PROCEDURE Etiq;
+BEGIN
+     IF (typetrouve=fundef) & (tpexpr=fvarnum) THEN
+        ErrFlag:=(u<>':')
+        ELSE ErrFlag:=True;
+
+     IF NOT ErrFlag THEN
+        BEGIN
+          AddVar(ResExpr^^.Param,fetiq,Numvar,TkVar);
+          instind(NumVar,TkVar,ResExpr);
+          CopyHandle(ResExpr,ResEtiq);
+        END
+        ELSE
+        BEGIN
+          EXIT(Etiq);
+        END;
+
+     tpetiq:=fetiq;
+END;
+
+{==============================================================================}
+PROCEDURE ProcCall;
+     VAR  temp: TParamHandle; fini: boolean;
+          i:integer; trouve:boolean; nbtemp: integer;
+          PrintFlag: Boolean;
+BEGIN
+     IF typetrouve<>fproc THEN
+          BEGIN
+               ErrFlag:=true;
+               EXIT(ProcCall);
+          END;
+
+     Temp:=TParamHandle(NewHandle(0));
+     HNoPurge(Handle(Temp));
+
+     ErrFlag:=false;
+     IF (u=mots^^[TkPrint].MotRes) | (u=mots^^[TkTrace].MotRes) THEN
+        BEGIN
+          PrintFlag:=(u=mots^^[TkPrint].MotRes);
+          getu;
+          IF (u<>'') & (u<>':') THEN
+               BEGIN
+                    expr;
+                    ErrFlag:=ErrFlag | (tpExpr=fundef);
+                    IF ErrFlag THEN
+                       BEGIN
+                         DisposHandle(Handle(Temp));
+                         EXIT(ProcCall);
+                       END;
+
+                    IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN
+                        BEGIN
+                             AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                             IF ErrFlag THEN
+                                BEGIN
+                                  DisposHandle(Handle(Temp));
+                                  EXIT(ProcCall);
+                                END;
+                             instind(NumVar,TkVar,ResExpr)
+                        END;
+
+                    IF PrintFlag THEN inst1(tkPrint,ResExpr,Temp)
+                                 ELSE inst1(tkTrace,ResExpr,Temp);
+
+                    REPEAT
+                         fini:=false;
+                         IF (u=',') | (u=';') THEN
+                              BEGIN
+							  
+							  	   IF u=',' THEN
+								   	inst0(TkV,ResExpr)
+									ELSE
+								   	inst0(TkPV,ResExpr);
+                                   addparam(temp,ResExpr);
+									
+                                   Getu;
+								   { retire, on peut terminer par , ou ; }
+                                   IF (u='') | (u=':') THEN
+								   	fini:=true
+								   ELSE
+                                   BEGIN
+                                   	expr;
+                                   	ErrFlag:=ErrFlag | (tpExpr=fundef);
+                                   	IF ErrFlag THEN
+                                   	BEGIN
+                                        DisposHandle(Handle(Temp));
+                                        EXIT(ProcCall);
+                                   	END;
+
+                                   	IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN
+                                       BEGIN
+                                            AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                                            IF ErrFlag THEN
+                                             BEGIN
+                                                  DisposHandle(Handle(Temp));
+                                                  EXIT(ProcCall);
+                                             END;
+                                            instind(NumVar,TkVar,ResExpr)
+                                       END;
+
+                                   	addparam(temp,ResExpr);
+                                   END;
+                              END
+                         ELSE fini:=true;
+                    UNTIL fini;
+               END
+               ELSE
+               BEGIN
+                    IF PrintFlag THEN inst0(tkPrint,Temp)
+                                 ELSE inst0(tkTrace,Temp);
+               END
+        END		{ PRINT ou TRACE }
+
+        ELSE
+     IF (u=mots^^[TkFPrint].MotRes) THEN
+        BEGIN
+          getu;
+          IF (u<>'') & (u<>':') THEN
+               BEGIN
+                    expr;
+                    IF ErrFlag THEN
+                    BEGIN
+                        DisposHandle(Handle(Temp));
+                        EXIT(ProcCall);
+                    END;
+
+                    IF NOT cknum(tpexpr) THEN
+                    BEGIN
+                         ErrFlag:=True;
+                         Error:=ErrType;
+                         DisposHandle(Handle(Temp));
+                         EXIT(ProcCall);
+                    END;
+
+					IF (tpExpr=fvarnum) THEN
+					   BEGIN
+							AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+							IF ErrFlag THEN
+							BEGIN
+								 DisposHandle(Handle(Temp));
+								 EXIT(ProcCall);
+							END;
+							instind(NumVar,TkVar,ResExpr)
+					   END;
+					   
+                    inst1(tkFPrint,ResExpr,Temp);
+
+                    REPEAT
+                         fini:=false;
+                         IF (u=',') | (u=';') THEN
+                              BEGIN
+							  
+							  	   IF u=',' THEN
+								   	inst0(TkV,ResExpr)
+									ELSE
+								   	inst0(TkPV,ResExpr);
+                                   addparam(temp,ResExpr);
+									
+                                   Getu;
+                                   { retire, on peut terminer par , ou ; }
+								   IF (u='') | (u=':') THEN
+                                        fini:=True
+								   ELSE
+								   BEGIN
+                                  	expr;
+                                   	ErrFlag:=ErrFlag | (tpExpr=fundef);
+                                   	IF ErrFlag THEN
+                                   	BEGIN
+                                        DisposHandle(Handle(Temp));
+                                        EXIT(ProcCall);
+                                   	END;
+
+                                   	IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN
+                                       BEGIN
+                                            AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                                            IF ErrFlag THEN
+                                            BEGIN
+                                                 DisposHandle(Handle(Temp));
+                                                 EXIT(ProcCall);
+                                            END;
+                                            instind(NumVar,TkVar,ResExpr)
+                                       END;
+
+                                   	addparam(temp,ResExpr);
+								   END;
+                              END
+                         ELSE fini:=true;
+                    UNTIL fini;
+               END
+               ELSE
+               BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrMissing;
+                    DisposHandle(Handle(Temp));
+                    EXIT(ProcCall);
+               END
+        END	{ PRINT }
+
+        ELSE
+     IF (u=mots^^[TkWrite].MotRes) THEN
+        BEGIN
+          getu;
+          IF (u<>'') & (u<>':') THEN
+               BEGIN
+                    expr;
+                    IF ErrFlag THEN
+                    BEGIN
+                        DisposHandle(Handle(Temp));
+                        EXIT(ProcCall);
+                    END;
+
+                    IF NOT cknum(tpexpr) THEN
+                    BEGIN
+                         ErrFlag:=True;
+                         Error:=ErrType;
+                         DisposHandle(Handle(Temp));
+                         EXIT(ProcCall);
+                    END;
+
+					IF (tpExpr=fvarnum) THEN
+					   BEGIN
+							AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+							IF ErrFlag THEN
+							BEGIN
+								 DisposHandle(Handle(Temp));
+								 EXIT(ProcCall);
+							END;
+							instind(NumVar,TkVar,ResExpr)
+					   END;
+
+                    inst1(tkWrite,ResExpr,Temp);
+
+                    REPEAT
+                         fini:=false;
+                         IF u=',' THEN
+                              BEGIN
+                                   Getu;
+                                   IF u='' THEN
+                                   BEGIN
+                                        ErrFlag:=True;
+                                        Error:=ErrSyntax;
+                                        DisposHandle(Handle(Temp));
+                                        EXIT(ProcCall);
+                                   END;
+
+                                   expr;
+                                   ErrFlag:=ErrFlag | (tpExpr=fundef);
+                                   IF ErrFlag THEN
+                                   BEGIN
+                                        DisposHandle(Handle(Temp));
+                                        EXIT(ProcCall);
+                                   END;
+
+                                   IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN
+                                       BEGIN
+                                            AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                                            IF ErrFlag THEN
+                                            BEGIN
+                                                 DisposHandle(Handle(Temp));
+                                                 EXIT(ProcCall);
+                                            END;
+                                            instind(NumVar,TkVar,ResExpr)
+                                       END;
+
+                                   addparam(temp,ResExpr);
+                              END
+                         ELSE fini:=true;
+                    UNTIL fini;
+               END
+               ELSE
+               BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrMissing;
+                    DisposHandle(Handle(Temp));
+                    EXIT(ProcCall);
+               END
+        END	{ WRITE }
+
+        ELSE
+     IF u=mots^^[TkRead].MotRes THEN
+        BEGIN
+          getu;
+          IF (u<>'') & (u<>':') THEN
+               BEGIN
+                    expr;
+                    IF ErrFlag THEN
+                    BEGIN
+                         DisposHandle(Handle(Temp));
+                         EXIT(ProcCall);
+                    END;
+
+                    IF NOT ckNum(tpexpr) THEN
+                    BEGIN
+                         ErrFlag:=True;
+                         Error:=ErrType;
+                         DisposHandle(Handle(Temp));
+                         EXIT(ProcCall);
+                    END;
+
+					IF (tpExpr=fvarnum) THEN
+					   BEGIN
+							AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+							IF ErrFlag THEN
+							BEGIN
+								 DisposHandle(Handle(Temp));
+								 EXIT(ProcCall);
+							END;
+							instind(NumVar,TkVar,ResExpr)
+					   END;
+
+                    inst1(tkRead,ResExpr,Temp);
+
+                    REPEAT
+                         fini:=false;
+                         IF u=',' THEN
+                              BEGIN
+                                   Getu;
+                                   IF u='' THEN
+                                   BEGIN
+                                        ErrFlag:=True;
+                                        Error:=ErrSyntax;
+                                        DisposHandle(Handle(Temp));
+                                        EXIT(ProcCall);
+                                   END;
+
+                                   expr;
+                                   IF ErrFlag THEN
+                                   BEGIN
+                                        DisposHandle(Handle(Temp));
+                                        EXIT(ProcCall);
+                                   END;
+
+                                   IF NOT tpck1(tpexpr,fvar) THEN
+                                   BEGIN
+                                        ErrFlag:=True;
+                                        Error:=ErrType;
+                                        DisposHandle(Handle(Temp));
+                                        EXIT(ProcCall);
+                                   END;
+
+                                   IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN
+                                       BEGIN
+                                            AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                                            IF ErrFlag THEN
+                                            BEGIN
+                                                 DisposHandle(Handle(Temp));
+                                                 EXIT(ProcCall);
+                                            END;
+                                            instind(NumVar,TkVar,ResExpr)
+                                       END;
+
+                                   addparam(temp,ResExpr);
+                              END
+                         ELSE fini:=true;
+                    UNTIL fini;
+               END
+               ELSE
+               BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrMissing;
+                    DisposHandle(Handle(Temp));
+                    EXIT(ProcCall);
+               END
+        END	{ READ }
+
+        ELSE
+     IF u=mots^^[TkInput].MotRes THEN
+        BEGIN { input [prompt;]variable }
+
+          inst0(tkinput,temp);
+
+          getu;
+          IF (u='') | (u=':') THEN
+               BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrMissing;
+                    DisposHandle(Handle(Temp));
+                    EXIT(ProcCall);
+               END;
+
+          expr;
+          IF ErrFlag THEN
+          BEGIN
+               DisposHandle(Handle(Temp));
+               EXIT(ProcCall);
+          END;
+
+          IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN
+              BEGIN
+                   AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                   IF ErrFlag THEN
+                   BEGIN
+                        DisposHandle(Handle(Temp));
+                        EXIT(ProcCall);
+                   END;
+                   instind(NumVar,TkVar,ResExpr)
+              END;
+
+          IF ckStr(tpexpr) THEN
+             IF u=',' THEN
+                BEGIN
+                    addparam(temp,Resexpr);
+
+                    getu;
+                    IF (u='') | (u=':') THEN
+                         BEGIN
+                              ErrFlag:=True;
+                              Error:=ErrMissing;
+                              DisposHandle(Handle(Temp));
+                              EXIT(ProcCall);
+                         END;
+
+                    expr;
+                    IF ErrFlag THEN
+                    BEGIN
+                         DisposHandle(Handle(Temp));
+                         EXIT(ProcCall);
+                    END;
+
+                    IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN
+                        BEGIN
+                             AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                             IF ErrFlag THEN
+                             BEGIN
+                                  DisposHandle(Handle(Temp));
+                                  EXIT(ProcCall);
+                             END;
+                             instind(NumVar,TkVar,ResExpr)
+                        END;
+                END
+                ELSE
+                IF (u<>':') & (u<>'') THEN
+                BEGIN
+                     ErrFlag:=True;
+                     Error:=ErrSyntax;
+                     DisposHandle(Handle(Temp));
+                     EXIT(ProcCall);
+                END;
+
+          IF (tpexpr=fvarnum) | (tpexpr=fvarstr) THEN
+               BEGIN
+                    addparam(temp,Resexpr);
+               END
+               ELSE
+               BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrType;
+                    DisposHandle(Handle(Temp));
+                    EXIT(ProcCall);
+               END;
+        END	{ INPUT }
+
+        ELSE
+        BEGIN
+             WITH mots^^[numtrouve] DO
+                IF nbparms>0 THEN
+                 BEGIN
+                    SharedFlag:=(mots^^[numtrouve].token IN
+                                 [tkpost,tkpend,tkrequest]);
+                    { a la peche des parametres ... }
+                    IF token <> ExtToken THEN
+											Inst0(token,temp)
+										ELSE
+											InstExt(NumTrouve,temp);
+
+                    GetU;
+                    FOR i:=1 TO nbparms DO
+                    BEGIN
+                       expr;
+                       IF ErrFlag THEN
+                       BEGIN
+                            DisposHandle(Handle(Temp));
+                            SharedFlag:=False;
+                            EXIT(ProcCall);
+                       END;
+
+                       IF i<nbparms THEN
+                         BEGIN
+                          IF u<>',' THEN
+                             BEGIN
+                                 ErrFlag:=True;
+                                 Error:=ErrMissing;
+                                 DisposHandle(Handle(Temp));
+                                 SharedFlag:=False;
+                                 EXIT(ProcCall);
+                             END;
+                          getU;
+                         END
+                         ELSE
+                          IF (u<>'') & (u<>':') THEN
+                             BEGIN
+                                 ErrFlag:=True;
+                                 Error:=ErrSyntax;
+                                 DisposHandle(Handle(Temp));
+                                 SharedFlag:=False;
+                                 EXIT(ProcCall);
+                             END;
+
+                       IF NOT tpck1(tpexpr,tparms[i]) THEN
+                          BEGIN
+                              ErrFlag:=True;
+                              Error:=ErrConf;
+                              DisposHandle(Handle(Temp));
+                              SharedFlag:=False;
+                              EXIT(ProcCall);
+                          END;
+
+                       IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN
+                           BEGIN
+                                AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                                IF ErrFlag THEN
+                                BEGIN
+                                     DisposHandle(Handle(Temp));
+                                     SharedFlag:=False;
+                                     EXIT(ProcCall);
+                                END;
+                                instind(NumVar,TkVar,ResExpr)
+                           END;
+
+                       addparam(temp,resExpr);
+                     END;
+                    SharedFlag:=False;
+                 END
+                 ELSE
+                 BEGIN
+                    IF token <> ExtToken THEN
+											Inst0(token,temp)				{ token normal }
+										ELSE
+											InstExt(NumTrouve,temp);		{ token externe ! }
+										getu;
+                 END;
+        END;
+
+     CopyHandle(Temp,ResProc);
+     DisposHandle(Handle(Temp));
+END;
+
+{==============================================================================}
+PROCEDURE ContStruct;
+     VAR temp, tempB: TParamHandle; fini: boolean; TempStr: str255;
+         e: TParamPtr;
+BEGIN
+     IF typeTrouve<>fcont THEN
+        BEGIN
+          ErrFlag:=true;
+          EXIT(Contstruct);
+        END;
+
+     Temp:=TParamHandle(NewHandle(0));
+     TempB:=TParamHandle(NewHandle(0));
+     HNoPurge(Handle(Temp));
+     HNoPurge(Handle(TempB));
+
+     ErrFlag:=false;
+     IF u=mots^^[TkFor].MotRes THEN	{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†FOR ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+        BEGIN {for affectation varnum to exprnum [step exprnum]}
+          getu;
+
+          expr;
+          IF ErrFlag THEN
+               BEGIN
+                    DisposHandle(Handle(Temp));
+                    DisposHandle(Handle(TempB));
+                    EXIT(ContStruct);
+               END;
+
+          IF u<>mots^^[Tkto].MotRes THEN	{¬†TO }
+             BEGIN
+                 ErrFlag:=True;
+                 Error:=ErrSyntax;
+                 DisposHandle(Handle(Temp));
+                 DisposHandle(Handle(TempB));
+                 EXIT(ContStruct);
+             END;
+
+          { controle affectation sur variable numerique }
+          IF (tpaffect<>fvarnum) & (tpaffect<>finumvar) THEN
+             BEGIN
+                 ErrFlag:=True;
+                 Error:=ErrSyntax;
+                 DisposHandle(Handle(Temp));
+                 DisposHandle(Handle(TempB));
+                 EXIT(ContStruct);
+             END;
+
+          inst1(tkfor,ResExpr,temp);
+
+          getu;
+          expr;
+          IF ErrFlag THEN
+               BEGIN
+                    DisposHandle(Handle(Temp));
+                    DisposHandle(Handle(TempB));
+                    EXIT(ContStruct);
+               END;
+
+          { controle expression numerique }
+          IF NOT cknum(tpexpr) THEN
+             BEGIN
+                 ErrFlag:=True;
+                 Error:=ErrSyntax;
+                 DisposHandle(Handle(Temp));
+                 DisposHandle(Handle(TempB));
+                 EXIT(ContStruct);
+             END;
+
+          IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN
+              BEGIN
+                   AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                   IF ErrFlag THEN
+                        BEGIN
+                             DisposHandle(Handle(Temp));
+                             DisposHandle(Handle(TempB));
+                             EXIT(ContStruct);
+                        END;
+                   instind(NumVar,TkVar,ResExpr)
+              END;
+
+          addparam(temp,ResExpr);
+
+          IF u=mots^^[TkStep].MotRes THEN	{¬†STEP }
+             BEGIN
+               getu;
+               expr;
+               IF ErrFlag THEN
+                    BEGIN
+                         DisposHandle(Handle(Temp));
+                         DisposHandle(Handle(TempB));
+                         EXIT(ContStruct);
+                    END;
+
+               { controle expression numerique }
+               IF NOT cknum(tpexpr) THEN
+                  BEGIN
+                      ErrFlag:=True;
+                      Error:=ErrSyntax;
+                      DisposHandle(Handle(Temp));
+                      DisposHandle(Handle(TempB));
+                      EXIT(ContStruct);
+                  END;
+
+               IF (tpExpr=fvarnum) | (tpExpr=fvarstr) THEN
+                   BEGIN
+                        AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                        IF ErrFlag THEN
+                             BEGIN
+                                  DisposHandle(Handle(Temp));
+                                  DisposHandle(Handle(TempB));
+                                  EXIT(ContStruct);
+                             END;
+                        instind(NumVar,TkVar,ResExpr)
+                   END;
+
+               addparam(temp,ResExpr);
+             END
+             ELSE
+             BEGIN
+               InstNum(1,TkNumCst,tempB);    { step 1 }
+               addparam(temp,tempB);
+             END;
+
+           AddFor;
+           InstNum(0,TkNumCst,tempB);    { element bidon }
+           addparam(temp,tempB);      { indirection Next  }
+        END
+
+        ELSE
+     IF u=mots^^[TkNext].MotRes THEN		{¬†‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†NEXT ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+        BEGIN { next }
+          inst0(tkNext,Temp);
+          AddNext;
+          InstNum(RepIndex,TkNumCst,tempB);	  { element bidon }
+          addparam(temp,tempB);	    { indirection wend  }
+          getu;
+        END
+
+        ELSE
+     IF u=mots^^[TkIf].MotRes THEN		{¬†‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†IF ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+        BEGIN {if expnum then instructions [else instructions] endif}
+              {if expnum goto etiquette	   [else instructions] endif}
+              getu;
+              expr;
+              IF ErrFlag THEN
+                   BEGIN
+                        DisposHandle(Handle(Temp));
+                        DisposHandle(Handle(TempB));
+                        EXIT(ContStruct);
+                   END;
+
+              IF NOT cknum(tpexpr) THEN
+                 BEGIN
+                     ErrFlag:=True;
+                     Error:=ErrSyntax;
+                     DisposHandle(Handle(Temp));
+                     DisposHandle(Handle(TempB));
+                     EXIT(ContStruct);
+                 END;
+
+              IF (tpExpr=fvarnum) THEN
+                  BEGIN
+                       AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                       IF ErrFlag THEN
+                            BEGIN
+                                 DisposHandle(Handle(Temp));
+                                 DisposHandle(Handle(TempB));
+                                 EXIT(ContStruct);
+                            END;
+                       instind(NumVar,TkVar,ResExpr)
+                  END;
+
+              inst1(tkif,ResExpr,temp);
+              AddIf;
+              InstNum(0,TkNumCst,tempB);    { element bidon }
+              addparam(temp,tempB);     		{ indirection else  }
+              addparam(temp,tempB);     		{ indirection endif }
+        END
+
+        ELSE
+     IF u=mots^^[TkElse].MotRes THEN		{¬†‚Ä¢‚Ä¢‚Ä¢‚Ä¢ ELSE ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+        BEGIN
+            inst0(tkElse,Temp);
+            AddElse;
+            InstNum(0,TkNumCst,tempB);    { element bidon }
+            addparam(temp,tempB);     		{ indirection ENDIF  }
+            getu;
+        END
+
+      ELSE
+     IF u=mots^^[TkEndif].MotRes THEN	{¬†‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†ENDIF ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+        BEGIN
+            inst0(tkEndif,Temp);
+            AddEndif;
+            getu;
+        END
+
+      ELSE
+     IF u=mots^^[TkWhile].MotRes THEN	{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†WHILE ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+        BEGIN { while expnum }
+              getu;
+              expr;
+              IF ErrFlag THEN
+                   BEGIN
+                        DisposHandle(Handle(Temp));
+                        DisposHandle(Handle(TempB));
+                        EXIT(ContStruct);
+                   END;
+
+              IF NOT cknum(tpexpr) THEN
+                  BEGIN
+                      ErrFlag:=True;
+                      Error:=ErrSyntax;
+                      DisposHandle(Handle(Temp));
+                      DisposHandle(Handle(TempB));
+                      EXIT(ContStruct);
+                  END;
+
+              IF (tpExpr=fvarnum) THEN
+                  BEGIN
+                       AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                       IF ErrFlag THEN
+                            BEGIN
+                                 DisposHandle(Handle(Temp));
+                                 DisposHandle(Handle(TempB));
+                                 EXIT(ContStruct);
+                            END;
+                       instind(NumVar,TkVar,ResExpr)
+                  END;
+
+              inst1(tkWhile,ResExpr,temp);
+              AddWhile;
+              InstNum(0,TkNumCst,tempB);    { element bidon }
+              addparam(temp,tempB);     { indirection wend  }
+        END
+
+        ELSE
+     IF u=mots^^[TkWEnd].MotRes THEN		{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ WEND ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+        BEGIN { wend }
+            inst0(tkWend,Temp);
+            AddWend;
+            InstNum(RepIndex,TkNumCst,tempB);    { element bidon }
+            addparam(temp,tempB);     { indirection wend  }
+            getu;
+        END
+
+        ELSE
+     IF u=mots^^[TkREPEAT].MotRes THEN		{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ REPEAT ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+        BEGIN { REPEAT }
+            inst0(TkREPEAT,Temp);
+            AddREPEAT;
+            getu;
+        END
+
+        ELSE
+     IF u=mots^^[TkUNTIL].MotRes THEN	{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†UNTIL ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+        BEGIN { UNTIL }
+              getu;
+              expr;
+              IF ErrFlag THEN
+							BEGIN
+								DisposHandle(Handle(Temp));
+								DisposHandle(Handle(TempB));
+								EXIT(ContStruct);
+							END;
+
+              IF NOT cknum(tpexpr) THEN
+							BEGIN
+								ErrFlag:=True;
+								Error:=ErrSyntax;
+								DisposHandle(Handle(Temp));
+								DisposHandle(Handle(TempB));
+								EXIT(ContStruct);
+							END;
+
+              IF (tpExpr=fvarnum) THEN
+							BEGIN
+								AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+								IF ErrFlag THEN
+								BEGIN
+									DisposHandle(Handle(Temp));
+									DisposHandle(Handle(TempB));
+									EXIT(ContStruct);
+								END;
+								instind(NumVar,TkVar,ResExpr)
+							END;
+
+              inst1(tkUNTIL,ResExpr,temp);
+              AddUNTIL(temp^);
+              InstNum(RepIndex,TkNumCst,tempB);		{ element bidon pour retourner sur le REPEAT }
+              addparam(temp,tempB);     					{ indirection UNTIL }
+        END
+
+        ELSE
+     IF u=mots^^[TkDim].MotRes THEN		{¬†‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†DIM ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+        BEGIN { Dim }
+              getu;
+              IF (u<>'') & (u<>':') THEN
+                   BEGIN
+                        expr;
+                        IF ErrFlag THEN
+                           BEGIN
+                              DisposHandle(Handle(Temp));
+                              DisposHandle(Handle(TempB));
+                              EXIT(ContStruct);
+                           END;
+
+                        IF (tpexpr<>finumvar) & (tpexpr<>fistrvar) THEN
+                           BEGIN
+                               ErrFlag:=True;
+                               Error:=ErrType;
+                               DisposHandle(Handle(Temp));
+                               DisposHandle(Handle(TempB));
+                               EXIT(ContStruct);
+                           END;
+
+                        { on regarde si l'indice est bien une constante }
+                        e:=ResExpr^;
+                        NextToken(e,sizeof(Tdummy)+2);
+                        NumVar:=e^.indir;
+                        NextToken(e,e^.lparam);
+                        IF e^.tk<>tkNUMCST THEN
+                           BEGIN
+                              ErrFlag:=True;
+                              Error:=ErrSyntax;
+                              DisposHandle(Handle(Temp));
+                              DisposHandle(Handle(TempB));
+                              EXIT(ContStruct);
+                           END;
+
+                        IF VarTab^^[NumVar].DimVal=0
+                             THEN VarTab^^[NumVar].DimVal:=e^.num;
+
+                        inst1(tkDim,ResExpr,temp);
+
+                        REPEAT
+                             fini:=false;
+                             IF u=',' THEN
+                                  BEGIN
+                                       Getu;
+                                       IF u='' THEN
+                                          BEGIN
+                                              ErrFlag:=True;
+                                              Error:=ErrSyntax;
+                                              DisposHandle(Handle(Temp));
+                                              DisposHandle(Handle(TempB));
+                                              EXIT(ContStruct);
+                                          END;
+
+                                       expr;
+                                       IF ErrFlag THEN
+                                          BEGIN
+                                             DisposHandle(Handle(Temp));
+                                             DisposHandle(Handle(TempB));
+                                             EXIT(ContStruct);
+                                          END;
+
+                                       IF (tpexpr<>finumvar) & (tpexpr<>fistrvar) THEN
+                                          BEGIN
+                                              ErrFlag:=True;
+                                              Error:=ErrSyntax;
+                                              DisposHandle(Handle(Temp));
+                                              DisposHandle(Handle(TempB));
+                                              EXIT(ContStruct);
+                                          END;
+
+                                       { on regarde si l'indice est bien une constante }
+                                       e:=ResExpr^;
+                                       NextToken(e,sizeof(Tdummy)+2);
+                                       NumVar:=e^.Indir;
+                                       NextToken(e,e^.lparam);
+                                       IF e^.tk<>tkNUMCST THEN
+                                          BEGIN
+                                             ErrFlag:=True;
+                                             Error:=ErrSyntax;
+                                             DisposHandle(Handle(Temp));
+                                             DisposHandle(Handle(TempB));
+                                             EXIT(ContStruct);
+                                          END;
+
+                                       IF VarTab^^[NumVar].DimVal=0
+                                            THEN VarTab^^[NumVar].DimVal:=e^.num;
+
+                                       addparam(temp,ResExpr);
+                                  END
+                             ELSE fini:=true;
+                        UNTIL fini;
+                   END
+                   ELSE
+                   BEGIN
+                       ErrFlag:=True;
+                       Error:=ErrSyntax;
+                       DisposHandle(Handle(Temp));
+                       DisposHandle(Handle(TempB));
+                       EXIT(ContStruct);
+                   END;
+        END
+
+        ELSE
+     IF u=mots^^[TkShared].MotRes THEN
+        BEGIN
+              SharedFlag:=True;
+              (* liste de noms de variables *)
+              getu;
+              IF (u<>'') & (u<>':') THEN
+                   BEGIN
+                        expr;
+                        IF ErrFlag THEN
+                           BEGIN
+                              SharedFlag:=False;
+                              DisposHandle(Handle(Temp));
+                              DisposHandle(Handle(TempB));
+                              EXIT(ContStruct);
+                           END;
+
+                        IF (tpexpr<>fvarnum) & (tpexpr<>fvarstr) &
+                           (tpexpr<>finumvar) & (tpexpr<>fistrvar) THEN
+                           BEGIN
+                               ErrFlag:=True;
+                               Error:=ErrSyntax;
+                               SharedFlag:=False;
+                               DisposHandle(Handle(Temp));
+                               DisposHandle(Handle(TempB));
+                               EXIT(ContStruct);
+                           END;
+
+                        IF (tpexpr=fvarnum) | (tpexpr=fvarstr) THEN
+                        BEGIN
+                            AddVar(ResExpr^^.Param,tpexpr,Numvar,TkVar);
+                            IF ErrFlag THEN
+                               BEGIN
+                                  SharedFlag:=False;
+                                  DisposHandle(Handle(Temp));
+                                  DisposHandle(Handle(TempB));
+                                  EXIT(ContStruct);
+                               END;
+
+                            instind(NumVar,TkVar,ResExpr);
+                        END;
+                        inst1(tkShared,ResExpr,temp);
+
+                        REPEAT
+                             fini:=false;
+                             IF u=',' THEN
+                                  BEGIN
+                                       Getu;
+                                       IF u='' THEN
+                                          BEGIN
+                                              ErrFlag:=True;
+                                              Error:=ErrSyntax;
+                                              SharedFlag:=False;
+                                              DisposHandle(Handle(Temp));
+                                              DisposHandle(Handle(TempB));
+                                              EXIT(ContStruct);
+                                          END;
+
+                                       expr;
+                                       IF ErrFlag THEN
+                                          BEGIN
+                                             SharedFlag:=False;
+                                             DisposHandle(Handle(Temp));
+                                             DisposHandle(Handle(TempB));
+                                             EXIT(ContStruct);
+                                          END;
+
+                                       IF (tpexpr<>fvarnum) &
+                                          (tpexpr<>fvarstr) &
+                                          (tpexpr<>finumvar) &
+                                          (tpexpr<>fistrvar) THEN
+                                          BEGIN
+                                              ErrFlag:=True;
+                                              Error:=ErrSyntax;
+                                              SharedFlag:=False;
+                                              DisposHandle(Handle(Temp));
+                                              DisposHandle(Handle(TempB));
+                                              EXIT(ContStruct);
+                                          END;
+
+                                       IF (tpexpr=fvarnum) | (tpexpr=fvarstr) THEN
+                                       BEGIN
+                                           AddVar(ResExpr^^.Param,tpexpr,Numvar,TkVar);
+                                           IF ErrFlag THEN
+                                              BEGIN
+                                                 SharedFlag:=False;
+                                                 DisposHandle(Handle(Temp));
+                                                 DisposHandle(Handle(TempB));
+                                                 EXIT(ContStruct);
+                                              END;
+                                           instind(NumVar,TkVar,ResExpr);
+                                       END;
+
+                                       addparam(temp,ResExpr);
+                                  END
+                             ELSE fini:=true;
+                        UNTIL fini;
+                   END
+                   ELSE
+                   BEGIN
+                       ErrFlag:=True;
+                       Error:=ErrSyntax;
+                       SharedFlag:=False;
+                       DisposHandle(Handle(Temp));
+                       DisposHandle(Handle(TempB));
+                       EXIT(ContStruct);
+                   END;
+              SharedFlag:=False;
+        END
+
+        ELSE
+     IF u=mots^^[TkOn].MotRes THEN
+        BEGIN
+              { on expnum goto etiquettes}
+              { on expnum gosub etiquettes}
+              getu;
+              expr;
+              IF ErrFlag THEN
+                   BEGIN
+                        DisposHandle(Handle(Temp));
+                        DisposHandle(Handle(TempB));
+                        EXIT(ContStruct);
+                   END;
+
+              IF NOT cknum(tpexpr) THEN
+                 BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrSyntax;
+                    DisposHandle(Handle(Temp));
+                    DisposHandle(Handle(TempB));
+                    EXIT(ContStruct);
+                 END;
+
+              IF (tpExpr=fvarnum) THEN
+                  BEGIN
+                       AddVar(ResExpr^^.Param,tpExpr,Numvar,TkVar);
+                       IF ErrFlag THEN
+                            BEGIN
+                                 DisposHandle(Handle(Temp));
+                                 DisposHandle(Handle(TempB));
+                                 EXIT(ContStruct);
+                            END;
+                       instind(NumVar,TkVar,ResExpr)
+                  END;
+
+              inst1(tkon,ResExpr,temp);
+
+              IF (u<>mots^^[TkGoto].MotRes) & (u<>mots^^[TkGosub].MotRes) THEN
+                 BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrSyntax;
+                    DisposHandle(Handle(Temp));
+                    DisposHandle(Handle(TempB));
+                    EXIT(ContStruct);
+                 END;
+
+              { goto ou gosub }
+              IF (u=mots^^[TkGoto].MotRes) THEN Inst0(tkGoto,TempB) ELSE Inst0(tkGosub,TempB);
+
+              addparam(temp,TempB);
+
+              { liste d'etiquettes }
+              getu;
+              IF (u<>'') & (u<>':') THEN
+                   BEGIN
+                        expr;
+                        IF ErrFlag THEN
+                             BEGIN
+                                  DisposHandle(Handle(Temp));
+                                  DisposHandle(Handle(TempB));
+                                  EXIT(ContStruct);
+                             END;
+
+                        IF tpexpr<>fvarnum THEN
+                           BEGIN
+                              ErrFlag:=True;
+                              Error:=ErrSyntax;
+                              DisposHandle(Handle(Temp));
+                              DisposHandle(Handle(TempB));
+                              EXIT(ContStruct);
+                           END;
+
+                        ResExpr^^.Tk:=TkUEtiq;
+
+                        AddVar(ResExpr^^.Param,fuetiq,Numvar,TkVar);
+                        IF ErrFlag THEN
+                             BEGIN
+                                  DisposHandle(Handle(Temp));
+                                  DisposHandle(Handle(TempB));
+                                  EXIT(ContStruct);
+                             END;
+
+                        instind(NumVar,TkVar,ResExpr);
+
+                        addparam(temp,ResExpr);
+
+                        REPEAT
+                             fini:=false;
+                             IF u=',' THEN
+                                  BEGIN
+                                       Getu;
+                                       IF u='' THEN
+                                          BEGIN
+                                             ErrFlag:=True;
+                                             Error:=ErrSyntax;
+                                             DisposHandle(Handle(Temp));
+                                             DisposHandle(Handle(TempB));
+                                             EXIT(ContStruct);
+                                          END;
+
+                                       expr;
+                                       IF ErrFlag THEN
+                                        BEGIN
+                                             DisposHandle(Handle(Temp));
+                                             DisposHandle(Handle(TempB));
+                                             EXIT(ContStruct);
+                                        END;
+
+                                       IF tpexpr<>fvarnum THEN
+                                          BEGIN
+                                             ErrFlag:=True;
+                                             Error:=ErrSyntax;
+                                             DisposHandle(Handle(Temp));
+                                             DisposHandle(Handle(TempB));
+                                             EXIT(ContStruct);
+                                          END;
+
+                                       ResExpr^^.Tk:=TkUEtiq;
+
+                                       AddVar(ResExpr^^.Param,fuetiq,Numvar,TkVar);
+                                        IF ErrFlag THEN
+                                             BEGIN
+                                                  DisposHandle(Handle(Temp));
+                                                  DisposHandle(Handle(TempB));
+                                                  EXIT(ContStruct);
+                                        END;
+
+                                       instind(NumVar,TkVar,ResExpr);
+
+                                       addparam(temp,ResExpr);
+                                  END
+                             ELSE fini:=true;
+                        UNTIL fini;
+                   END
+                   ELSE
+                   BEGIN
+                      ErrFlag:=True;
+                      Error:=ErrSyntax;
+                      DisposHandle(Handle(Temp));
+                      DisposHandle(Handle(TempB));
+                      EXIT(ContStruct);
+                   END;
+        END
+
+        ELSE
+     IF u=mots^^[TkGoto].MotRes THEN
+        BEGIN { goto etiquette }
+             GetU;
+             expr;
+             IF ErrFlag THEN
+                  BEGIN
+                       DisposHandle(Handle(Temp));
+                       DisposHandle(Handle(TempB));
+                       EXIT(ContStruct);
+                  END;
+
+             IF (tpexpr<>fvarnum) THEN
+                 BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrSyntax;
+                    DisposHandle(Handle(Temp));
+                    DisposHandle(Handle(TempB));
+                    EXIT(ContStruct);
+                 END;
+
+             ResExpr^^.Tk:=TkUEtiq;
+
+             AddVar(ResExpr^^.Param,fuetiq,Numvar,TkVar);
+             IF ErrFlag THEN
+                  BEGIN
+                       DisposHandle(Handle(Temp));
+                       DisposHandle(Handle(TempB));
+                       EXIT(ContStruct);
+                  END;
+
+             instind(NumVar,TkVar,ResExpr);
+
+             inst1(tkGoto,ResExpr,temp);
+        END
+
+        ELSE
+     IF u=mots^^[TkGosub].MotRes THEN
+        BEGIN { gosub etiquette }
+             GetU;
+             expr;
+             IF ErrFlag THEN
+                  BEGIN
+                       DisposHandle(Handle(Temp));
+                       DisposHandle(Handle(TempB));
+                       EXIT(ContStruct);
+                  END;
+
+             IF (tpexpr<>fvarnum) THEN
+                 BEGIN
+                    ErrFlag:=True;
+                    Error:=ErrSyntax;
+                    DisposHandle(Handle(Temp));
+                    DisposHandle(Handle(TempB));
+                    EXIT(ContStruct);
+                 END;
+
+             ResExpr^^.Tk:=TkUEtiq;
+
+             AddVar(ResExpr^^.Param,fuetiq,Numvar,TkVar);
+             IF ErrFlag THEN
+                  BEGIN
+                       DisposHandle(Handle(Temp));
+                       DisposHandle(Handle(TempB));
+                       EXIT(ContStruct);
+                  END;
+
+             instind(NumVar,TkVar,ResExpr);
+
+             inst1(tkGosub,ResExpr,temp);
+        END
+
+        ELSE
+     IF u=mots^^[TkReturn].MotRes THEN
+        BEGIN { return }
+            inst0(tkReturn,Temp);
+            getu;
+        END
+
+        ELSE
+     IF u=mots^^[TkBreak].MotRes THEN
+        BEGIN { break }
+            inst0(tkBreak,Temp);
+            AddBreak;
+            InstNum(0,TkNumCst,tempB);    { element bidon }
+            addparam(temp,tempB);     { indirection wend  }
+            getu;
+        END
+
+        ELSE
+     IF u=mots^^[TkContinue].MotRes THEN
+        BEGIN { continue }
+            inst0(tkContinue,Temp);
+            AddContinue;
+            InstNum(RepIndex,TkNumCst,tempB);    { element bidon }
+            addparam(temp,tempB);     { indirection wend  }
+            getu;
+        END
+        ELSE
+     IF u=mots^^[TkRem].MotRes THEN
+        BEGIN { Rem }
+            inst0(tkRem,Temp);
+            { on chope jusqu'a la fin de la ligne }
+            TempStr:='';
+            WHILE Tempin^[Curs]<>chr($0D) DO
+               BEGIN
+                    AddCar2(TempStr,Tempin^[Curs]);
+                    Curs:=Curs+1;
+               END;
+            InstStr(TempStr,TkRemStr,tempB);    { element bidon }
+            addparam(temp,tempB);     { rem ...	 }
+            getu;
+        END
+        ELSE
+        BEGIN
+           ErrFlag:=True;
+           Error:=ErrSyntax;
+           DisposHandle(Handle(Temp));
+           DisposHandle(Handle(TempB));
+           EXIT(ContStruct);
+        END;
+
+     CopyHandle(Temp,ResCont);
+     DisposHandle(Handle(Temp));
+     DisposHandle(Handle(TempB));
+END;
+
+{==============================================================================}
+PROCEDURE ListeInst;
+     LABEL 0;
+     VAR temp: TParamHandle;
+         StartCurs: integer;
+         LigneEtiq: boolean;
+         XCodeLen : Longint;
+BEGIN
+     Temp:=TParamHandle(NewHandle(0));
+     HNoPurge(Handle(Temp));
+
+     XCodeLen:=GetHandleSize(Handle(CodeHdle));
+
+     LigneEtiq:=False;
+     StartCurs:=Curs;
+     SharedFlag:=False;
+     { Curs doit etre initialise a la bonne valeur, comme CodeHdle et Tempin }
+     Getu;
+     ErrFlag:=False;
+     instind(Curs-StartCurs-Length(u),tkliste,temp);
+     Inst1(tkliste,temp,temp);
+     0:;
+		 IF (u<>'') & LigneEtiq THEN
+          BEGIN
+               ErrFlag:=True;
+               Error:=ErrSyntax;
+               EXIT(ListeInst);
+          END;
+     LigneEtiq:=False;
+     CurIndex:=temp^^.Lparam;
+     { recopie dans le code }
+     SetHSize(Handle(CodeHdle),XCodeLen+temp^^.Lparam);
+     BlockMoveData(Ptr(Ord4(temp^)),Ptr(Ord4(CodeHdle^)+XCodeLen),temp^^.Lparam);
+     IF (u<>'') & (NOT ErrFlag) THEN
+       BEGIN
+         expr;
+         IF NOT ErrFlag THEN
+                        BEGIN
+                             IF tpExpr=fnum
+                             THEN
+                               IF (tpaffect=fvarnum) |
+                                  (tpaffect=fvarstr) |
+                                  (tpaffect=finumVar) |
+                                  (tpaffect=fiStrVar) THEN
+                                   BEGIN { affectation }
+                                      BlockMoveData(Ptr(Ord4(CodeHdle^)+XCodeLen),
+                                                Ptr(Ord4(Temp^)),
+                                                Temp^^.Lparam);
+                                      addparam(Temp,ResExpr);
+                                   END
+                                   ELSE
+                                   BEGIN { affectation bizarre ... }
+                                      ErrFlag:=True;
+                                      Error:=ErrSyntax;
+                                      DisposHandle(Handle(Temp));
+                                      EXIT(ListeInst);
+                                   END
+                             ELSE
+                               BEGIN { on va essayer autre chose ... }
+                                  ErrFlag:=True;
+                                  Error:=ErrSyntax;
+                               END
+                        END;
+
+         IF ErrFlag THEN
+                        BEGIN
+                             { declaration d'etiquette ? }
+                             Etiq;
+                             IF NOT ErrFlag THEN
+                                BEGIN
+                                  BlockMoveData(Ptr(Ord4(CodeHdle^)+XCodeLen),
+                                            Ptr(Ord4(Temp^)),
+                                            Temp^^.Lparam);
+                                  addparam(Temp,ResEtiq);
+                                  LigneEtiq:=True;
+                                END
+                                  ELSE
+                                  BEGIN
+                                    { nom de procedure ? }
+                                    ProcCall;
+                                    IF NOT ErrFlag THEN
+                                       BEGIN
+                                        BlockMoveData(Ptr(Ord4(CodeHdle^)+XCodeLen),
+                                                  Ptr(Ord4(Temp^)),
+                                                  Temp^^.Lparam);
+                                        addparam(Temp,ResProc);
+                                       END
+
+                                       ELSE
+                                       BEGIN
+                                         { structure de controle ? }
+                                         ContStruct;
+                                         IF NOT ErrFlag THEN
+                                             BEGIN
+                                              BlockMoveData(Ptr(Ord4(CodeHdle^)+XCodeLen),
+                                                        Ptr(Ord4(Temp^)),
+                                                        Temp^^.Lparam);
+                                              addparam(Temp,ResCont);
+                                             END;
+                                       END;
+                                  END;
+                        END;
+
+         IF u=':' THEN BEGIN
+                         GetU;
+                         GOTO 0;
+                       END;
+
+         IF (u<>'') THEN
+          BEGIN
+               ErrFlag:=True;
+               Error:=ErrSyntax;
+               EXIT(ListeInst);
+          END;
+
+       END;
+
+     CopyHandle(Temp,ResListe);
+     DisposHandle(Handle(Temp));
+     Curs:=Curs+1;
+     { recopie dans le code }
+     SetHSize(Handle(CodeHdle),XCodeLen+ResListe^^.Lparam);
+     BlockMoveData(Ptr(Ord4(ResListe^)),
+               Ptr(Ord4(CodeHdle^)+XCodeLen),
+               ResListe^^.Lparam);
+END;
+
+{ DETOKENISEUR }
+{$S DETOKENISEUR}
+{==============================================================================}
+{			      D E T O K E N I Z E			       }
+{==============================================================================}
+PROCEDURE DeTokenize;
+
+VAR	flags : SignedByte;
+
+BEGIN
+     MoveHHi(Handle(Mots));
+		 Hlock(Handle(Mots));
+     flags := HGetState(Handle(ResListe));
+		 HLock(Handle(ResListe));
+		 Listedetok(ResListe^,TempOut);
+		 HSetState(Handle(ResListe),flags);
+     HUnlock(Handle(Mots));
+END;
+
+
+PROCEDURE AddCar(VAR s: str255; c: char);
+
+VAR l: integer;
+
+BEGIN
+	{ incrementer le nombre d'octets }
+	L:=ORD(s[0]);
+	IF l<255 THEN
+		BEGIN
+			s[0] := CHR(L+1);
+			s[length(s)]:=c;
+		END;
+END;
+
+
+PROCEDURE SupCar(VAR s: str255);
+
+VAR l: integer;
+
+BEGIN
+     { decrementer le nombre d'octets }
+     L:=ORD(s[0]);
+     IF L>0 THEN s[0]:=chr(l-1);
+END;
+
+
+PROCEDURE AddStr(VAR s1,s2: str255);
+
+BEGIN
+     s1 := concat(s1,s2);
+END;
+
+
+PROCEDURE AddStr20(VAR s1: str255; s2: str20);
+
+BEGIN
+     s1 := concat(s1,s2);
+END;
+
+
+PROCEDURE AddStr64(VAR s1: str255; VAR s2: str64);
+
+BEGIN
+     s1 := concat(s1,s2);
+END;
+
+
+{==============================================================================}
+PROCEDURE ListeDeTok(e: TparamPtr; VAR s: str255);
+
+VAR temp: Str255; nb,len,i: integer;
+
+BEGIN { detokeniser de e dans s }
+	temp:='';
+	nb:=e^.nbparam;
+	NextToken(e,sizeof(Tdummy)+2);
+	FOR i:=1 TO e^.indir DO AddCar(Temp,' ');
+	NextToken(e,e^.lparam);
+	FOR i:=2 TO nb DO
+	BEGIN
+		 RoutDeTok(e,s);
+		 AddStr(Temp,s);
+		 IF i<>nb THEN
+				BEGIN
+						AddCar(Temp,':');
+						AddCar(Temp,' ');
+				END;
+		 len:=e^.lparam;
+		 NextToken(e,len);
+	END;
+	s:=temp;
+END;
+
+
+PROCEDURE ExtDetok(e: TParamPtr; VAR s:Str255);
+
+VAR
+	temp: Str255;
+	nb,len,i: integer;
+	TheTk: integer;
+	Infos: ExtRec;
+
+BEGIN { detokeniser de e dans s }
+	TheTk:=e^.tk;
+	infos := e^.extInfos;
+	nb:= infos.extnbparam;
+	temp:= infos.extName;
+	NextToken(e,sizeof(Tdummy)+SizeOf(ExtRec)-SizeOf(TNextI));
+	IF nb>0 THEN
+	BEGIN
+		IF Infos.extType = fProc THEN AddCar(Temp,' ') ELSE AddCar(Temp,'(');
+		FOR i:=1 TO nb DO
+		BEGIN
+			RoutDeTok(e,s);
+			AddStr(temp,s);
+			IF i<>nb THEN AddCar(Temp,',');
+			len:=e^.lparam;
+			NextToken(e,len);
+		END;
+		IF Infos.extType <> fproc THEN AddCar(Temp,')');
+	END;
+	s:=temp;
+END;
+
+{==============================================================================}
+PROCEDURE procdetok(e:TParamPtr; VAR s: str255);
+
+VAR temp: Str255; nb,len,i: integer; TheTk: integer;
+
+BEGIN { detokeniser de e dans s }
+	TheTk:=e^.tk;
+	nb:= e^.nbparam;
+	temp:=mots^^[e^.tk].MotRes;
+	NextToken(e,sizeof(Tdummy)+2);
+	IF nb>0 THEN AddCar(Temp,' ');
+	FOR i:=1 TO nb DO
+	BEGIN
+		RoutDeTok(e,s);
+		AddStr(Temp,s);
+		IF (NOT (TheTk IN [TkPrint,TkTrace,TkFPrint])) & (i<>nb) THEN AddCar(Temp,',');
+		len:=e^.lparam;
+		NextToken(e,len);
+	END;
+	s:=temp;
+END;
+
+{==============================================================================}
+PROCEDURE contdetok(e:TParamPtr; VAR s: str255);
+
+VAR temp: Str255; nb,i,len: integer;
+
+BEGIN
+     temp:=mots^^[e^.tk].MotRes;
+     CASE e^.tk OF
+          tkif,tkwhile,tkgoto,tkgosub,TkUNTIL:
+               BEGIN
+                    NextToken(e,sizeof(Tdummy)+2);
+                    RoutDeTok(e,S);
+                    AddCar(Temp,' ');
+                    AddStr(Temp,S);
+               END;
+          tkrem:
+               BEGIN
+                    NextToken(e,sizeof(Tdummy)+2);
+                    RoutDeTok(e,S);
+                    AddStr(Temp,S);
+               END;
+
+          tkdim,tkShared:
+               BEGIN
+                    nb:=e^.nbparam;
+                    NextToken(e,sizeof(Tdummy)+2);
+                    AddCar(Temp,' ');
+                    FOR i:=1 TO nb DO
+                    BEGIN
+                       RoutDeTok(e,S);
+                       AddStr(Temp,S);
+                       IF i<>nb THEN AddCar(Temp,',');
+                       len:=e^.lparam;
+                       NextToken(e,len);
+                    END;
+               END;
+
+          tkon:
+               BEGIN
+                    nb:=e^.nbparam-2;
+                    NextToken(e,sizeof(Tdummy)+2);
+                    RoutDeTok(e,s);
+                    AddCar(Temp,' ');
+                    AddStr(Temp,S);
+                    len:=e^.lparam;
+                    NextToken(e,len);
+                    AddCar(Temp,' ');
+                    AddStr20(Temp,mots^^[e^.tk].MotRes);
+                    len:=e^.lparam;
+                    NextToken(e,len);
+                    FOR i:=1 TO nb DO
+                    BEGIN
+                       RoutDeTok(e,s);
+                       AddCar(Temp,' ');
+                       AddStr(Temp,S);
+                       IF i<>nb THEN AddCar(Temp,',');
+                       len:=e^.lparam;
+                       NextToken(e,len);
+                    END;
+               END;
+          tkfor:
+               BEGIN
+                    nb:=e^.nbparam;
+                    NextToken(e,sizeof(Tdummy)+2);
+                    RoutDeTok(e,s);
+                    AddCar(Temp,' ');
+                    AddStr(Temp,S);
+                    AddCar(Temp,' ');
+                    AddStr20(Temp,mots^^[tkTo].MotRes);
+                    AddCar(Temp,' ');
+                    len:=e^.lparam;
+                    NextToken(e,len);
+                    RoutDeTok(e,S);
+                    AddStr(Temp,S);
+                    len:=e^.lparam;
+                    NextToken(e,len);
+                    RoutDeTok(e,S);
+                    AddCar(Temp,' ');
+                    AddStr20(Temp,mots^^[tkStep].MotRes);
+                    AddCar(Temp,' ');
+                    AddStr(Temp,S);
+               END;
+     END;
+     S:=temp;
+END;
+
+{==============================================================================}
+PROCEDURE exprdetok(e:TParamPtr; VAR s: str255);
+
+VAR temp: Str255; xtk,nb,len,i: integer;
+
+BEGIN
+     xtk:=e^.tk;
+     IF (mots^^[xtk].tfunc=fcnum) | (mots^^[xtk].tfunc=fcstr) THEN
+          BEGIN
+             NextToken(e,sizeof(Tdummy)+2);
+             RoutDeTok(e,s);
+             IF (xtk<>tkpar) & (xtk<>tkneg) & (xtk<>tkNot) THEN
+                BEGIN
+                   Temp:=s;
+                   AddCar(Temp,' ');
+                   AddStr20(Temp,mots^^[xtk].MotRes);
+                   AddCar(Temp,' ');
+                   NextToken(e,e^.lparam);
+                   RoutDeTok(e,s);
+                   AddStr(Temp,s);
+                   s:=temp;
+                END
+                ELSE
+             IF (xtk<>tkpar) THEN
+                  BEGIN
+                     IF xtk=tkNeg THEN Temp:='-' ELSE Temp:='NOT ';
+                     AddStr(Temp,s);
+                     s:=temp;
+                  END
+                ELSE
+                  BEGIN
+                     temp:='(';
+                     AddStr(Temp,s);
+                     AddCar(Temp,')');
+                     s:=temp;
+                  END
+          END
+     ELSE
+          BEGIN
+             Temp:=mots^^[xtk].MotRes;
+             nb:=e^.nbparam;
+             IF nb>0 THEN
+                BEGIN
+                   AddCar(Temp,'(');
+                   NextToken(e,sizeof(Tdummy)+2);
+                   FOR i:=1 TO nb DO
+                   BEGIN
+                      RoutDeTok(e,s);
+                      AddStr(Temp,s);
+                      IF i<>nb THEN AddCar(Temp,',');
+                      len:=e^.lparam;
+                      NextToken(e,len);
+                   END;
+                END;
+             s:=Temp;
+             IF nb>0 THEN AddCar(s,')');
+          END;
+END;
+
+{==============================================================================}
+PROCEDURE strdetok(e:TParamPtr; VAR s: str255);
+BEGIN
+     s:=VarTab^^[e^.indir].NomVar;
+END;
+
+{==============================================================================}
+PROCEDURE idetok(e:TParamPtr; VAR s: str255);
+
+VAR temp: Str255;
+
+BEGIN
+     NextToken(e,sizeof(Tdummy)+2);
+     { 1er parametre: numero de variable }
+     temp:=VarTab^^[e^.indir].NomVar;
+     SupCar(Temp);
+
+     { 2e parametre: indice }
+     NextToken(e,e^.lparam);
+     RoutDetok(e,s);
+
+     AddStr(Temp,S);
+     AddCar(Temp,')');
+
+     S:=Temp;
+END;
+
+{==============================================================================}
+PROCEDURE Cstdetok(e:TParamPtr; VAR s: str255);
+BEGIN
+     s:='"';
+     AddStr64(s,CstTab^^[e^.indir]);
+     AddCar(s,'"');
+END;
+
+{==============================================================================}
+PROCEDURE Numdetok(e:TParamPtr; VAR s: str255);
+BEGIN
+     NumToString(e^.Num,S);
+END;
+
+{==============================================================================}
+PROCEDURE Remdetok(e:TParamPtr; VAR s: str255);
+BEGIN
+     s:=e^.param;
+END;
+
+{==============================================================================}
+PROCEDURE etiqdetok(e:TParamPtr; VAR s: str255);
+BEGIN
+     strDeTok(e,s);
+     AddCar(s,':');
+END;
+
+{==============================================================================}
+PROCEDURE pardetok(e:TParamPtr; VAR s: str255);
+
+VAR temp: Str255;
+
+BEGIN
+     NextToken(e,sizeof(Tdummy)+2);
+     RoutDeTok(e,s);
+
+     Temp:='(';
+     AddStr(Temp,s);
+     AddCar(Temp,')');
+     s:=temp;
+END;
+
+{==============================================================================}
+PROCEDURE routdetok(e:TParamPtr; VAR s: str255);
+
+BEGIN
+	IF e^.tk = ExtToken THEN
+		ExtDetok(e,s)
+	ELSE
+	CASE mots^^[e^.tk].tfunc OF
+		fproc: ProcDetok(e,s);
+		fcont: ContDetok(e,s);
+		fliste: listeDetok(e,s);
+		fuetiq: etiqDetok(e,s);
+		fiuetiq: strDetok(e,s);
+		fpar: parDetok(e,s);
+		fnum,fstr,fcnum,fcstr: exprDetok(e,s);
+		finumvar,fistrvar: idetok(e,s);
+		fvarnum,fvarstr: strDetok(e,s);
+		fcstnum: numdetok(e,s);
+		fcststr: cstdetok(e,s);
+		frem: remdetok(e,s);
+		fnop: s:=mots^^[e^.tk].MotRes;
+		OTHERWISE s:='autre';
+	END; { CASE }
+	
+(*
+		tpf:=mots^^[e^.tk].tfunc;
+		IF tpf=fproc THEN procdetok(e,s)
+		ELSE
+		IF tpf=fcont THEN contdetok(e,s)
+		ELSE
+		IF tpf=fliste THEN listedetok(e,s)
+		ELSE
+		IF tpf=fuetiq THEN etiqdetok(e,s)
+		ELSE
+		IF tpf=fiuetiq THEN strdetok(e,s)
+		ELSE
+		IF tpf=fpar THEN pardetok(e,s)
+		ELSE
+		IF (tpf=fnum) | (tpf=fstr) |
+			(tpf=fcnum) | (tpf=fcstr) THEN exprdetok(e,s)
+		ELSE
+		IF (tpf=finumvar) | (tpf=fistrvar) THEN idetok(e,s)
+		ELSE
+		IF (tpf=fvarnum) | (tpf=fvarstr) THEN strdetok(e,s)
+		ELSE
+		IF (tpf=fcstnum) THEN numdetok(e,s)
+		ELSE
+		IF (tpf=fcststr) THEN cstdetok(e,s)
+		ELSE
+		IF (tpf=frem) THEN remdetok(e,s)
+		ELSE
+		IF tpf=fnop THEN s:=mots^^[e^.tk].MotRes
+		ELSE s:='autre';
+ END;
+*)
+
+END;

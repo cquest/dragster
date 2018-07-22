@@ -1,1 +1,359 @@
-(*	Fichier:	DragsterExt.inc.p	Contenu:	Définitions des callBack à utiliser dans les routines externes de						Dragster (à partir de la version 1.92) mode compilé.	Ecrit par:	Christian QUEST	Copyright:	1991 JCA Télématique / Ch. QUEST	Historique:				15/08/91	CQ		Première ébauche des callbacks de Dragster	A faire:		Implémenté les mêmes instructions dans l'interpreteur.		Modifier l'interpreteur pour que lui aussi utilise ces routines, ceci le		rendra plus compact, plus simple et sûrement plus rapide.*){ INLINES…		4EAD xxxx = JSR xxxx(A5)		700x = MOVEQ x,D0		203C xxxx xxxx = MOVE.L xxxxxxxx,D0}{ ••••• Instructions d'affichage et de présentation ••••• }	PROCEDURE Drg_PrintChar (theChar: CHAR);	INLINE		$4EAD, $0006;	PROCEDURE Drg_PrintNum (theNum: LONGINT);	INLINE		$4EAD, $0012;	PROCEDURE Drg_PrintStr (theStr: Str255);	INLINE		$4EAD, $0018;{ ••••• Gestion du temps et multi-tâche ••••• }	CONST		MaxZones = 40;		{ nombre maxi de zones }		MaxFile = 12;			{ nombre maxi de fichiers }	TYPE		FRecord = RECORD				FileRef: Integer;      	{ Numero de reference interne du fichier }				FileRLen: Integer;      { Longueur d'un record (acces dir) }				FilePos: Longint;      	{ Prochaine pos à lire, ou record courant }				BaseFlag: Boolean;			{ base ou fichier ? }			END;		RSZone = RECORD			{ définition d'une ZONE }				PosX, PosY, Len: Integer;				TkVar: Integer;	{ type de variable (Alpha ou Num ?) }				AdVar: Ptr;			{ Ptr vers la variable }				Color: Integer;			END;		TCBPtr = ^TCBRec;		TCBRec = RECORD				Reserv1: Longint;							{ tjrs = $12345678 }				NextTCB: TCBPtr;	        		{ prochain TCB dans la liste }				PredTCB: TCBPtr;							{	TCB précédent }				PtOffScreen: Ptr;					 		{ offset des codes + videotex}				PtNameScreen: Ptr;						{ noms des ecrans}				PtStringCsts: Ptr;						{ Ptr vers constantes chaine}				PtSVars: Ptr;		        			{ Ptr variables shared }				PtLVars: Ptr;	       					{ Ptr variables locales }				PtCode: Ptr;									{ Ptr code application }				PtScreens: Ptr;								{ Ptr écrans Videotex }				PtJump: Ptr;	        				{ jump table Run Time }				PtOrgStk: Ptr;								{ pile de départ }				TheNScreen: Longint;					{ Numero ecran courant}				TheVScreen: Ptr;	        		{ Ecran VideoTex Courant}				TheQueues: Ptr;        				{ Queues des serveurs }				TheMQueues: Ptr; 		    	   	{ Queues des messages }				TheAuxBuffPtr: Ptr;          	{ Buffer serial port }				TheModem: Integer;      			{ Numero du modem associé }				SerRefIn: integer;						{ RefNum Driver In  }				SerRefOut: Integer;     		 	{ RefNum Driver Out }				StatusWord: Integer;    	  	(* état de la tâche																											 0: ready																											 1: waiting delay																											 2: waiting IOCompletion																											 3: waiting IOCompletion with TimeOut																											 4: waiting char																											 5: waiting char with TimeOut																											 6: pending for mailbox																											 7: pending for mailbox with TimeOut																											 8: pending for string																											 9: pending for string with TimeOut																											10: waiting network response																											11: waiting network response with TimeOut																											12: waiting for OutPut allowing																											14: waiting for Start																									*)				DelayValue: Longint;				{ Nombre de Ticks à attendre }				IOCompFlag: Integer;      	{ 0: IO terminée, 1: IO en cours }				Error: Integer;      				{ Code d'Erreur }				PendAdr: Ptr;	        			{ Var Adress for pend }				PendStr: Longint;      			{ Str Pattern to wait }				StartTime: Longint;     	 	{ 'secs' à la connexion }				MaxTime: Longint;      			{ TimeOut }				ZoneNumber: Integer;      	{ Zone de sortie du Wait}				TaskNumber: Integer;      	{ Numero de la tache/voie logique}				TaskPriority: Integer;      { Priorité de la tache }				TheNLine: Integer;					{ Numero de ligne dans le module }				TheNInst: Integer;					{ Numero d'intruction dans la ligne }				LocalMode: Boolean;      		{ mode local ou non }				EchoFlag: Boolean;      		{ echo ou non }				OutPutFlag: Boolean;				FrOutPut: Boolean;					{ vrai si FrontScreen en cours }				StarFlag: Boolean;      		{ si * seule en saisie }				StoppedFlag: Boolean;				{ vrai si la tache a été arrêtée }				TaskSNumber: Integer;				HardType: Integer;					{ Type de HardWare }				OPFlag: Integer;				SerSpeed: Integer;					{ vitesse pour pour série }				ADSPInfos: Ptr;							{ pointeur vers infos ADSP }				OPPtr: Ptr;									{ pointeur vers buffer de sortie }				RegArea: ARRAY[0..16] OF Ptr; 	{ registres tache background }				RegAreaF: ARRAY[0..16] OF Ptr; 	{ registres tache principale }				NbZones: Integer;      			{ Nb Zones de saisie }				TheZones: ARRAY[1..MaxZones] OF RSZone;				Res2: Longint;				Res3: Integer;				Res4: Integer;				XCallDatas: STRING[26]; 		{ données d'appel Transpac }				Res5: LONGINT;				Res6: Ptr;				Res7: Ptr;				Res8: Integer;				Res9: Integer;				Res10: Boolean;				Res11: Boolean;				ConFlag: Boolean;      			{ valide si voie connectée }				XConFlag: Boolean;				Res12: Integer;				FilterFlag: boolean;				{ vrai si FILTER }				TrPrintFlag: boolean;				{ vrai si print "transparent" }				RWSz: Integer;							{ Taille buffer Read/Write des fichiers }				RWPtr: Ptr;									{ Pointer sur Buffer Read/Write }				RWCount: Integer;						{ nb octets lus/écrits }				RWIdx: Integer;							{ Index dans RW buffer 1..RWSz }				DBPtr: Ptr;									{ Pointer to data base Buffer }				DBSz: Longint;							{ Data Base com area size }				DBCount: Longint;						{ com area actual size }				DBRef: Longint;							{ record reference }				DBIdx: Longint;							{ com area actual index }				IOQueue: Integer;						{ N° Queue pour I/O }				RndMemo: Longint;						{ random seed 1 }				RndCount: Longint;					{ random seed 2 }				Res13: Longint;				Res14: Ptr;				TheFiles: ARRAY[1..MaxFile] OF FRecord;		{ tableau des fichiers de la tâche }			END;	FUNCTION Drg_GetTCB: TCBPtr;	INLINE		$4EAD, $0060;	PROCEDURE Drg_Delay(Delay: LONGINT);	INLINE		$4EAD, $00BA;	PROCEDURE Drg_YieldCpu;	INLINE		$4EAD, $02D0;	FUNCTION Drg_RunFlags: Str255;	INLINE		$4EAD, $0420;{ ••••• Gestion des fichiers ••••• }	TYPE		MyParamBlockRec = RECORD				TCB: TCBPtr;				PB: ParamBlockRec;			END;		MyParamBlockPtr = ^MyParamBlockRec;		MyHParamBlockRec = RECORD				TCB: TCBPtr;				HPB: HParamBlockRec;			END;		MyHParamBlockPtr = ^MyHParamBlockRec;	PROCEDURE Drg_Open (NumLog: LONGINT; Nom: Str255);	INLINE		$4EAD, $014A;	PROCEDURE Drg_OpenRF (NumLog: LONGINT; Nom: Str255);	INLINE		$4EAD, $0426;	PROCEDURE Drg_Close (NumLog: LONGINT);	INLINE		$4EAD, $009C;	FUNCTION Drg_FSRead (NumLog: LONGINT; VAR count: LONGINT; Buffer: Ptr): OsErr;	INLINE		$7001, $4EAD, $0066;	FUNCTION Drg_FSWrite (NumLog: LONGINT; VAR count: LONGINT; Buffer: Ptr): OsErr;	INLINE		$7002, $4EAD, $0066;	FUNCTION Drg_Error: LONGINT;	INLINE		$4EAD, $00E4;	FUNCTION Drg_EOF (NumLog: LONGINT): LONGINT;	INLINE		$4EAD, $00DE;	FUNCTION Drg_GetEOF (NumLog: LONGINT): LONGINT;	INLINE		$4EAD, $0108;	PROCEDURE Drg_SetEOF (NumLog, LogEof: LONGINT);	INLINE		$4EAD, $017A;	FUNCTION Drg_FPos (NumLog: LONGINT): LONGINT;	INLINE		$4EAD, $0102;	PROCEDURE Drg_Seek (NumLog, Pos: LONGINT);	INLINE		$4EAD, $0174;	PROCEDURE Drg_RLen (NumLog, RecLen: LONGINT);	INLINE		$4EAD, $0168;	PROCEDURE Drg_RSeek (NumLog, NumRec: LONGINT);	INLINE		$4EAD, $016E;	PROCEDURE Drg_Create (Nom: Str255);	INLINE		$4EAD, $00A8;	PROCEDURE Drg_Kill (Nom: Str255);	INLINE		$4EAD, $011A;	PROCEDURE Drg_Rename (ancien, nouveau: Str255);	INLINE		$4EAD, $0156;	PROCEDURE Drg_Lock (NumLog: LONGINT);	INLINE		$4EAD, $0288;	PROCEDURE Drg_Unlock (NumLog: LONGINT);	INLINE		$4EAD, $028E;	PROCEDURE Drg_GetFile (VAR NomFicDos: Str255; NomDoss: Str255; Index: LONGINT);	INLINE		$4EAD, $032A;	PROCEDURE Drg_NewFolder (Nom: Str255);	INLINE		$4EAD, $039C;	PROCEDURE Drg_GetFInfo (Nom: Str255; VAR TypeCreat: Str255; VAR DataSz, RsrcSz, DateCr, DateMod: LONGINT);	INLINE		$4EAD, $03A2;	PROCEDURE Drg_SetFinfo (Nom: Str255; TypeCreate: Str255);	INLINE		$4EAD, $03A8;	PROCEDURE Drg_GetVol (VAR NomVol: Str255; Index: LONGINT);	INLINE		$4EAD, $03AE;	FUNCTION Drg_PBCall (theCall: INTEGER; thePB: MyParamBlockPtr): OsErr;	INLINE		$7003, $4EAD, $0066;	FUNCTION Drg_PBHCall (theCall: INTEGER; thePB: MyHParamBlockPtr): OsErr;	INLINE		$7004, $4EAD, $0066;	CONST     { requêtes du serveur de fichier }		ReqOpen = 1;	        { demande de PBOpen }		ReqClose = 2;	        { demande de PBClose }		ReqRename = 3;	      { demande de PBHRename† }		ReqDelete = 4;	      { demande de PBHDelete† }		ReqRead = 5;	        { demande de PBRead }		ReqWrite = 6;	        { demande de PBWrite }		ReqGetEof = 7;	      { demande de PBGetEof }		ReqSetEof = 8;	      { demande de PBSetEof }		ReqLock = 9;	        { demande de PBLock }		ReqUnlock = 10;	      { demande de PBUnlock }		ReqCreate = 11;	      { demande de PBCreate }		ReqGetFInfo = 12;	    { demande de PBHGetFInfo† }		ReqSetFInfo = 13;	    { demande de PBHSetFInfo† }		ReqOpWd = 14;					{ demande de PBOpenWD° }		ReqClWd = 15;					{ demande de PBCloseWD° }		ReqGetCat = 16;				{ demande de PBGetCatInfo }		ReqOpRsrc = 17;				{ demande de PBOpenRf }		ReqDirCreate = 18;		{ demande de PBDirCreate }		ReqFlush = 19;				{ demande de PBFlushVol }		ReqNameOfId = 20;			{ demande de nom courant }		ReqGetVol =  21;			{ demande de PBGetVol }		ReqSetVol =  22;			{ demande de PBSetVol }		ReqGetVInfo =	23;			{ demande de PBGetVInfo }		ReqCatMove = 24;			{ demande de PBCatMove }				{ † PBHCall  }		{	° PBWDCall }	PROCEDURE Drg_SetRunMode (NewMode: INTEGER);	INLINE		$7005, $4EAD, $0066;	CONST		kNoInterrupt = 0;		kInterrupt = 1;		{ Appels à DragsterBoot… }{ allocation d'un Handle par DragsterBoot }FUNCTION Drg_NewHandle(size:LONGINT):Handle;INLINE	$203C, $0000, $0100, $4EAD, $0066;{ enregistrement de datas par DragsterBoot }FUNCTION Drg_StoreData(dataPtr:Ptr; dataName:Str255):OsErr;INLINE	$203C, $0000, $0101, $4EAD, $0066;{ récupération de datas conservées par DragsterBoot }FUNCTION Drg_RestoreData(dataName:Str255):Ptr;INLINE	$203C, $0000, $0102, $4EAD, $0066;{ suppression de datas conservées par DragsterBoot }PROCEDURE Drg_KillData(dataName:Str255);INLINE	$203C, $0000, $0103, $4EAD, $0066;
+(*
+
+	Fichier:	DragsterExt.inc.p
+
+	Contenu:	D√©finitions des callBack √† utiliser dans les routines externes de
+						Dragster (√† partir de la version 1.92) mode compil√©.
+
+	Ecrit par:	Christian QUEST
+
+	Copyright:	1991 JCA T√©l√©matique / Ch. QUEST
+
+	Historique:
+
+				15/08/91	CQ		Premi√®re √©bauche des callbacks de Dragster
+
+	A faire:
+		Impl√©ment√© les m√™mes instructions dans l'interpreteur.
+		Modifier l'interpreteur pour que lui aussi utilise ces routines, ceci le
+		rendra plus compact, plus simple et s√ªrement plus rapide.
+*)
+
+
+{ INLINES‚Ä¶
+		4EAD xxxx = JSR xxxx(A5)
+		700x = MOVEQ x,D0
+		203C xxxx xxxx = MOVE.L xxxxxxxx,D0
+}
+
+{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢ Instructions d'affichage et de pr√©sentation ‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+
+	PROCEDURE Drg_PrintChar (theChar: CHAR);
+	INLINE
+		$4EAD, $0006;
+
+	PROCEDURE Drg_PrintNum (theNum: LONGINT);
+	INLINE
+		$4EAD, $0012;
+
+	PROCEDURE Drg_PrintStr (theStr: Str255);
+	INLINE
+		$4EAD, $0018;
+
+
+{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢ Gestion du temps et multi-t√¢che ‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+
+	CONST
+		MaxZones = 40;		{ nombre maxi de zones }
+		MaxFile = 12;			{ nombre maxi de fichiers }
+
+	TYPE
+		FRecord = RECORD
+				FileRef: Integer;      	{ Numero de reference interne du fichier }
+				FileRLen: Integer;      { Longueur d'un record (acces dir) }
+				FilePos: Longint;      	{ Prochaine pos √† lire, ou record courant }
+				BaseFlag: Boolean;			{ base ou fichier ? }
+			END;
+
+
+		RSZone = RECORD			{ d√©finition d'une ZONE }
+				PosX, PosY, Len: Integer;
+				TkVar: Integer;	{ type de variable (Alpha ou Num ?) }
+				AdVar: Ptr;			{ Ptr vers la variable }
+				Color: Integer;
+			END;
+
+
+		TCBPtr = ^TCBRec;
+
+		TCBRec = RECORD
+				Reserv1: Longint;							{ tjrs = $12345678 }
+				NextTCB: TCBPtr;	        		{ prochain TCB dans la liste }
+				PredTCB: TCBPtr;							{	TCB pr√©c√©dent }
+				PtOffScreen: Ptr;					 		{ offset des codes + videotex}
+				PtNameScreen: Ptr;						{ noms des ecrans}
+				PtStringCsts: Ptr;						{ Ptr vers constantes chaine}
+				PtSVars: Ptr;		        			{ Ptr variables shared }
+				PtLVars: Ptr;	       					{ Ptr variables locales }
+				PtCode: Ptr;									{ Ptr code application }
+				PtScreens: Ptr;								{ Ptr √©crans Videotex }
+				PtJump: Ptr;	        				{ jump table Run Time }
+				PtOrgStk: Ptr;								{ pile de d√©part }
+				TheNScreen: Longint;					{ Numero ecran courant}
+				TheVScreen: Ptr;	        		{ Ecran VideoTex Courant}
+				TheQueues: Ptr;        				{ Queues des serveurs }
+				TheMQueues: Ptr; 		    	   	{ Queues des messages }
+				TheAuxBuffPtr: Ptr;          	{ Buffer serial port }
+				TheModem: Integer;      			{ Numero du modem associ√© }
+				SerRefIn: integer;						{ RefNum Driver In  }
+				SerRefOut: Integer;     		 	{ RefNum Driver Out }
+				StatusWord: Integer;    	  	(* √©tat de la t√¢che
+																											 0: ready
+																											 1: waiting delay
+																											 2: waiting IOCompletion
+																											 3: waiting IOCompletion with TimeOut
+																											 4: waiting char
+																											 5: waiting char with TimeOut
+																											 6: pending for mailbox
+																											 7: pending for mailbox with TimeOut
+																											 8: pending for string
+																											 9: pending for string with TimeOut
+																											10: waiting network response
+																											11: waiting network response with TimeOut
+																											12: waiting for OutPut allowing
+																											14: waiting for Start
+																									*)
+				DelayValue: Longint;				{ Nombre de Ticks √† attendre }
+				IOCompFlag: Integer;      	{ 0: IO termin√©e, 1: IO en cours }
+				Error: Integer;      				{ Code d'Erreur }
+				PendAdr: Ptr;	        			{ Var Adress for pend }
+				PendStr: Longint;      			{ Str Pattern to wait }
+				StartTime: Longint;     	 	{ 'secs' √† la connexion }
+				MaxTime: Longint;      			{ TimeOut }
+				ZoneNumber: Integer;      	{ Zone de sortie du Wait}
+				TaskNumber: Integer;      	{ Numero de la tache/voie logique}
+				TaskPriority: Integer;      { Priorit√© de la tache }
+				TheNLine: Integer;					{ Numero de ligne dans le module }
+				TheNInst: Integer;					{ Numero d'intruction dans la ligne }
+				LocalMode: Boolean;      		{ mode local ou non }
+				EchoFlag: Boolean;      		{ echo ou non }
+				OutPutFlag: Boolean;
+				FrOutPut: Boolean;					{ vrai si FrontScreen en cours }
+				StarFlag: Boolean;      		{ si * seule en saisie }
+				StoppedFlag: Boolean;				{ vrai si la tache a √©t√© arr√™t√©e }
+				TaskSNumber: Integer;
+				HardType: Integer;					{ Type de HardWare }
+				OPFlag: Integer;
+				SerSpeed: Integer;					{¬†vitesse pour pour s√©rie }
+				ADSPInfos: Ptr;							{ pointeur vers infos ADSP }
+				OPPtr: Ptr;									{ pointeur vers buffer de sortie }
+				RegArea: ARRAY[0..16] OF Ptr; 	{ registres tache background }
+				RegAreaF: ARRAY[0..16] OF Ptr; 	{ registres tache principale }
+				NbZones: Integer;      			{ Nb Zones de saisie }
+				TheZones: ARRAY[1..MaxZones] OF RSZone;
+				Res2: Longint;
+				Res3: Integer;
+				Res4: Integer;
+				XCallDatas: STRING[26]; 		{ donn√©es d'appel Transpac }
+				Res5: LONGINT;
+				Res6: Ptr;
+				Res7: Ptr;
+				Res8: Integer;
+				Res9: Integer;
+				Res10: Boolean;
+				Res11: Boolean;
+				ConFlag: Boolean;      			{ valide si voie connect√©e }
+				XConFlag: Boolean;
+				Res12: Integer;
+				FilterFlag: boolean;				{ vrai si FILTER }
+				TrPrintFlag: boolean;				{ vrai si print "transparent" }
+				RWSz: Integer;							{ Taille buffer Read/Write des fichiers }
+				RWPtr: Ptr;									{ Pointer sur Buffer Read/Write }
+				RWCount: Integer;						{ nb octets lus/√©crits }
+				RWIdx: Integer;							{ Index dans RW buffer 1..RWSz }
+				DBPtr: Ptr;									{ Pointer to data base Buffer }
+				DBSz: Longint;							{ Data Base com area size }
+				DBCount: Longint;						{ com area actual size }
+				DBRef: Longint;							{ record reference }
+				DBIdx: Longint;							{ com area actual index }
+				IOQueue: Integer;						{ N¬∞ Queue pour I/O }
+				RndMemo: Longint;						{ random seed 1 }
+				RndCount: Longint;					{ random seed 2 }
+				Res13: Longint;
+				Res14: Ptr;
+				TheFiles: ARRAY[1..MaxFile] OF FRecord;		{ tableau des fichiers de la t√¢che }
+			END;
+
+	FUNCTION Drg_GetTCB: TCBPtr;
+	INLINE
+		$4EAD, $0060;
+
+	PROCEDURE Drg_Delay(Delay: LONGINT);
+	INLINE
+		$4EAD, $00BA;
+
+	PROCEDURE Drg_YieldCpu;
+	INLINE
+		$4EAD, $02D0;
+
+	FUNCTION Drg_RunFlags: Str255;
+	INLINE
+		$4EAD, $0420;
+
+
+{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢ Gestion des fichiers ‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+
+	TYPE
+		MyParamBlockRec = RECORD
+				TCB: TCBPtr;
+				PB: ParamBlockRec;
+			END;
+		MyParamBlockPtr = ^MyParamBlockRec;
+
+		MyHParamBlockRec = RECORD
+				TCB: TCBPtr;
+				HPB: HParamBlockRec;
+			END;
+		MyHParamBlockPtr = ^MyHParamBlockRec;
+
+
+	PROCEDURE Drg_Open (NumLog: LONGINT; Nom: Str255);
+	INLINE
+		$4EAD, $014A;
+
+	PROCEDURE Drg_OpenRF (NumLog: LONGINT; Nom: Str255);
+	INLINE
+		$4EAD, $0426;
+
+	PROCEDURE Drg_Close (NumLog: LONGINT);
+	INLINE
+		$4EAD, $009C;
+
+	FUNCTION Drg_FSRead (NumLog: LONGINT; VAR count: LONGINT; Buffer: Ptr): OsErr;
+	INLINE
+		$7001, $4EAD, $0066;
+
+	FUNCTION Drg_FSWrite (NumLog: LONGINT; VAR count: LONGINT; Buffer: Ptr): OsErr;
+	INLINE
+		$7002, $4EAD, $0066;
+
+	FUNCTION Drg_Error: LONGINT;
+	INLINE
+		$4EAD, $00E4;
+
+	FUNCTION Drg_EOF (NumLog: LONGINT): LONGINT;
+	INLINE
+		$4EAD, $00DE;
+
+	FUNCTION Drg_GetEOF (NumLog: LONGINT): LONGINT;
+	INLINE
+		$4EAD, $0108;
+
+	PROCEDURE Drg_SetEOF (NumLog, LogEof: LONGINT);
+	INLINE
+		$4EAD, $017A;
+
+	FUNCTION Drg_FPos (NumLog: LONGINT): LONGINT;
+	INLINE
+		$4EAD, $0102;
+
+	PROCEDURE Drg_Seek (NumLog, Pos: LONGINT);
+	INLINE
+		$4EAD, $0174;
+
+	PROCEDURE Drg_RLen (NumLog, RecLen: LONGINT);
+	INLINE
+		$4EAD, $0168;
+
+	PROCEDURE Drg_RSeek (NumLog, NumRec: LONGINT);
+	INLINE
+		$4EAD, $016E;
+
+	PROCEDURE Drg_Create (Nom: Str255);
+	INLINE
+		$4EAD, $00A8;
+
+	PROCEDURE Drg_Kill (Nom: Str255);
+	INLINE
+		$4EAD, $011A;
+
+	PROCEDURE Drg_Rename (ancien, nouveau: Str255);
+	INLINE
+		$4EAD, $0156;
+
+	PROCEDURE Drg_Lock (NumLog: LONGINT);
+	INLINE
+		$4EAD, $0288;
+
+	PROCEDURE Drg_Unlock (NumLog: LONGINT);
+	INLINE
+		$4EAD, $028E;
+
+	PROCEDURE Drg_GetFile (VAR NomFicDos: Str255; NomDoss: Str255; Index: LONGINT);
+	INLINE
+		$4EAD, $032A;
+
+	PROCEDURE Drg_NewFolder (Nom: Str255);
+	INLINE
+		$4EAD, $039C;
+
+	PROCEDURE Drg_GetFInfo (Nom: Str255; VAR TypeCreat: Str255; VAR DataSz, RsrcSz, DateCr, DateMod: LONGINT);
+	INLINE
+		$4EAD, $03A2;
+
+	PROCEDURE Drg_SetFinfo (Nom: Str255; TypeCreate: Str255);
+	INLINE
+		$4EAD, $03A8;
+
+	PROCEDURE Drg_GetVol (VAR NomVol: Str255; Index: LONGINT);
+	INLINE
+		$4EAD, $03AE;
+
+	FUNCTION Drg_PBCall (theCall: INTEGER; thePB: MyParamBlockPtr): OsErr;
+	INLINE
+		$7003, $4EAD, $0066;
+
+	FUNCTION Drg_PBHCall (theCall: INTEGER; thePB: MyHParamBlockPtr): OsErr;
+	INLINE
+		$7004, $4EAD, $0066;
+
+	CONST
+     { requ√™tes du serveur de fichier }
+		ReqOpen = 1;	        { demande de PBOpen }
+		ReqClose = 2;	        { demande de PBClose }
+		ReqRename = 3;	      { demande de PBHRename‚Ä† }
+		ReqDelete = 4;	      { demande de PBHDelete‚Ä† }
+		ReqRead = 5;	        { demande de PBRead }
+		ReqWrite = 6;	        { demande de PBWrite }
+		ReqGetEof = 7;	      { demande de PBGetEof }
+		ReqSetEof = 8;	      { demande de PBSetEof }
+		ReqLock = 9;	        { demande de PBLock }
+		ReqUnlock = 10;	      { demande de PBUnlock }
+		ReqCreate = 11;	      { demande de PBCreate }
+		ReqGetFInfo = 12;	    { demande de PBHGetFInfo‚Ä† }
+		ReqSetFInfo = 13;	    { demande de PBHSetFInfo‚Ä† }
+		ReqOpWd = 14;					{ demande de PBOpenWD¬∞ }
+		ReqClWd = 15;					{ demande de PBCloseWD¬∞ }
+		ReqGetCat = 16;				{ demande de PBGetCatInfo }
+		ReqOpRsrc = 17;				{ demande de PBOpenRf }
+		ReqDirCreate = 18;		{ demande de PBDirCreate }
+		ReqFlush = 19;				{ demande de PBFlushVol }
+		ReqNameOfId = 20;			{ demande de nom courant }
+		ReqGetVol =  21;			{ demande de PBGetVol }
+		ReqSetVol =  22;			{ demande de PBSetVol }
+		ReqGetVInfo =	23;			{ demande de PBGetVInfo }
+		ReqCatMove = 24;			{ demande de PBCatMove }
+		
+		{ ‚Ä† PBHCall  }
+		{	¬∞ PBWDCall }
+
+
+	PROCEDURE Drg_SetRunMode (NewMode: INTEGER);
+	INLINE
+		$7005, $4EAD, $0066;
+
+	CONST
+		kNoInterrupt = 0;
+		kInterrupt = 1;
+		
+{ Appels √† DragsterBoot‚Ä¶¬†}
+
+{ allocation d'un Handle par DragsterBoot }
+FUNCTION Drg_NewHandle(size:LONGINT):Handle;
+INLINE
+	$203C, $0000, $0100, $4EAD, $0066;
+
+{ enregistrement de datas par DragsterBoot }
+FUNCTION Drg_StoreData(dataPtr:Ptr; dataName:Str255):OsErr;
+INLINE
+	$203C, $0000, $0101, $4EAD, $0066;
+
+{ r√©cup√©ration de datas conserv√©es par DragsterBoot }
+FUNCTION Drg_RestoreData(dataName:Str255):Ptr;
+INLINE
+	$203C, $0000, $0102, $4EAD, $0066;
+
+{ suppression de datas conserv√©es par DragsterBoot }
+PROCEDURE Drg_KillData(dataName:Str255);
+INLINE
+	$203C, $0000, $0103, $4EAD, $0066;

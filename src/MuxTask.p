@@ -1,1 +1,618 @@
-UNIT MuxTask;{$SETC DEBUG=FALSE}{$SETC DEBUG2=FALSE}{$SETC DOLOG=FALSE}	{ Tache gérant le flot d'entrée en protocole ASM }	INTERFACE		USES MemTypes, OSIntf, ToolIntf, PackIntf, ADSP, TextUtils, GestaltEqu;		PROCEDURE TheTask;	IMPLEMENTATION		{$I DragsterTCB.p}		TYPE			TCBsArray = ARRAY [0..255] OF RECORD				TCB: TPtr;				NextInArray: INTEGER;			END;						TCBsPtr = ^TCBsArray;		CONST			ErrTime = 128;			SOH = chr(1);			STX = chr(2);			ETX = chr(3);			BS = chr(8);			FF = chr(12);			SO = chr(14);			SI = chr(15);			DLE = chr(16);			DC1 = chr(17);			REP = chr(18);			SEP = chr(19);			DC4 = chr(20);			SS2 = chr(22);			ETB = chr(23);			CAN = chr(24);			ACC = chr(25);			ESC = chr(27);			RS = chr(30);			US = chr(31);			SP = chr(32);			DataFrame = $30;		{ '0' Données }			CallFrame = $31;		{ '1' Appel }			LibFrame = $32;			{ '2' Libération/confirm. de libération }			ComFrame = $33;			{ '3' Confirmation d'appel }			ErrFrame = $34;			{ '4' Erreur de procédure }			XOffFrame = $35;		{ '5' Contr. de flux = SUSPEND }			XOnFrame = $36;			{ '6'   "     "    " = RESUME }			EchoOffFrame = $37;	{ '7' Suppression d'écho sur le PAD }			EchoOnFrame = $38;	{ '8' Rétablissement d'écho }			X29Frame = $39;			{ '9' Message X29 bit Q=1 }			X29FrameNAMTEL = $3A;						{ ajouts Hyptek }			CLibFrame = $3C;			{ confirmation de libération (Hyptek) }			NextDataFrame = $40;	{ données à suivre bit M=1 }			NextX29Frame = $49;		{ message X29 à suivre bit M=1 Q=1 }						{ ajouts ASM/T Namtel }			ErrorFrame = $3F;			ResetFrame = $3E;								FUNCTION GetCurSt: TPtr;		{ GetCurSt rend CurStPtr, qui pointe sur le TCB actif }			EXTERNAL;		PROCEDURE SwapTasks(AdRegs1, AdRegs2: Ptr);		{ Sauvegarde contexte courant dans AdRegs1 et restaure AdRegs2 }			EXTERNAL;		PROCEDURE AsmCompletion;		{ IOCompletion qui donne l'adresse de la tache appelante }			EXTERNAL;		PROCEDURE WaitDelay(Num1: Longint);			BEGIN				WITH GetCurSt^ DO					BEGIN						DelayValue := Num1;						StatusWord := DelayCst;						SwapTasks(@RegArea, @RegAreaF);					END;			END;				FUNCTION Concatnum(str:str255; num:longint):str255;				VAR	tempStr:Str255;				BEGIN			numtostring(num,tempstr);			concatnum := concat(str,tempstr);		END;							FUNCTION str(num:LONGINT):Str255;						VAR		temp:Str255;						negatif: BOOLEAN;									BEGIN				Temp := '';				negatif := (num<0);				num := abs(num);				WHILE Num<>0 DO				BEGIN					temp := concat(CHR($30+Num MOD 10),Temp);					Num := Num DIV 10;				END;				IF Temp='' THEN Temp := '0';				IF negatif THEN temp := concat('-',Temp);				Str := Temp;			END;PROCEDURE SetRunMode(NewMode: Integer);	VAR		SaveStatus: Integer;	BEGIN		WITH GetCurSt^ DO			BEGIN				SaveStatus := StatusWord;				RunMode := NewMode;				StatusWord := ReadyCst;				WHILE CurRunMode > RunMode DO					SwapTasks(@RegArea, @RegAreaF);				StatusWord := SaveStatus;			END;	END;		PROCEDURE TheTask; { Tache de pool d'entree }			CONST				ErrCode = - 1; { mauvais code action }			VAR				ThePtr, CurTCB: TPtr;				TheTCBs: TCBsArray;				i: Integer;				pb: MyParamblockrec;				InChar, TpPaq, cv: Integer;				FirstInArray: Integer;				buff: Str255;				paqLen: INTEGER;				result: LONGINT;						PROCEDURE DoDebugStr(msg: Str255);				BEGIN{$IFC DOLOG}			DebugStr(concat('cv=',str(cv),' T=',chr(tppaq),' L=',str(paqlen), ' > ', msg));{$ENDC}				END;							PROCEDURE GetNext_old;						VAR				Err: OSErr;			BEGIN				WITH pb, GetCurSt^ DO				BEGIN						StatusWord := IOWaitCst;					ioReqCount := 1;					ioBuffer := @buff[1];					Err := PbReadAsync(@QLink);					SwapTasks(@RegArea, @RegAreaF);					inChar := ord(buff[1]);					paqLen := paqLen-1;{$IFC DEBUG2}DebugStr(concatnum('inChar=',inChar));{$ENDC}				END;			END;									PROCEDURE GetNext;				VAR					Err: OSErr;				BEGIN					IF ord(buff[0])=0 THEN	{ le buffer de réception est vide… }					WITH pb, GetCurSt^ DO					BEGIN							{ 1/ on regarde combien de car. sont arrivés							2/ on en lit 1 si rien de dispo							3/ on les lit tous si dispo						}						Err := SerGetBuf(SerRefIn,ioReqCount);						IF ioReqCount=0 THEN							ioReqCount := 1;						IF ioReqCount>255 THEN							ioReqCount := 255;						StatusWord := IOWaitCst;						Err := PbReadAsync(@QLink);						SwapTasks(@RegArea, @RegAreaF);						buff[0] := chr(ioActCount);						{$IFC DOLOG}DebugStr(concat('GetNext: ',buff));{$ENDC}					END;					inChar := ord(buff[1]);					Delete(buff,1,1);					paqLen := paqLen-1;				END;			PROCEDURE CallPack;				VAR					XDataCount: Integer;					champ: INTEGER;					lastChar: CHAR;								PROCEDURE AddChar(theChar:CHAR);								BEGIN					IF (XDataCount<SZCALL) & ((theChar<>'.') | (XDataCount<>15)) THEN	{ 27/3/95 }					BEGIN						XDataCount := XDataCount+1;						CurTCB^.XCallDatas[XDataCount]:=theChar;					END;				END;								BEGIN { la voie va etre connectée }					{ il faut remplir les données d'entrée - max 24 cars }					champ := 0;					lastChar := ' ';					WITH CurTCB^ DO						BEGIN							XCallDatas := '                          ';							XDataCount := 0;														REPEAT								GetNext;								{ remise en forme du champ PCV et GFA pour les NAMTEL }								IF inChar=ord('/') THEN								BEGIN									champ := champ+1;									IF lastChar='/' THEN	{ champ vide ? }									BEGIN										IF champ IN [3,4] THEN AddChar('0');	{ pas de PCV }										IF champ=4 THEN AddChar('0');	{ pas de GFA }									END;								END;								lastChar := chr(inChar);								IF (inChar>$20) & (inChar<>ord('/')) THEN									AddChar(chr(InChar));							UNTIL (InChar=ord(ETX));							DoDebugStr(concat('Call, data="',XCallDatas,'"'));														ConFlag := FALSE;	{ au cas où on n'aurait pas reçu le LIB précédent… }							XConFlag := True;	{ connecté au niveau X25 !! }							IF (StatusWord IN [WDataCst..WComTCst]) THEN	{ on réactive la tâche d'origine }								BEGIN									Error := NoErr;									StatusWord := ReadyCst;								END;						END;				END;			PROCEDURE LibPack;				BEGIN { la voie est déconnectée }					WITH CurTCB^ DO						BEGIN							DoDebugStr('Lib');							XCallDatas := '                          ';							ConFlag := False;							XConFlag := False;							IF (StatusWord IN [WDataCst..WComTCst]) THEN	{ on réactive la tâche d'origine }								BEGIN									Error := NoErr;									StatusWord := ReadyCst;								END;						END;				END;			PROCEDURE ComPack;			{ confirmation d'appel }							BEGIN { la voie est connectée }					{ pas de données d'entrée }					WITH CurTCB^ DO						BEGIN							XCallDatas := '                          ';							XConFlag := True;							DoDebugStr('Conn');						END;				END;			PROCEDURE DataPack;				VAR					Idx: Integer;					ABuff: iBuffPtr;					transp: BOOLEAN;					done:	BOOLEAN;									BEGIN { on met les données dans InBuff --- max 255 chars }					WITH CurTCB^ DO						BEGIN							DoDebugStr('Data');							IF InBuffEnd = NIL THEN	{ pas de buffer pour l'instant }							BEGIN								InBuffEnd := InBuffPool^.Link;	{ on en prend un nouveau }								IF InBuffEnd = NIL THEN EXIT(DataPack); { plus de buffer, infos perdues }								InBuffPool^.Link := InBuffPool^.Link^.Link;								InBuffEnd^.InBuff[0] := chr(0);	{ raz de ce nouveau buffer }								InBuffSt := InBuffEnd;	{ c'est le premier à utiliser }								InBuffEnd^.Link := NIL;	{ pas de buffer suivant }								InBuffNb := 1;					{ on a un seul buffer pour l'intant }							END;														WBuffFlag := True;	{ remplissage du buffer en cours !!! }							done := FALSE;							REPEAT								IF length(InBuffEnd^.InBuff) = 255 THEN { ce buffer en plein ! }								BEGIN									DoDebugStr('Nouveau Buffer');									ABuff := InBuffPool^.Link;	{ on en prend un nouveau }									IF ABuff <> NIL THEN									BEGIN										InBuffNb := InBuffNb + 1;										InBuffPool^.Link := InBuffPool^.Link^.Link;										InBuffEnd^.Link := ABuff;										ABuff^.Link := NIL;										InBuffEnd := ABuff;										InBuffEnd^.InBuff[0]:=chr(0);									END									ELSE Leave; { on sort du REPEAT car on n'a plus de buffer libre ! }								END;								GetNext;															CASE HardType OF									MuxASM:									BEGIN											Transp := (InChar = ord(DLE));										IF Transp THEN GetNext;	{ Transparence des DLE }										IF Transp | (Inchar<>ord(ETX)) THEN										WITH InBuffEnd^ DO										BEGIN											InBuff[0] := CHR(ORD(InBuff[0])+1);											InBuff[length(InBuff)] := chr(InChar);											DoDebugStr(concat('Trans DLE Data= ',chr(Inchar),concatnum(' ',inchar),' ',InBuff));										END;										done := (inChar=ord(ETX)) & (Transp=FALSE);									END;									MuxASMT:									BEGIN										WITH InBuffEnd^ DO										BEGIN											InBuff[0] := CHR(ORD(InBuff[0])+1);											InBuff[length(InBuff)] := chr(InChar);										END;										done := (paqLen=0);									END;								END;	{ CASE HardType }							UNTIL (done);														WBuffFlag := False;	{ plus d'écriture dans le buffer }							IF (StatusWord IN [WDataCst..WComTCst]) THEN	{ on réactive la tâche d'origine }								BEGIN									Error := NoErr;									StatusWord := ReadyCst;								END;						END;				END;			PROCEDURE X29DataPack;						VAR				transp: BOOLEAN;				temp: Str255;							BEGIN				WITH CurTcb^,CurTcb^.Infos^ DO				BEGIN					DoDebugStr('DataX29');					LastX29 := '';										CASE HardType OF					MuxASM:						REPEAT							GetNext;														{ Transparence des DLE }							IF HardType=MuxASM THEN							BEGIN								Transp := (InChar = ord(DLE));								IF Transp THEN GetNext;							END							ELSE								Transp := FALSE;															IF Transp | (Inchar<>ord(ETX)) THEN							BEGIN								LastX29[0] := CHR(ORD(LastX29[0])+1);								LastX29[length(LastX29)] := chr(InChar);							END;						UNTIL (inChar=ord(ETX)) & (Transp=FALSE);					MuxASMT:	{ 19/12/97 }						REPEAT							GetNext;							LastX29[0] := CHR(ORD(LastX29[0])+1);							LastX29[length(LastX29)] := chr(InChar);						UNTIL (paqLen=0);										END;	{ CASE HardType }										IF LastX29[1]=chr($92) THEN { Commande POSSIBILITES }					BEGIN						PO1 := 0;						PO[2] := '';						PO[3] := '';						PO[4] := '';						PO[5] := '';						PO[6] := '';						temp := LastX29;						Delete(Temp,1,3);	{ $92 + 2 oct. de longueur }						REPEAT							CASE ORD(Temp[1]) OF								$81:									PO1 := ord(Temp[3]);								$82..$86:										PO[ORD(Temp[1])-$80] := Copy(temp,3,ORD(Temp[2]));								OTHERWISE									Temp := '';							END;							IF (temp <> '') THEN	{ 19/12/97 }								Delete(Temp,1,2+ORD(Temp[2]));						UNTIL temp='';					END;				END;	{ WITH CurTcb^ }			END;									PROCEDURE IndispPack;				BEGIN { on change le flag OutPutFlag de la voie a false }					{ seulement si la voie est encore connectée }					WITH CurTCB^ DO OutPutFlag := False;					DoDebugStr('Xoff');				END;			PROCEDURE DispPack;				BEGIN { on change le flag OutPutFlag de la voie a true }					WITH CurTCB^ DO OutPutFlag := True;					DoDebugStr('Xon');				END;			PROCEDURE ErrPack;			BEGIN { on a reçu une trame d'erreur ! }				DoDebugStr(concat('Err cv=',str(CurTCB^.Tasknumber),' type=',chr(tpPaq)));			END;			BEGIN		{ début de MuxTask }				{ 14/5/98 }{				i := Gestalt(gestaltNativeCPUtype, result);				IF (result >= gestaltCPU601) THEN					SetRunMode(0);}				SetRunMode(1);	{ 15/6/99 }					ThePtr := GetCurSt;	{ TCB de cette tâche }				InChar := 0;				TpPaq := 0;				buff := '';				WITH pb, ThePtr^ DO					BEGIN						TcbPtr := ThePtr;						ioCompletion := ProcPtr(@AsmCompletion);						ioBuffer := @buff[1];						ioReqCount := 1;						ioPosMode := fsAtMark;						ioPosOffset := 0;{$IFC DOLOG}				IF HardType=MuxASMT THEN	DebugStr('MuxASMT');{$ENDC}						ioRefNum := SerRefIn;					END;				{ raz du tableau des TCBs }				FOR i := 0 TO 255 DO				BEGIN					theTCBS[i].TCB := NIL;					theTCBs[i].NextInArray := 0;				END;								{ on initialise le tableau de TPtr }				CurTcb := ThePtr;				REPEAT					CurTCB := CurTCB^.NextTCB;					IF (CurTCB^.TaskNumber<1024) & (CurTCB^.HardType IN [MuxASM, MuxASMT]) & (CurTCB^.SerRefIn = ThePtr^.SerRefIn) THEN						TheTCBs[CurTCB^.TheModem].TCB := CurTCB;				UNTIL CurTCB^.NextTCB=NIL;								FirstInArray := 0;				FOR i := 255 DOWNTO 0 DO				BEGIN					IF theTCBs[i].TCB <> NIL THEN					BEGIN						theTCBs[i].NextInArray := FirstInArray;						FirstInArray := i;					END;				END;								InChar := 0;				WITH ThePtr^ DO					WHILE True DO						BEGIN							{ attente du STX de début de trame }							WHILE (InChar <> ord(STX)) DO								GetNext;							{ réception du type de paquet }							GetNext;							TpPaq := InChar;							{ réception du N° de CVC }							GetNext;							cv := InChar;														IF HardType=MuxASMT THEN		{ ASM Transparent: longueur de la trame }							BEGIN								GetNext;								paqLen := 128*inChar;								GetNext;								paqLen := paqLen + InChar+1;	{ +1 car le GetNext précédent a décrémenté paqLen }							END							ELSE								paqLen := 0;							DoDebugStr('Mux');														IF (TpPaq IN [XonFrame,XoffFrame]) & (inChar=ord(ETX)) THEN							BEGIN								{ contrôle de flux général !! }								i := FirstInArray;								WHILE i<>0 DO								BEGIN									TheTCBs[i].TCB^.OutputFlag := (tpPaq=XOnFrame);									i := theTCBs[i].NextInArray;								END;							END							ELSE							BEGIN								CurTCB := TheTCBs[cv].TCB;								IF CurTCB <> NIL THEN								BEGIN									CASE TpPaq OF										DataFrame,NextDataFrame: DataPack;										CallFrame: CallPack;										LibFrame,CLibFrame: LibPack;										ComFrame: ComPack;										XoffFrame: IndispPack;										XonFrame: DispPack;										X29Frame,X29FrameNAMTEL: X29DataPack;										ErrFrame,ErrorFrame: ErrPack;									END;								END;							END;														{ attente du ETX (ou ETB) de fin de trame }							CASE HardType OF								MuxASM:									WHILE InChar <> ord(ETX) DO										GetNext;																	MuxASMT:								BEGIN{$IFC DOLOG}							DebugStr(concat('paqlen=',str(paqlen),' inchar=',str(inchar)));{$ENDC}									WHILE paqLen>0 DO										GetNext;								END;							END; { CASE HArdType }													END;			END; {of theTask}END. {of Unit}
+UNIT MuxTask;
+
+{$SETC DEBUG=FALSE}
+{$SETC DEBUG2=FALSE}
+{$SETC DOLOG=FALSE}
+
+	{ Tache g√©rant le flot d'entr√©e en protocole ASM }
+
+	INTERFACE
+
+		USES MemTypes, OSIntf, ToolIntf, PackIntf, ADSP, TextUtils, GestaltEqu;
+
+		PROCEDURE TheTask;
+
+	IMPLEMENTATION
+
+		{$I DragsterTCB.p}
+
+		TYPE
+			TCBsArray = ARRAY [0..255] OF RECORD
+				TCB: TPtr;
+				NextInArray: INTEGER;
+			END;
+			
+			TCBsPtr = ^TCBsArray;
+
+		CONST
+			ErrTime = 128;
+
+			SOH = chr(1);
+			STX = chr(2);
+			ETX = chr(3);
+			BS = chr(8);
+			FF = chr(12);
+			SO = chr(14);
+			SI = chr(15);
+			DLE = chr(16);
+			DC1 = chr(17);
+			REP = chr(18);
+			SEP = chr(19);
+			DC4 = chr(20);
+			SS2 = chr(22);
+			ETB = chr(23);
+			CAN = chr(24);
+			ACC = chr(25);
+			ESC = chr(27);
+			RS = chr(30);
+			US = chr(31);
+			SP = chr(32);
+
+			DataFrame = $30;		{ '0' Donn√©es }
+			CallFrame = $31;		{ '1' Appel }
+			LibFrame = $32;			{ '2' Lib√©ration/confirm. de lib√©ration }
+			ComFrame = $33;			{ '3' Confirmation d'appel }
+			ErrFrame = $34;			{ '4' Erreur de proc√©dure }
+			XOffFrame = $35;		{ '5' Contr. de flux = SUSPEND }
+			XOnFrame = $36;			{ '6'   "     "    " = RESUME }
+			EchoOffFrame = $37;	{ '7' Suppression d'√©cho sur le PAD }
+			EchoOnFrame = $38;	{ '8' R√©tablissement d'√©cho }
+			X29Frame = $39;			{ '9' Message X29 bit Q=1 }
+			X29FrameNAMTEL = $3A;
+			
+			{ ajouts Hyptek }
+			CLibFrame = $3C;			{ confirmation de lib√©ration (Hyptek) }
+			NextDataFrame = $40;	{ donn√©es √† suivre bit M=1 }
+			NextX29Frame = $49;		{ message X29 √† suivre bit M=1 Q=1 }
+			
+			{¬†ajouts ASM/T Namtel }
+			ErrorFrame = $3F;
+			ResetFrame = $3E;
+			
+			
+		FUNCTION GetCurSt: TPtr;
+		{ GetCurSt rend CurStPtr, qui pointe sur le TCB actif }
+			EXTERNAL;
+
+		PROCEDURE SwapTasks(AdRegs1, AdRegs2: Ptr);
+		{ Sauvegarde contexte courant dans AdRegs1 et restaure AdRegs2 }
+			EXTERNAL;
+
+		PROCEDURE AsmCompletion;
+		{ IOCompletion qui donne l'adresse de la tache appelante }
+			EXTERNAL;
+
+		PROCEDURE WaitDelay(Num1: Longint);
+
+			BEGIN
+				WITH GetCurSt^ DO
+					BEGIN
+						DelayValue := Num1;
+						StatusWord := DelayCst;
+						SwapTasks(@RegArea, @RegAreaF);
+					END;
+			END;
+		
+		FUNCTION Concatnum(str:str255; num:longint):str255;
+		
+		VAR	tempStr:Str255;
+		
+		BEGIN
+			numtostring(num,tempstr);
+			concatnum := concat(str,tempstr);
+		END;
+		
+		
+			FUNCTION str(num:LONGINT):Str255;
+			
+			VAR		temp:Str255;
+						negatif: BOOLEAN;
+						
+			BEGIN
+				Temp := '';
+				negatif := (num<0);
+				num := abs(num);
+				WHILE Num<>0 DO
+				BEGIN
+					temp := concat(CHR($30+Num MOD 10),Temp);
+					Num := Num DIV 10;
+				END;
+				IF Temp='' THEN Temp := '0';
+				IF negatif THEN temp := concat('-',Temp);
+				Str := Temp;
+			END;
+
+
+PROCEDURE SetRunMode(NewMode: Integer);
+
+	VAR
+		SaveStatus: Integer;
+
+	BEGIN
+		WITH GetCurSt^ DO
+			BEGIN
+				SaveStatus := StatusWord;
+				RunMode := NewMode;
+				StatusWord := ReadyCst;
+				WHILE CurRunMode > RunMode DO
+					SwapTasks(@RegArea, @RegAreaF);
+				StatusWord := SaveStatus;
+			END;
+	END;
+
+
+		PROCEDURE TheTask; { Tache de pool d'entree }
+
+			CONST
+				ErrCode = - 1; { mauvais code action }
+
+			VAR
+				ThePtr, CurTCB: TPtr;
+				TheTCBs: TCBsArray;
+				i: Integer;
+				pb: MyParamblockrec;
+				InChar, TpPaq, cv: Integer;
+				FirstInArray: Integer;
+				buff: Str255;
+				paqLen: INTEGER;
+				result: LONGINT;
+				
+		PROCEDURE DoDebugStr(msg: Str255);
+		
+		BEGIN
+{$IFC DOLOG}
+			DebugStr(concat('cv=',str(cv),' T=',chr(tppaq),' L=',str(paqlen), ' > ', msg));
+{$ENDC}		
+		END;
+		
+		
+
+			PROCEDURE GetNext_old;
+			
+			VAR
+				Err: OSErr;
+
+			BEGIN
+				WITH pb, GetCurSt^ DO
+				BEGIN	
+					StatusWord := IOWaitCst;
+					ioReqCount := 1;
+					ioBuffer := @buff[1];
+					Err := PbReadAsync(@QLink);
+					SwapTasks(@RegArea, @RegAreaF);
+					inChar := ord(buff[1]);
+					paqLen := paqLen-1;
+{$IFC DEBUG2}
+DebugStr(concatnum('inChar=',inChar));
+{$ENDC}
+				END;
+			END;
+			
+			
+			PROCEDURE GetNext;
+
+				VAR
+					Err: OSErr;
+
+				BEGIN
+					IF ord(buff[0])=0 THEN	{¬†le buffer de r√©ception est vide‚Ä¶¬†}
+					WITH pb, GetCurSt^ DO
+					BEGIN	
+						{¬†1/ on regarde combien de car. sont arriv√©s
+							2/ on en lit 1 si rien de dispo
+							3/ on les lit tous si dispo
+						}
+						Err := SerGetBuf(SerRefIn,ioReqCount);
+						IF ioReqCount=0 THEN
+							ioReqCount := 1;
+						IF ioReqCount>255 THEN
+							ioReqCount := 255;
+
+						StatusWord := IOWaitCst;
+						Err := PbReadAsync(@QLink);
+						SwapTasks(@RegArea, @RegAreaF);
+						buff[0] := chr(ioActCount);
+						
+{$IFC DOLOG}
+DebugStr(concat('GetNext: ',buff));
+{$ENDC}
+					END;
+
+					inChar := ord(buff[1]);
+					Delete(buff,1,1);
+					paqLen := paqLen-1;
+				END;
+
+			PROCEDURE CallPack;
+
+				VAR
+					XDataCount: Integer;
+					champ: INTEGER;
+					lastChar: CHAR;
+				
+				PROCEDURE AddChar(theChar:CHAR);
+				
+				BEGIN
+					IF (XDataCount<SZCALL) & ((theChar<>'.') | (XDataCount<>15)) THEN	{¬†27/3/95 }
+					BEGIN
+						XDataCount := XDataCount+1;
+						CurTCB^.XCallDatas[XDataCount]:=theChar;
+					END;
+				END;
+				
+				BEGIN { la voie va etre connect√©e }
+					{ il faut remplir les donn√©es d'entr√©e - max 24 cars }
+					champ := 0;
+					lastChar := ' ';
+					WITH CurTCB^ DO
+						BEGIN
+							XCallDatas := '                          ';
+							XDataCount := 0;
+							
+							REPEAT
+								GetNext;
+								{¬†remise en forme du champ PCV et GFA pour les NAMTEL }
+								IF inChar=ord('/') THEN
+								BEGIN
+									champ := champ+1;
+									IF lastChar='/' THEN	{¬†champ vide ? }
+									BEGIN
+										IF champ IN [3,4] THEN AddChar('0');	{¬†pas de PCV }
+										IF champ=4 THEN AddChar('0');	{¬†pas de GFA }
+									END;
+								END;
+								lastChar := chr(inChar);
+								IF (inChar>$20) & (inChar<>ord('/')) THEN
+									AddChar(chr(InChar));
+							UNTIL (InChar=ord(ETX));
+
+							DoDebugStr(concat('Call, data="',XCallDatas,'"'));
+							
+							ConFlag := FALSE;	{ au cas o√π on n'aurait pas re√ßu le LIB pr√©c√©dent‚Ä¶¬†}
+							XConFlag := True;	{ connect√© au niveau X25 !! }
+							IF (StatusWord IN [WDataCst..WComTCst]) THEN	{ on r√©active la t√¢che d'origine }
+								BEGIN
+									Error := NoErr;
+									StatusWord := ReadyCst;
+								END;
+						END;
+				END;
+
+
+			PROCEDURE LibPack;
+
+				BEGIN { la voie est d√©connect√©e }
+					WITH CurTCB^ DO
+						BEGIN
+							DoDebugStr('Lib');
+
+							XCallDatas := '                          ';
+							ConFlag := False;
+							XConFlag := False;
+							IF (StatusWord IN [WDataCst..WComTCst]) THEN	{ on r√©active la t√¢che d'origine }
+								BEGIN
+									Error := NoErr;
+									StatusWord := ReadyCst;
+								END;
+						END;
+				END;
+
+
+			PROCEDURE ComPack;
+			{¬†confirmation d'appel }
+			
+				BEGIN { la voie est connect√©e }
+					{ pas de donn√©es d'entr√©e }
+					WITH CurTCB^ DO
+						BEGIN
+							XCallDatas := '                          ';
+							XConFlag := True;
+							DoDebugStr('Conn');
+						END;
+				END;
+
+
+			PROCEDURE DataPack;
+
+				VAR
+					Idx: Integer;
+					ABuff: iBuffPtr;
+					transp: BOOLEAN;
+					done:	BOOLEAN;
+					
+				BEGIN { on met les donn√©es dans InBuff --- max 255 chars }
+					WITH CurTCB^ DO
+						BEGIN
+							DoDebugStr('Data');
+							IF InBuffEnd = NIL THEN	{ pas de buffer pour l'instant }
+							BEGIN
+								InBuffEnd := InBuffPool^.Link;	{ on en prend un nouveau }
+								IF InBuffEnd = NIL THEN EXIT(DataPack); { plus de buffer, infos perdues }
+								InBuffPool^.Link := InBuffPool^.Link^.Link;
+								InBuffEnd^.InBuff[0] := chr(0);	{ raz de ce nouveau buffer }
+								InBuffSt := InBuffEnd;	{ c'est le premier √† utiliser }
+								InBuffEnd^.Link := NIL;	{ pas de buffer suivant }
+								InBuffNb := 1;					{ on a un seul buffer pour l'intant }
+							END;
+							
+							WBuffFlag := True;	{ remplissage du buffer en cours !!! }
+
+							done := FALSE;
+							REPEAT
+								IF length(InBuffEnd^.InBuff) = 255 THEN { ce buffer en plein ! }
+								BEGIN
+									DoDebugStr('Nouveau Buffer');
+									ABuff := InBuffPool^.Link;	{ on en prend un nouveau }
+									IF ABuff <> NIL THEN
+									BEGIN
+										InBuffNb := InBuffNb + 1;
+										InBuffPool^.Link := InBuffPool^.Link^.Link;
+										InBuffEnd^.Link := ABuff;
+										ABuff^.Link := NIL;
+										InBuffEnd := ABuff;
+										InBuffEnd^.InBuff[0]:=chr(0);
+									END
+									ELSE Leave; { on sort du REPEAT car on n'a plus de buffer libre ! }
+								END;
+
+								GetNext;
+							
+								CASE HardType OF
+									MuxASM:
+									BEGIN	
+										Transp := (InChar = ord(DLE));
+										IF Transp THEN GetNext;	{ Transparence des DLE }
+										IF Transp | (Inchar<>ord(ETX)) THEN
+										WITH InBuffEnd^ DO
+										BEGIN
+											InBuff[0] := CHR(ORD(InBuff[0])+1);
+											InBuff[length(InBuff)] := chr(InChar);
+											DoDebugStr(concat('Trans DLE Data= ',chr(Inchar),concatnum(' ',inchar),' ',InBuff));
+										END;
+										done := (inChar=ord(ETX)) & (Transp=FALSE);
+									END;
+
+									MuxASMT:
+									BEGIN
+										WITH InBuffEnd^ DO
+										BEGIN
+											InBuff[0] := CHR(ORD(InBuff[0])+1);
+											InBuff[length(InBuff)] := chr(InChar);
+										END;
+										done := (paqLen=0);
+									END;
+								END;	{ CASE HardType }
+							UNTIL (done);
+							
+							WBuffFlag := False;	{¬†plus d'√©criture dans le buffer }
+							IF (StatusWord IN [WDataCst..WComTCst]) THEN	{ on r√©active la t√¢che d'origine }
+								BEGIN
+									Error := NoErr;
+									StatusWord := ReadyCst;
+								END;
+						END;
+				END;
+
+			PROCEDURE X29DataPack;
+			
+			VAR
+				transp: BOOLEAN;
+				temp: Str255;
+				
+			BEGIN
+				WITH CurTcb^,CurTcb^.Infos^ DO
+				BEGIN
+					DoDebugStr('DataX29');
+
+					LastX29 := '';
+					
+					CASE HardType OF
+					MuxASM:
+						REPEAT
+							GetNext;
+							
+							{ Transparence des DLE }
+							IF HardType=MuxASM THEN
+							BEGIN
+								Transp := (InChar = ord(DLE));
+								IF Transp THEN GetNext;
+							END
+							ELSE
+								Transp := FALSE;
+								
+							IF Transp | (Inchar<>ord(ETX)) THEN
+							BEGIN
+								LastX29[0] := CHR(ORD(LastX29[0])+1);
+								LastX29[length(LastX29)] := chr(InChar);
+							END;
+						UNTIL (inChar=ord(ETX)) & (Transp=FALSE);
+
+					MuxASMT:	{ 19/12/97 }
+						REPEAT
+							GetNext;
+							LastX29[0] := CHR(ORD(LastX29[0])+1);
+							LastX29[length(LastX29)] := chr(InChar);
+						UNTIL (paqLen=0);					
+					END;	{ CASE HardType }
+					
+					IF LastX29[1]=chr($92) THEN {¬†Commande POSSIBILITES }
+					BEGIN
+						PO1 := 0;
+						PO[2] := '';
+						PO[3] := '';
+						PO[4] := '';
+						PO[5] := '';
+						PO[6] := '';
+						temp := LastX29;
+						Delete(Temp,1,3);	{¬†$92 + 2 oct. de longueur }
+						REPEAT
+							CASE ORD(Temp[1]) OF
+								$81:
+									PO1 := ord(Temp[3]);
+								$82..$86:	
+									PO[ORD(Temp[1])-$80] := Copy(temp,3,ORD(Temp[2]));
+								OTHERWISE
+									Temp := '';
+							END;
+							IF (temp <> '') THEN	{ 19/12/97 }
+								Delete(Temp,1,2+ORD(Temp[2]));
+						UNTIL temp='';
+					END;
+				END;	{¬†WITH CurTcb^ }
+			END;
+			
+			
+			PROCEDURE IndispPack;
+
+				BEGIN { on change le flag OutPutFlag de la voie a false }
+					{ seulement si la voie est encore connect√©e }
+					WITH CurTCB^ DO OutPutFlag := False;
+					DoDebugStr('Xoff');
+				END;
+
+			PROCEDURE DispPack;
+
+				BEGIN { on change le flag OutPutFlag de la voie a true }
+					WITH CurTCB^ DO OutPutFlag := True;
+					DoDebugStr('Xon');
+				END;
+
+
+			PROCEDURE ErrPack;
+
+			BEGIN { on a re√ßu une trame d'erreur ! }
+				DoDebugStr(concat('Err cv=',str(CurTCB^.Tasknumber),' type=',chr(tpPaq)));
+			END;
+
+
+			BEGIN		{¬†d√©but de MuxTask }
+				{¬†14/5/98 }
+{
+				i := Gestalt(gestaltNativeCPUtype, result);
+				IF (result >= gestaltCPU601) THEN
+					SetRunMode(0);
+}
+				SetRunMode(1);	{ 15/6/99 }
+	
+				ThePtr := GetCurSt;	{ TCB de cette t√¢che }
+
+				InChar := 0;
+				TpPaq := 0;
+				buff := '';
+
+				WITH pb, ThePtr^ DO
+					BEGIN
+						TcbPtr := ThePtr;
+						ioCompletion := ProcPtr(@AsmCompletion);
+						ioBuffer := @buff[1];
+						ioReqCount := 1;
+						ioPosMode := fsAtMark;
+						ioPosOffset := 0;
+{$IFC DOLOG}				
+IF HardType=MuxASMT THEN
+	DebugStr('MuxASMT');
+{$ENDC}
+						ioRefNum := SerRefIn;
+					END;
+
+				{ raz du tableau des TCBs }
+				FOR i := 0 TO 255 DO
+				BEGIN
+					theTCBS[i].TCB := NIL;
+					theTCBs[i].NextInArray := 0;
+				END;
+				
+				{ on initialise le tableau de TPtr }
+				CurTcb := ThePtr;
+				REPEAT
+					CurTCB := CurTCB^.NextTCB;
+					IF (CurTCB^.TaskNumber<1024) & (CurTCB^.HardType IN [MuxASM, MuxASMT]) & (CurTCB^.SerRefIn = ThePtr^.SerRefIn) THEN
+						TheTCBs[CurTCB^.TheModem].TCB := CurTCB;
+				UNTIL CurTCB^.NextTCB=NIL;
+				
+				FirstInArray := 0;
+				FOR i := 255 DOWNTO 0 DO
+				BEGIN
+					IF theTCBs[i].TCB <> NIL THEN
+					BEGIN
+						theTCBs[i].NextInArray := FirstInArray;
+						FirstInArray := i;
+					END;
+				END;
+				
+				InChar := 0;
+
+				WITH ThePtr^ DO
+					WHILE True DO
+						BEGIN
+							{ attente du STX de d√©but de trame }
+							WHILE (InChar <> ord(STX)) DO
+								GetNext;
+
+							{ r√©ception du type de paquet }
+							GetNext;
+							TpPaq := InChar;
+
+							{ r√©ception du N¬∞ de CVC }
+							GetNext;
+							cv := InChar;
+							
+							IF HardType=MuxASMT THEN		{¬†ASM Transparent: longueur de la trame }
+							BEGIN
+								GetNext;
+								paqLen := 128*inChar;
+								GetNext;
+								paqLen := paqLen + InChar+1;	{ +1 car le GetNext pr√©c√©dent a d√©cr√©ment√© paqLen }
+							END
+							ELSE
+								paqLen := 0;
+
+							DoDebugStr('Mux');
+							
+							IF (TpPaq IN [XonFrame,XoffFrame]) & (inChar=ord(ETX)) THEN
+							BEGIN
+								{ contr√¥le de flux g√©n√©ral !! }
+								i := FirstInArray;
+								WHILE i<>0 DO
+								BEGIN
+									TheTCBs[i].TCB^.OutputFlag := (tpPaq=XOnFrame);
+									i := theTCBs[i].NextInArray;
+								END;
+							END
+							ELSE
+							BEGIN
+								CurTCB := TheTCBs[cv].TCB;
+								IF CurTCB <> NIL THEN
+								BEGIN
+									CASE TpPaq OF
+										DataFrame,NextDataFrame: DataPack;
+										CallFrame: CallPack;
+										LibFrame,CLibFrame: LibPack;
+										ComFrame: ComPack;
+										XoffFrame: IndispPack;
+										XonFrame: DispPack;
+										X29Frame,X29FrameNAMTEL: X29DataPack;
+										ErrFrame,ErrorFrame: ErrPack;
+									END;
+								END;
+							END;
+							
+							{ attente du ETX (ou ETB) de fin de trame }
+							CASE HardType OF
+								MuxASM:
+									WHILE InChar <> ord(ETX) DO
+										GetNext;
+									
+								MuxASMT:
+								BEGIN
+{$IFC DOLOG}				
+			DebugStr(concat('paqlen=',str(paqlen),' inchar=',str(inchar)));
+{$ENDC}
+									WHILE paqLen>0 DO
+										GetNext;
+								END;
+							END; { CASE HArdType }
+							
+						END;
+			END; {of theTask}
+END. {of Unit}

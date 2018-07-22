@@ -1,1 +1,197 @@
-{$SETC DEBUG = FALSE }UNIT ShutDownTask;INTERFACEUSES	MemTypes,QuickDraw ,OSIntf ,ToolIntf ,PackIntf, AppleTalk, ADSP;PROCEDURE TheTask;IMPLEMENTATION{$I DragsterTCB.p}{$R-}CONST	TaskQueue = ShutDownQ;	FUNCTION GetCurSt: TPtr;{ GetCurSt rend CurStPtr, qui pointe sur le TCB actif }EXTERNAL;PROCEDURE SwapTasks(AdRegs1,AdRegs2: Ptr);{ Sauvegarde contexte courant dans AdRegs1 et restaure AdRegs2 }EXTERNAL;PROCEDURE AsmCompletion;{ IOCompletion qui donne l'adresse de la tache appelante }EXTERNAL;PROCEDURE YieldCpu;BEGIN	WITH GetCurSt^ DO SwapTasks(@RegArea, @RegAreaF);END;PROCEDURE WaitDelay(Num1: Longint);BEGIN        WITH GetCurSt^ DO          BEGIN                DelayValue:=Num1;                StatusWord:=DelayCst;                SwapTasks(@RegArea,@RegAreaF);          END;END;PROCEDURE TheTask;  { Tache d'appel des procédures d'arrêt }TYPE	{ tableau de stockage des datas pour les routines externes }	DatasRec =	RECORD								Name: StringHandle;		{ nom de ces datas… }								thePtr: Ptr;					{ pointeur à conserver… }							END;	DatasArray = RECORD			NbDatas: INTEGER;			Datas: ARRAY [1..10000] OF DatasRec;	END;	DPtr = ^DatasArray;	DHandle = ^DPtr;	CONST	ErrCode = -1;     { mauvais code action }VAR	ThePtr	    : TPtr;	TheRequest	: TQEPtr;	theData			: DHandle;	i						: INTEGER;		PROCEDURE Push(data:LONGINT);		INLINE $4E71; { NOP (pour conserver l'info sur la pile) }	PROCEDURE CallShutDownProc(dataPtr,procPtr: Ptr); INLINE $205F,$4E90;	{ MOVE (A7)+,A0 ; JSR (A0) }	PROCEDURE WaitRequest; { on attend une nouvelle requête dans la queue }		BEGIN		WITH ThePtr^, ThePtr^.TheQueues^[TaskQueue] DO			BEGIN				IF QFirst = NIL THEN PendAdr := @QFirst				ELSE PendAdr := @QEnd^.QLink;					StatusWord := PdCst;				SwapTasks(@RegArea, @RegAreaF);			END;	END;BEGIN	TheData := NIL;	ThePtr:=GetCurSt;	WITH ThePtr^ DO	BEGIN		{ initialisation de notre queue }		WITH TheQueues^[TaskQueue] DO		BEGIN			QOwner:=ThePtr;			QFirst:=Nil;			QEnd:=Nil;			QNumber:=0;		END;	END;		WITH ThePtr^ DO	WHILE true DO	BEGIN		{ on attend une requete }		WaitRequest;		{$IFC DEBUG}DebugStr('UtilTask: debut');{$ENDC}		TheRequest := TheQueues^[TaskQueue].QFirst;				{ on traite la requete en cours }		WITH TheRequest^ DO		BEGIN			MaxTime := ORD4(EOwner);			ZoneNumber := ECode;						CASE ECode OF				1:	{ appel procédure d'arrêt }				{ -> EParam1 contient l'adresse de la tâche à appeler }				{ -> EParam2 contient le DataPtr à fournir à la procédure d'arrêt }				BEGIN{$IFC DEBUG}DebugStr('UtilTask: CallShutDownProc');{$ENDC}					{ on met l'adresse de la table de saut sur la pile }					Push(ORD4(GetCurST^.PtJump));							{ on appelle la procédure d'arrêt }					CallShutDownProc(EParam2,EParam1);				END;								2:	{ mise à jour adresse tableau de données }				{ -> EParam1 contient le handle du tableau de données }				BEGIN{$IFC DEBUG}DebugStr('UtilTask: SetDataHandle');{$ENDC}(*					DebugStr('UtilTask: SetDataHandle');	{ bugstoredata } *)					theData := DHandle(EParam1);				END;								3:	{ recherche données }				BEGIN				{ -> EParam2 un pointeur vers le nom de la variable }				{ <- EParam1 rendra l'adresse correspondant ou NIL si nom inconnu }{$IFC DEBUG}DebugStr('UtilTask: RestoreData');{$ENDC}					EParam1:=NIL;					IF theData<>NIL THEN						FOR i := 1 TO theData^^.NbDatas DO							IF theData^^.Datas[i].Name^^=StringPtr(EParam2)^ THEN	{ trouvé !! }							BEGIN{$IFC DEBUG}DebugStr('UtilTask: Trouve');{$ENDC}								EParam1:=theData^^.Datas[i].thePtr;								Leave;							END;				END;			END;	{ CASE }			{$IFC Debug}	DebugStr('UtilTask: fin'); {$ENDC}			{ on informe l'appelant que c'est terminé }			ERet := 0;				IF EOwner<>NIL THEN EOwner^.StatusWord:=ReadyCst;			ZoneNumber := 0;			MaxTime := 0;		END;				{ on retire la requete de la queue }		WITH TheQueues^[TaskQueue] DO		BEGIN			QFirst := QFirst^.QLink;			IF QFirst = NIL THEN			BEGIN				QEnd := Nil;				QNumber := 0;			END;			IF QNumber > 0 THEN QNumber := QNumber -1;		END;	END;END;END. {of Dragster Run Time}
+{$SETC DEBUG = FALSE }
+
+UNIT ShutDownTask;
+
+INTERFACE
+
+USES	MemTypes,QuickDraw ,OSIntf ,ToolIntf ,PackIntf, AppleTalk, ADSP;
+
+PROCEDURE TheTask;
+
+IMPLEMENTATION
+
+{$I DragsterTCB.p}
+{$R-}
+
+CONST
+	TaskQueue = ShutDownQ;
+	
+FUNCTION GetCurSt: TPtr;
+{ GetCurSt rend CurStPtr, qui pointe sur le TCB actif }
+EXTERNAL;
+
+PROCEDURE SwapTasks(AdRegs1,AdRegs2: Ptr);
+{ Sauvegarde contexte courant dans AdRegs1 et restaure AdRegs2 }
+EXTERNAL;
+
+PROCEDURE AsmCompletion;
+{ IOCompletion qui donne l'adresse de la tache appelante }
+EXTERNAL;
+
+PROCEDURE YieldCpu;
+
+BEGIN
+	WITH GetCurSt^ DO SwapTasks(@RegArea, @RegAreaF);
+END;
+
+
+PROCEDURE WaitDelay(Num1: Longint);
+
+BEGIN
+        WITH GetCurSt^ DO
+          BEGIN
+                DelayValue:=Num1;
+                StatusWord:=DelayCst;
+                SwapTasks(@RegArea,@RegAreaF);
+          END;
+END;
+
+
+PROCEDURE TheTask;  { Tache d'appel des proc√©dures d'arr√™t }
+
+TYPE
+	{ tableau de stockage des datas pour les routines externes }
+	DatasRec =	RECORD
+								Name: StringHandle;		{ nom de ces datas‚Ä¶¬†}
+								thePtr: Ptr;					{ pointeur √† conserver‚Ä¶¬†}
+							END;
+	DatasArray = RECORD
+			NbDatas: INTEGER;
+			Datas: ARRAY [1..10000] OF DatasRec;
+	END;
+	DPtr = ^DatasArray;
+	DHandle = ^DPtr;
+	
+
+CONST
+	ErrCode = -1;     { mauvais code action }
+
+VAR
+	ThePtr	    : TPtr;
+	TheRequest	: TQEPtr;
+	theData			: DHandle;
+	i						: INTEGER;
+	
+	PROCEDURE Push(data:LONGINT);
+		INLINE $4E71; { NOP (pour conserver l'info sur la pile) }
+
+	PROCEDURE CallShutDownProc(dataPtr,procPtr: Ptr); INLINE $205F,$4E90;
+	{ MOVE (A7)+,A0 ; JSR (A0) }
+
+	PROCEDURE WaitRequest; { on attend une nouvelle requ√™te dans la queue }
+	
+	BEGIN
+		WITH ThePtr^, ThePtr^.TheQueues^[TaskQueue] DO
+			BEGIN
+				IF QFirst = NIL THEN PendAdr := @QFirst
+				ELSE PendAdr := @QEnd^.QLink;
+	
+				StatusWord := PdCst;
+				SwapTasks(@RegArea, @RegAreaF);
+			END;
+	END;
+
+BEGIN
+	TheData := NIL;
+	ThePtr:=GetCurSt;
+	WITH ThePtr^ DO
+	BEGIN
+		{ initialisation de notre queue }
+		WITH TheQueues^[TaskQueue] DO
+		BEGIN
+			QOwner:=ThePtr;
+			QFirst:=Nil;
+			QEnd:=Nil;
+			QNumber:=0;
+		END;
+	END;
+	
+	WITH ThePtr^ DO
+	WHILE true DO
+	BEGIN
+		{ on attend une requete }
+		WaitRequest;
+		
+{$IFC DEBUG}
+DebugStr('UtilTask: debut');
+{$ENDC}
+
+		TheRequest := TheQueues^[TaskQueue].QFirst;
+		
+		{ on traite la requete en cours }
+		WITH TheRequest^ DO
+		BEGIN
+			MaxTime := ORD4(EOwner);
+			ZoneNumber := ECode;
+			
+			CASE ECode OF
+				1:	{¬†appel proc√©dure d'arr√™t }
+				{ -> EParam1 contient l'adresse de la t√¢che √† appeler }
+				{ -> EParam2 contient le DataPtr √† fournir √† la proc√©dure d'arr√™t }
+				BEGIN
+{$IFC DEBUG}
+DebugStr('UtilTask: CallShutDownProc');
+{$ENDC}
+					{¬†on met l'adresse de la table de saut sur la pile }
+					Push(ORD4(GetCurST^.PtJump));		
+					{ on appelle la proc√©dure d'arr√™t }
+					CallShutDownProc(EParam2,EParam1);
+				END;
+				
+				2:	{¬†mise √† jour adresse tableau de donn√©es }
+				{ -> EParam1 contient le handle du tableau de donn√©es }
+				BEGIN
+{$IFC DEBUG}
+DebugStr('UtilTask: SetDataHandle');
+{$ENDC}
+(*					DebugStr('UtilTask: SetDataHandle');	{ bugstoredata } *)
+					theData := DHandle(EParam1);
+				END;
+				
+				3:	{¬†recherche donn√©es }
+				BEGIN
+				{ -> EParam2 un pointeur vers le nom de la variable }
+				{ <- EParam1 rendra l'adresse correspondant ou NIL si nom inconnu }
+{$IFC DEBUG}
+DebugStr('UtilTask: RestoreData');
+{$ENDC}
+					EParam1:=NIL;
+					IF theData<>NIL THEN
+						FOR i := 1 TO theData^^.NbDatas DO
+							IF theData^^.Datas[i].Name^^=StringPtr(EParam2)^ THEN	{ trouv√© !! }
+							BEGIN
+{$IFC DEBUG}
+DebugStr('UtilTask: Trouve');
+{$ENDC}
+								EParam1:=theData^^.Datas[i].thePtr;
+								Leave;
+							END;
+				END;
+
+			END;	{ CASE }
+			
+{$IFC Debug}	DebugStr('UtilTask: fin'); {$ENDC}
+
+			{ on informe l'appelant que c'est termin√© }
+			ERet := 0;	
+			IF EOwner<>NIL THEN EOwner^.StatusWord:=ReadyCst;
+			ZoneNumber := 0;
+			MaxTime := 0;
+		END;
+		
+		{¬†on retire la requete de la queue }
+		WITH TheQueues^[TaskQueue] DO
+		BEGIN
+			QFirst := QFirst^.QLink;
+			IF QFirst = NIL THEN
+			BEGIN
+				QEnd := Nil;
+				QNumber := 0;
+			END;
+			IF QNumber > 0 THEN QNumber := QNumber -1;
+		END;
+
+	END;
+END;
+
+END. {of Dragster Run Time}

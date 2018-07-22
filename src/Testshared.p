@@ -1,1 +1,4 @@
-(* variables partagées *)SharedRec = RECORDEND; {RECORD SharedRec}
+(* variables partag√©es *)
+
+SharedRec = RECORD
+END; {RECORD SharedRec}

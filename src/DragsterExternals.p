@@ -1,1 +1,20 @@
-UNIT DragsterExternals;INTERFACE		{$DECL DrgTree}		{$SETC DrgTree := FALSE}USES	Memtypes, Quickdraw, OSIntf, ToolIntf, packages, Sane, MacPrint,			{$U :Wintree:DrgTree.p } DrgTree, ADSP,			WritelnWindow, DragsterIO,TokDetok, Emulator, Interpretor;IMPLEMENTATIONCONST           {$I TkTokenCst.p}						END.
+UNIT DragsterExternals;
+
+INTERFACE
+
+		{$DECL DrgTree}
+		{$SETC DrgTree := FALSE}
+
+USES	Memtypes, Quickdraw, OSIntf, ToolIntf, packages, Sane, MacPrint,
+			{$U :Wintree:DrgTree.p } DrgTree, ADSP,
+			WritelnWindow, DragsterIO,TokDetok, Emulator, Interpretor;
+
+
+IMPLEMENTATION
+
+CONST
+           {$I TkTokenCst.p}
+						
+
+
+END.

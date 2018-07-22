@@ -1,1 +1,12 @@
-resource 'TSKP' (2000) {	7,			/* N¡ de queue de message */	35,			/* prioritŽ */	2000,		/* N¡ de TSKC */	1,			/* Nb taches de ce type */	0,			/* globales */	0,			/* 4Ko de locales */	8192,		/* 8Ko de pileÉ */	0,			/* utilisation RW Buffer */	0				/* utilisation DB Buffer */};
+resource 'TSKP' (2000) {
+	7,			/* NÂ° de queue de message */
+	35,			/* prioritÃ© */
+	2000,		/* NÂ° de TSKC */
+	1,			/* Nb taches de ce type */
+	0,			/* globales */
+	0,			/* 4Ko de locales */
+	8192,		/* 8Ko de pileâ€¦ */
+	0,			/* utilisation RW Buffer */
+	0				/* utilisation DB Buffer */
+};
+

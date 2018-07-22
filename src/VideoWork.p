@@ -1,1 +1,896 @@
-UNIT VideoWork;{===============================================================================     VIDEO WORK:     Basic adapté au Videotex - partie compactage/decompactage d'écran Vidéotex     Version du 28/2/86 - Philippe Boulanger===============================================================================}INTERFACE{==============================================================================}{			        I N T E R F A C E			       }{==============================================================================}USES	MemTypes,QuickDraw , OSIntf ,ToolIntf ,Sane ,MacPrint ,packages, Kit;{==============================================================================}{			       C O N S T A N T E S			       }{==============================================================================}     CONST          nbcar		= 960;	    { nombre de car d'un ecran vidéotex }		  US		 = chr(31);          CAN		 = chr(24);          FF		 = chr(12);          REP		 = chr(18);          ESC		 = chr(27);          SP		 = chr(32);          SO		 = chr(14);          SI		 = chr(15);          SS2		 = chr(22);          RS		 = chr(30);		  CR		 = chr(13);		  LF		 = chr(10);		  BS		 = chr(8);		  HT		 = chr(9);		  VT		 = chr(11);{==============================================================================}{				    T Y P E S				       }{==============================================================================}TYPE          TCar	        =	  PACKED RECORD                                        VCouleur : byte;                                        VBCouleur: byte;                                        VJeu	 : byte;                                        VTaille	 : byte;                                        VFlags	 : byte;                                        ValG01	 : char;                                  END;          ACar	        =	  ARRAY[0..nbcar] OF TCar;VAR	CarNeutre : TCar;	offChar: GrafPort;PROCEDURE InitVWork;FUNCTION Compact(VAR TheCars: ACar): Handle;PROCEDURE DeCompact(VAR TheCars: ACar; VcodeH: Handle);PROCEDURE GetAttrib(At: byte; VAR B1,B2,B3,B4,B5: boolean);FUNCTION SetAttrib(B1,B2,B3,B4,B5: boolean): Byte;IMPLEMENTATION{==============================================================================}{		        I M P L E M E N T A T I O N			       }{==============================================================================}{$S COMPOSEUR}PROCEDURE InitVWork;VAR Att: Byte;	OldPort: GrafPtr;	Bmap: BitMap;	BEGIN    { caractere neutre }    Att:=SetAttrib(false,false,false,false,false);    WITH CarNeutre DO      BEGIN        VCouleur:=7;        VBCouleur:=0;        VJeu:=0;        VTaille:=0;        VFlags:=Att;        ValG01:=' ';      END;	  	{ initialisation du CharPort }	GetPort(OldPort);	OpenPort(@OffChar);    textsize(10);    SetRect(OffChar.portRect,0,0,8,10);    WITH BMap DO	BEGIN		bounds := OffChar.portRect;		rowBytes := (((bounds.right - bounds.left)+15)DIV 16)*2; 		baseAddr := NewPtr(longint(rowBytes)*longint(bounds.bottom - bounds.top));	END;	SetPortBits(bMap);    SetPort(OldPort);END;{==============================================================================}{			     U T I L I T A I R E S			       }{==============================================================================}{ clignotement, disjoint, masquage, inverse, incrustation }FUNCTION SetAttrib(B1,B2,B3,B4,B5: boolean): Byte;    VAR li: longint;BEGIN    li:=0;    IF B1 THEN li:=bitor(li,1);    IF B2 THEN li:=bitor(li,2);    IF B3 THEN li:=bitor(li,4);    IF B4 THEN li:=bitor(li,8);    IF B4 THEN li:=bitor(li,16);    SetAttrib:=Li;END;{ clignotement, disjoint, masquage, inverse, incrustation }PROCEDURE GetAttrib(At: byte; VAR B1,B2,B3,B4,B5: boolean);VAR li: longint;BEGIN    Li:=At;    B1:=(Bitand(Li,1)<>0);    B2:=(Bitand(Li,2)<>0);    B3:=(Bitand(Li,4)<>0);    B4:=(Bitand(Li,8)<>0);    B4:=(Bitand(Li,16)<>0);END;FUNCTION CompCar(C1, C2: TCar): Boolean;BEGIN     CompCar:= (C1.VCouleur   =	   C2.VCouleur)	  AND               (C1.VBCouleur  =	   C2.VBCouleur)  AND               (C1.VJeu	      =	   C2.VJeu)	  AND               (C1.VTaille    =	   C2.VTaille)	  AND               (C1.VFlags     =	   C2.VFlags)	  AND               (C1.ValG01     =	   C2.ValG01);END;PROCEDURE AddCar(HCode: Handle; C: Char);     VAR CLen: longint;BEGIN     CLen:=GetHandleSize(HCode);     SetHSize(HCode,CLen+1);     BlockMoveData(Ptr(Ord4(@C)+1),Ptr(Ord4(HCode^)+CLen),1);END;PROCEDURE AddCarG012(HCode: Handle; C01: Char);BEGIN	IF ord(C01)>127 THEN	CASE C01 OF		chr($83):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($23));			END;		chr($86):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($27));			END;		chr($88):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'A');				AddCar(HCode,'a');			END;		chr($89):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'C');				AddCar(HCode,'a');			END;		'ç':			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'K');				AddCar(HCode,'c');			END;		'é':			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'B');				AddCar(HCode,'e');			END;		'è':			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'A');				AddCar(HCode,'e');			END;		chr($90):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'C');				AddCar(HCode,'e');			END;		chr($91):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'H');				AddCar(HCode,'e');			END;		chr($94):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'C');				AddCar(HCode,'i');			END;		chr($95):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'H');				AddCar(HCode,'i');			END;		chr($99):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'C');				AddCar(HCode,'o');			END;		chr($9d):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'A');				AddCar(HCode,'u');			END;		chr($9e):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,'C');				AddCar(HCode,'u');			END;		chr($a1):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($30));			END;		chr($a7):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($2c));			END;		chr($a8):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($2d));			END;		chr($a9):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($2e));			END;		chr($aa):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($2f));			END;		chr($ab):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($3c));			END;		chr($ac):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($3d));			END;		chr($ad):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($3e));			END;		chr($b1):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($31));			END;		chr($ce):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($6a));			END;		chr($cf):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($7a));			END;		chr($d6):			BEGIN				AddCar(HCode,SS2);				AddCar(HCode,chr($38));			END;	 END	 ELSE     	AddCar(HCode,C01);END;PROCEDURE AddRep(HCode: Handle; RepCount: Integer; XCar: Char);	 VAR a: Integer;BEGIN	 WHILE RepCount>0 DO	 BEGIN	 	a:=RepCount;		IF a>63 THEN a:=63;     	AddCar(HCode,REP);     	AddCar(HCode,Chr($40+a));		RepCount:=RepCount-a;		IF RepCount>0 THEN		BEGIN			RepCount:=RepCount-1;			AddCar(HCode,XCar);		END;	 END;END;PROCEDURE AddPos(HCode: Handle; Pos: Integer);BEGIN     AddCar(HCode,US);     AddCar(HCode,Chr($40+(Pos DIV 40)+1));     AddCar(HCode,Chr($40+(Pos MOD 40)+1));END;PROCEDURE AddClignotement(HCode: Handle; Flag: Boolean);BEGIN     AddCar(HCode,ESC);     IF Flag THEN AddCar(HCode,Chr($48))             ELSE AddCar(HCode,Chr($49));END;PROCEDURE AddDisjoint(HCode: Handle; Flag: Boolean);BEGIN     AddCar(HCode,ESC);     IF Flag THEN AddCar(HCode,Chr($5A))             ELSE AddCar(HCode,Chr($59));END;PROCEDURE AddMasquage(HCode: Handle; Flag: Boolean);BEGIN     AddCar(HCode,ESC);     IF Flag THEN AddCar(HCode,Chr($5F))             ELSE AddCar(HCode,Chr($58));END;PROCEDURE AddInverse(HCode: Handle; Flag: Boolean);BEGIN     AddCar(HCode,ESC);     IF Flag THEN AddCar(HCode,Chr($5D))             ELSE AddCar(HCode,Chr($5C));END;PROCEDURE AddIncrustation(HCode: Handle; Flag: Boolean);BEGIN     AddCar(HCode,ESC);     IF Flag THEN AddCar(HCode,Chr($4B))             ELSE AddCar(HCode,Chr($4A));END;PROCEDURE AddTaille(HCode: Handle; Valeur: Integer);BEGIN     AddCar(HCode,ESC);     AddCar(HCode,Chr($4C+Valeur));END;PROCEDURE AddJeu(HCode: Handle; Valeur: Integer);BEGIN     IF Valeur=0 THEN AddCar(HCode,SI)     ELSE     IF Valeur=1 THEN AddCar(HCode,SO);END;PROCEDURE AddCouleur(HCode: Handle; Valeur: Integer);BEGIN     AddCar(HCode,ESC);     AddCar(HCode,Chr($40+Valeur));END;PROCEDURE AddBCouleur(HCode: Handle; Valeur: Integer);BEGIN     AddCar(HCode,ESC);     AddCar(HCode,Chr($50+Valeur));END;{==============================================================================}{				  C O M P A C T				       }{==============================================================================}FUNCTION Compact(VAR TheCars: ACar): Handle;     VAR  i, xi, offDep, k,          xOffDep		   : integer;          MonVCode		   : Handle;          XCar			   : TCar;          { clignotement, disjoint, masquage, inverse, incrustation }          cfc,cfd,cfm,cfi,cfn	   : boolean;          fc,fd,fm,fi,fn	   : boolean;          cTaille,          cCouleur,          cBCouleur,          cJeu			   : integer;          RepCount		   : integer;BEGIN     MonVCode:=NewHandle(0);     AddCar(MonVCode,RS);     { debut des cars }     XCar:=CarNeutre;     i:=0;     { positionnement des attributs }     OffDep:=1;     cfc:=False;     cfd:=False;     cfm:=False;     cfi:=False;     cfn:=False;     cTaille:=0;     cCouleur:=7;     cBCouleur:=0;     cJeu:=0;     { compactage }     WHILE (i<=nbcar) DO     BEGIN          { memo numero de car en cours }          xi:=i;          { recherche du premier non neutre a partir de i }          WHILE (i<NbCar) & (CompCar(TheCars[i],CarNeutre))  DO               BEGIN                    CASE TheCars[i].VTaille OF                         0,1: xOffDep:=1;                         2,3: xOffDep:=2;                    END;                    i:=i+xOffDep;               END;          { termine ? }          IF CompCar(TheCars[i],CarNeutre) THEN               BEGIN                    Compact:=MonVCode;                    EXIT(Compact);               END;          { saut ou 3 cars max ? }          IF (i-xi)<=3               THEN                    BEGIN                         { on ajoute les 3 caracteres SP max }                         FOR k:=1 TO (i-xi) DO                              AddCar(MonVCode,SP);                    END               ELSE BEGIN                         { positionnement sur le bon caractere }                         AddPos(MonVCode,i);                         { reset des attributs }                         OffDep:=1;                         cfc:=False;                         cfd:=False;                         cfm:=False;                         cfi:=False;                         cfn:=False;                         cTaille:=0;                         cCouleur:=7;                         cBCouleur:=0;                         cJeu:=0;                    END;          { on regarde les ruptures d'attributs }          WITH TheCars[i] DO          BEGIN               GetAttrib(VFlags,fc,fd,fm,fi,fn);               { Jeu }               IF VJeu<>cJeu THEN                    BEGIN                              AddJeu(MonVCode,VJeu);                              cJeu:=VJeu;                              IF cJeu=1 THEN                                 BEGIN                                   cTaille:=0;                                   OffDep:=1;                                   cfn:=False;                                 END;                              cfd:=false;                    END;               { clignotement }               IF fc<>cfc THEN                    BEGIN                         AddClignotement(MonVCode,fc);                         cfc:=fc;                    END;               { disjoint/souligne }               IF fd<>cfd THEN                    BEGIN                         AddDisjoint(MonVCode,fd);                         cfd:=fd;                    END;               { masquage }               IF fm<>cfm THEN                    BEGIN                         AddMasquage(MonVCode,fm);                         cfm:=fm;                    END;               { inverse }               IF fi<>cfi THEN                    BEGIN                         AddInverse(MonVCode,fi);                         cfi:=fi;                    END;               { Incrustation }               IF fn<>cfn THEN                    BEGIN                         AddIncrustation(MonVCode,fn);                         cfn:=fn;                    END;               { taille }               IF VTaille<>cTaille THEN                    BEGIN                         AddTaille(MonVCode,VTaille);                         cTaille:=VTaille;                         CASE cTaille OF                              0,1: OffDep:=1;                              2,3: OffDep:=2;                         END;                    END;               { Couleur }               IF VCouleur<>cCouleur THEN                    BEGIN                         AddCouleur(MonVCode,VCouleur);                         cCouleur:=VCouleur;                    END;               { Background Couleur }               IF VBCouleur<>cBCouleur THEN                    BEGIN                         AddBCouleur(MonVCode,VBCouleur);                         cBCouleur:=VBCouleur;                    END;          END;          { on ajoute le car }          AddCarG012(MonVCode,TheCars[i].ValG01);          { memo numero de car en cours }          XCar:=TheCars[i];          i:=i+OffDep;          xi:=i;          RepCount:=0;		  		  IF ((i MOD 40)=0) & (cJeu = 0) THEN		  BEGIN		  	cBCouleur := 0;			cfm := FALSE;			cfd := FALSE;		  END;		            { on regarde si on peut faire une repetition }          WHILE (i<NbCar) & (CompCar(TheCars[i],XCar)) DO               BEGIN                    i:=i+OffDep;                    RepCount:=RepCount+1;               END;          { repetition interressante ? }          IF (i=NbCar) THEN               BEGIN                    IF (CompCar(TheCars[i],XCar)) THEN                      BEGIN                       IF (RepCount+1)>2 THEN                         AddRep(MonVCode,RepCount+1,XCar.ValG01)                         ELSE                           FOR k:=1 TO RepCount+1 DO                                AddCarG012(MonVCode,XCar.ValG01);                       i:=NbCar+1;                      END					  ELSE					  BEGIN                       IF (RepCount)>2 THEN                         AddRep(MonVCode,RepCount,XCar.ValG01)                         ELSE                           FOR k:=1 TO RepCount DO                                AddCarG012(MonVCode,XCar.ValG01);					  END               END          ELSE               BEGIN                    IF (RepCount)>2 THEN                      AddRep(MonVCode,RepCount,XCar.ValG01)                    ELSE                      FOR k:=1 TO RepCount DO                           AddCarG012(MonVCode,XCar.ValG01);               END;     END;     Compact:=MonVCode;END;{==============================================================================}{			        D E C O M P A C T			       }{==============================================================================}PROCEDURE DeCompact(VAR TheCars: ACar; VcodeH: Handle);     VAR  i, offDep, k, PosCode	   : Integer;          C,Cx,Cy		   : Char;          RepCar		   : TCar;          { clignotement, disjoint, masquage, inverse, incrustation }          cfc,cfd,cfm,cfi,cfn	   : boolean;          cTaille,          cCouleur,          cBCouleur,          cJeu			   : integer;     FUNCTION GetNextCar: Char;     BEGIN          IF PosCode = GetHandleSize(VCodeH) THEN               BEGIN                    GetNextCar:=chr(0);                    EXIT(GetNextCar);               END;          GetNextCar:=Chr(Ptr(Ord4(VCodeH^)+PosCode)^);          PosCode:=PosCode+1;     END;BEGIN     { attributs de depart }     OffDep:=1;     cfc:=False;     cfd:=False;     cfm:=False;     cfi:=False;     cfn:=False;     cTaille:=0;     cCouleur:=7;     cBCouleur:=0;     cJeu:=0;     i:=0;     PosCode:=0;     { decompactage }     REPEAT          c:=GetNextCar;          IF c<>Chr(0) THEN          BEGIN               CASE c OF               RS,FF:                    BEGIN                         { initialisation }                         IF C=FF THEN                              FOR i:=0 TO Nbcar DO                                   TheCars[i]:=CarNeutre;                         i:=0;                         { reset attributs }                         OffDep:=1;                         cfc:=False;                         cfd:=False;                         cfm:=False;                         cfi:=False;                         cfn:=False;                         cTaille:=0;                         cCouleur:=7;                         cBCouleur:=0;                         cJeu:=0;                    END;               ESC:                    BEGIN                         cx:=GetNextCar;                         CASE ord(cx) OF                              $48: cfc:=true;                              $49: cfc:=false;                              $5A: cfd:=true;                              $59: cfd:=false;                              $5F: cfm:=true;                              $58: cfm:=false;                              $5D: cfi:=true;                              $5C: cfi:=false;                              $4B: cfn:=true;                              $4A: cfn:=false;                              $40..$47: cCouleur :=ord(Cx)-$40;                              $50..$57: cBCouleur:=ord(Cx)-$50;                              $4C..$4F:                                   BEGIN                                        cTaille:=ord(Cx)-$4C;                                        CASE cTaille OF                                             0,1: OffDep:=1;                                             2,3: OffDep:=2;                                        END;                                   END;                         END;                    END;               REP:                    BEGIN                         cx:=GetNextCar;                         RepCar:=CarNeutre;                         IF i>0 THEN RepCar:=TheCars[i-1];                         FOR k:=1 TO ord(cx)-$40 DO                              BEGIN                                   IF i<=nbcar THEN TheCars[i]:=RepCar;                                   i:=i+OffDep;                              END;                         IF i>nbcar THEN i:=nbcar;                    END;               US:                    BEGIN                         { nouvelle position }                         cx:=GetNextCar;                         cy:=GetNextCar;                         i:= (ord(cx)-$41)*40 + (ord(cy)-$41);                         IF i>nbcar THEN i:=nbcar;                         { reset attributs }                         OffDep:=1;                         cfc:=False;                         cfd:=False;                         cfm:=False;                         cfi:=False;                         cfn:=False;                         cTaille:=0;                         cCouleur:=7;                         cBCouleur:=0;                         cJeu:=0;                    END;               SS2:                    BEGIN                         C:=GetNextCar;                         WITH TheCars[i] DO                           BEGIN                              VFlags:=SetAttrib(cfc,cfd,cfm,cfi,cfn);                              VTaille:=cTaille;                              VCouleur:=cCouleur;                              VBCouleur:=cBCouleur;                              VJeu:=0;							  ValG01:=C;                              IF (C IN ['A'..'K']) THEN                                 BEGIN                                   C:=GetNextCar;								   CASE C OF								   'a': CASE ValG01 OF								        'A': ValG01:='à';										'B': ValG01:='á';								        'C': ValG01:='â';										'H': ValG01:='ä';										END;								   'e': CASE ValG01 OF								        'A': ValG01:='è';								        'B': ValG01:='é';								        'C': ValG01:='ê';								        'H': ValG01:='ë';										END;								   'i': CASE ValG01 OF								   		'A': ValG01:='ì';										'B': ValG01:='í';								        'C': ValG01:='î';								        'H': ValG01:='ï';										END;								   'o': CASE ValG01 OF								        'A': ValG01:='ò';										'B': ValG01:='ó';								        'C': ValG01:='ô';								        'H': ValG01:='ö';										END;								   'u': CASE ValG01 OF								        'A': ValG01:='ù';										'B': ValG01:='ú';								        'C': ValG01:='û';								        'H': ValG01:='ü';										END;									'c': IF ValG01='K' THEN ValG01:='ç';									OTHERWISE ValG01:=' ';								   END;                                 END								 ELSE								 	CASE ValG01 OF									'#': ValG01:=chr($83);									'&': ValG01:='#';									'''': ValG01:=chr($86);									',': ValG01:=chr($A7);									'-': ValG01:=chr($A8);									'.': ValG01:=chr($A9);									'/': ValG01:=chr($AA);									'0': ValG01:=chr($A1);									'1': ValG01:=chr($B1);									'8': ValG01:=chr($D6);									'<': ValG01:=chr($AB);									'=': ValG01:=chr($AC);									'>': ValG01:=chr($AD);									'j': ValG01:=chr($CE);									'z': ValG01:=chr($CF);									OTHERWISE										ValG01:=' ';								 	END;                           END;                         i:=i+OffDep;                         IF i>nbcar THEN i:=nbcar;                    END;               SO:                    BEGIN                         cJeu:=1;                         cTaille:=0;                         OffDep:=1;                         cfn:=False;                    END;               SI:                    BEGIN                         cJeu:=0;                    END;			   CR:                    BEGIN                         i:=(i DIV 40) * 40;                    END;			   LF:                    BEGIN                         i:=(i + 40) MOD nbCar;                    END;			   BS:                    BEGIN                         i:= i- 1;						 IF i<0 THEN i:=nbCar-1;                    END;			   HT:                    BEGIN                         i:= (i+1) MOD nbCar;                    END;			   VT:                    BEGIN                         i:= (i - 40);						 IF i<0 THEN i:=nbCar-i;                    END;               OTHERWISE { it is a normal char }                    BEGIN                         WITH TheCars[i] DO                           BEGIN                              VFlags:=SetAttrib(cfc,cfd,cfm,cfi,cfn);                              VTaille:=cTaille;                              VCouleur:=cCouleur;                              VBCouleur:=cBCouleur;                              VJeu:=cJeu;                              ValG01:=C;                           END;                         i:=i+OffDep;                         IF i>nbcar THEN i:=nbcar;                    END;               END          END     UNTIL c=chr(0);END;END. { Implementation }
+UNIT VideoWork;
+{===============================================================================
+
+     VIDEO WORK:
+
+     Basic adapt√© au Videotex - partie compactage/decompactage d'√©cran Vid√©otex
+
+     Version du 28/2/86 - Philippe Boulanger
+
+===============================================================================}
+
+
+
+INTERFACE
+{==============================================================================}
+{			        I N T E R F A C E			       }
+{==============================================================================}
+
+
+USES	MemTypes,QuickDraw , OSIntf ,ToolIntf ,Sane ,MacPrint ,packages, Kit;
+
+
+{==============================================================================}
+{			       C O N S T A N T E S			       }
+{==============================================================================}
+
+     CONST
+          nbcar		= 960;	    { nombre de car d'un ecran vid√©otex }
+		  US		 = chr(31);
+          CAN		 = chr(24);
+          FF		 = chr(12);
+          REP		 = chr(18);
+          ESC		 = chr(27);
+          SP		 = chr(32);
+          SO		 = chr(14);
+          SI		 = chr(15);
+          SS2		 = chr(22);
+          RS		 = chr(30);
+		  CR		 = chr(13);
+		  LF		 = chr(10);
+		  BS		 = chr(8);
+		  HT		 = chr(9);
+		  VT		 = chr(11);
+
+{==============================================================================}
+{				    T Y P E S				       }
+{==============================================================================}
+TYPE
+          TCar	        =	  PACKED RECORD
+                                        VCouleur : byte;
+                                        VBCouleur: byte;
+                                        VJeu	 : byte;
+                                        VTaille	 : byte;
+                                        VFlags	 : byte;
+                                        ValG01	 : char;
+                                  END;
+
+          ACar	        =	  ARRAY[0..nbcar] OF TCar;
+
+
+VAR	CarNeutre : TCar;
+	offChar: GrafPort;
+
+PROCEDURE InitVWork;
+FUNCTION Compact(VAR TheCars: ACar): Handle;
+PROCEDURE DeCompact(VAR TheCars: ACar; VcodeH: Handle);
+PROCEDURE GetAttrib(At: byte; VAR B1,B2,B3,B4,B5: boolean);
+FUNCTION SetAttrib(B1,B2,B3,B4,B5: boolean): Byte;
+
+
+IMPLEMENTATION
+{==============================================================================}
+{		        I M P L E M E N T A T I O N			       }
+{==============================================================================}
+
+{$S COMPOSEUR}
+PROCEDURE InitVWork;
+
+VAR Att: Byte;
+	OldPort: GrafPtr;
+	Bmap: BitMap;
+	
+BEGIN
+    { caractere neutre }
+    Att:=SetAttrib(false,false,false,false,false);
+    WITH CarNeutre DO
+      BEGIN
+        VCouleur:=7;
+        VBCouleur:=0;
+        VJeu:=0;
+        VTaille:=0;
+        VFlags:=Att;
+        ValG01:=' ';
+      END;
+	  
+	{ initialisation du CharPort }
+	GetPort(OldPort);
+	OpenPort(@OffChar);
+    textsize(10);
+    SetRect(OffChar.portRect,0,0,8,10);
+    WITH BMap DO
+	BEGIN
+		bounds := OffChar.portRect;
+		rowBytes := (((bounds.right - bounds.left)+15)DIV 16)*2; 
+		baseAddr := NewPtr(longint(rowBytes)*longint(bounds.bottom - bounds.top));
+	END;
+	SetPortBits(bMap);
+
+    SetPort(OldPort);
+END;
+
+
+{==============================================================================}
+{			     U T I L I T A I R E S			       }
+{==============================================================================}
+
+{ clignotement, disjoint, masquage, inverse, incrustation }
+
+FUNCTION SetAttrib(B1,B2,B3,B4,B5: boolean): Byte;
+    VAR li: longint;
+BEGIN
+    li:=0;
+    IF B1 THEN li:=bitor(li,1);
+    IF B2 THEN li:=bitor(li,2);
+    IF B3 THEN li:=bitor(li,4);
+    IF B4 THEN li:=bitor(li,8);
+    IF B4 THEN li:=bitor(li,16);
+    SetAttrib:=Li;
+END;
+
+
+{ clignotement, disjoint, masquage, inverse, incrustation }
+PROCEDURE GetAttrib(At: byte; VAR B1,B2,B3,B4,B5: boolean);
+
+VAR li: longint;
+
+BEGIN
+    Li:=At;
+    B1:=(Bitand(Li,1)<>0);
+    B2:=(Bitand(Li,2)<>0);
+    B3:=(Bitand(Li,4)<>0);
+    B4:=(Bitand(Li,8)<>0);
+    B4:=(Bitand(Li,16)<>0);
+END;
+
+
+FUNCTION CompCar(C1, C2: TCar): Boolean;
+BEGIN
+     CompCar:= (C1.VCouleur   =	   C2.VCouleur)	  AND
+               (C1.VBCouleur  =	   C2.VBCouleur)  AND
+               (C1.VJeu	      =	   C2.VJeu)	  AND
+               (C1.VTaille    =	   C2.VTaille)	  AND
+               (C1.VFlags     =	   C2.VFlags)	  AND
+               (C1.ValG01     =	   C2.ValG01);
+END;
+
+
+PROCEDURE AddCar(HCode: Handle; C: Char);
+     VAR CLen: longint;
+BEGIN
+     CLen:=GetHandleSize(HCode);
+     SetHSize(HCode,CLen+1);
+     BlockMoveData(Ptr(Ord4(@C)+1),Ptr(Ord4(HCode^)+CLen),1);
+END;
+
+
+PROCEDURE AddCarG012(HCode: Handle; C01: Char);
+BEGIN
+	IF ord(C01)>127 THEN
+	CASE C01 OF
+		chr($83):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($23));
+			END;
+		chr($86):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($27));
+			END;
+		chr($88):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'A');
+				AddCar(HCode,'a');
+			END;
+		chr($89):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'C');
+				AddCar(HCode,'a');
+			END;
+		'√ß':
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'K');
+				AddCar(HCode,'c');
+			END;
+		'√©':
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'B');
+				AddCar(HCode,'e');
+			END;
+		'√®':
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'A');
+				AddCar(HCode,'e');
+			END;
+		chr($90):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'C');
+				AddCar(HCode,'e');
+			END;
+		chr($91):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'H');
+				AddCar(HCode,'e');
+			END;
+		chr($94):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'C');
+				AddCar(HCode,'i');
+			END;
+		chr($95):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'H');
+				AddCar(HCode,'i');
+			END;
+		chr($99):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'C');
+				AddCar(HCode,'o');
+			END;
+		chr($9d):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'A');
+				AddCar(HCode,'u');
+			END;
+		chr($9e):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,'C');
+				AddCar(HCode,'u');
+			END;
+		chr($a1):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($30));
+			END;
+		chr($a7):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($2c));
+			END;
+		chr($a8):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($2d));
+			END;
+		chr($a9):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($2e));
+			END;
+		chr($aa):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($2f));
+			END;
+		chr($ab):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($3c));
+			END;
+		chr($ac):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($3d));
+			END;
+		chr($ad):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($3e));
+			END;
+		chr($b1):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($31));
+			END;
+		chr($ce):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($6a));
+			END;
+		chr($cf):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($7a));
+			END;
+		chr($d6):
+			BEGIN
+				AddCar(HCode,SS2);
+				AddCar(HCode,chr($38));
+			END;
+	 END
+	 ELSE
+     	AddCar(HCode,C01);
+END;
+
+
+PROCEDURE AddRep(HCode: Handle; RepCount: Integer; XCar: Char);
+	 VAR a: Integer;
+BEGIN
+	 WHILE RepCount>0 DO
+	 BEGIN
+	 	a:=RepCount;
+		IF a>63 THEN a:=63;
+     	AddCar(HCode,REP);
+     	AddCar(HCode,Chr($40+a));
+		RepCount:=RepCount-a;
+		IF RepCount>0 THEN
+		BEGIN
+			RepCount:=RepCount-1;
+			AddCar(HCode,XCar);
+		END;
+	 END;
+END;
+
+
+PROCEDURE AddPos(HCode: Handle; Pos: Integer);
+BEGIN
+     AddCar(HCode,US);
+     AddCar(HCode,Chr($40+(Pos DIV 40)+1));
+     AddCar(HCode,Chr($40+(Pos MOD 40)+1));
+END;
+
+
+PROCEDURE AddClignotement(HCode: Handle; Flag: Boolean);
+BEGIN
+     AddCar(HCode,ESC);
+     IF Flag THEN AddCar(HCode,Chr($48))
+             ELSE AddCar(HCode,Chr($49));
+END;
+
+
+PROCEDURE AddDisjoint(HCode: Handle; Flag: Boolean);
+BEGIN
+     AddCar(HCode,ESC);
+     IF Flag THEN AddCar(HCode,Chr($5A))
+             ELSE AddCar(HCode,Chr($59));
+END;
+
+
+PROCEDURE AddMasquage(HCode: Handle; Flag: Boolean);
+BEGIN
+     AddCar(HCode,ESC);
+     IF Flag THEN AddCar(HCode,Chr($5F))
+             ELSE AddCar(HCode,Chr($58));
+END;
+
+
+PROCEDURE AddInverse(HCode: Handle; Flag: Boolean);
+BEGIN
+     AddCar(HCode,ESC);
+     IF Flag THEN AddCar(HCode,Chr($5D))
+             ELSE AddCar(HCode,Chr($5C));
+END;
+
+
+PROCEDURE AddIncrustation(HCode: Handle; Flag: Boolean);
+BEGIN
+     AddCar(HCode,ESC);
+     IF Flag THEN AddCar(HCode,Chr($4B))
+             ELSE AddCar(HCode,Chr($4A));
+END;
+
+
+PROCEDURE AddTaille(HCode: Handle; Valeur: Integer);
+BEGIN
+     AddCar(HCode,ESC);
+     AddCar(HCode,Chr($4C+Valeur));
+END;
+
+
+PROCEDURE AddJeu(HCode: Handle; Valeur: Integer);
+BEGIN
+     IF Valeur=0 THEN AddCar(HCode,SI)
+     ELSE
+     IF Valeur=1 THEN AddCar(HCode,SO);
+END;
+
+
+PROCEDURE AddCouleur(HCode: Handle; Valeur: Integer);
+BEGIN
+     AddCar(HCode,ESC);
+     AddCar(HCode,Chr($40+Valeur));
+END;
+
+
+PROCEDURE AddBCouleur(HCode: Handle; Valeur: Integer);
+BEGIN
+     AddCar(HCode,ESC);
+     AddCar(HCode,Chr($50+Valeur));
+END;
+
+
+{==============================================================================}
+{				  C O M P A C T				       }
+{==============================================================================}
+
+FUNCTION Compact(VAR TheCars: ACar): Handle;
+     VAR  i, xi, offDep, k,
+          xOffDep		   : integer;
+          MonVCode		   : Handle;
+          XCar			   : TCar;
+          { clignotement, disjoint, masquage, inverse, incrustation }
+          cfc,cfd,cfm,cfi,cfn	   : boolean;
+          fc,fd,fm,fi,fn	   : boolean;
+          cTaille,
+          cCouleur,
+          cBCouleur,
+          cJeu			   : integer;
+          RepCount		   : integer;
+
+BEGIN
+     MonVCode:=NewHandle(0);
+     AddCar(MonVCode,RS);
+     { debut des cars }
+     XCar:=CarNeutre;
+     i:=0;
+
+     { positionnement des attributs }
+     OffDep:=1;
+     cfc:=False;
+     cfd:=False;
+     cfm:=False;
+     cfi:=False;
+     cfn:=False;
+     cTaille:=0;
+     cCouleur:=7;
+     cBCouleur:=0;
+     cJeu:=0;
+
+     { compactage }
+     WHILE (i<=nbcar) DO
+     BEGIN
+          { memo numero de car en cours }
+          xi:=i;
+
+          { recherche du premier non neutre a partir de i }
+          WHILE (i<NbCar) & (CompCar(TheCars[i],CarNeutre))  DO
+               BEGIN
+                    CASE TheCars[i].VTaille OF
+                         0,1: xOffDep:=1;
+                         2,3: xOffDep:=2;
+                    END;
+                    i:=i+xOffDep;
+               END;
+
+          { termine ? }
+          IF CompCar(TheCars[i],CarNeutre) THEN
+               BEGIN
+                    Compact:=MonVCode;
+                    EXIT(Compact);
+               END;
+
+          { saut ou 3 cars max ? }
+          IF (i-xi)<=3
+               THEN
+                    BEGIN
+                         { on ajoute les 3 caracteres SP max }
+                         FOR k:=1 TO (i-xi) DO
+                              AddCar(MonVCode,SP);
+                    END
+               ELSE BEGIN
+                         { positionnement sur le bon caractere }
+                         AddPos(MonVCode,i);
+
+                         { reset des attributs }
+                         OffDep:=1;
+                         cfc:=False;
+                         cfd:=False;
+                         cfm:=False;
+                         cfi:=False;
+                         cfn:=False;
+                         cTaille:=0;
+                         cCouleur:=7;
+                         cBCouleur:=0;
+                         cJeu:=0;
+                    END;
+
+          { on regarde les ruptures d'attributs }
+          WITH TheCars[i] DO
+          BEGIN
+               GetAttrib(VFlags,fc,fd,fm,fi,fn);
+
+               { Jeu }
+               IF VJeu<>cJeu THEN
+                    BEGIN
+                              AddJeu(MonVCode,VJeu);
+                              cJeu:=VJeu;
+                              IF cJeu=1 THEN
+                                 BEGIN
+                                   cTaille:=0;
+                                   OffDep:=1;
+                                   cfn:=False;
+                                 END;
+                              cfd:=false;
+                    END;
+
+               { clignotement }
+               IF fc<>cfc THEN
+                    BEGIN
+                         AddClignotement(MonVCode,fc);
+                         cfc:=fc;
+                    END;
+
+               { disjoint/souligne }
+               IF fd<>cfd THEN
+                    BEGIN
+                         AddDisjoint(MonVCode,fd);
+                         cfd:=fd;
+                    END;
+
+               { masquage }
+               IF fm<>cfm THEN
+                    BEGIN
+                         AddMasquage(MonVCode,fm);
+                         cfm:=fm;
+                    END;
+
+               { inverse }
+               IF fi<>cfi THEN
+                    BEGIN
+                         AddInverse(MonVCode,fi);
+                         cfi:=fi;
+                    END;
+
+               { Incrustation }
+               IF fn<>cfn THEN
+                    BEGIN
+                         AddIncrustation(MonVCode,fn);
+                         cfn:=fn;
+                    END;
+
+               { taille }
+               IF VTaille<>cTaille THEN
+                    BEGIN
+                         AddTaille(MonVCode,VTaille);
+                         cTaille:=VTaille;
+                         CASE cTaille OF
+                              0,1: OffDep:=1;
+                              2,3: OffDep:=2;
+                         END;
+                    END;
+
+               { Couleur }
+               IF VCouleur<>cCouleur THEN
+                    BEGIN
+                         AddCouleur(MonVCode,VCouleur);
+                         cCouleur:=VCouleur;
+                    END;
+
+               { Background Couleur }
+               IF VBCouleur<>cBCouleur THEN
+                    BEGIN
+                         AddBCouleur(MonVCode,VBCouleur);
+                         cBCouleur:=VBCouleur;
+                    END;
+          END;
+
+          { on ajoute le car }
+          AddCarG012(MonVCode,TheCars[i].ValG01);
+
+          { memo numero de car en cours }
+          XCar:=TheCars[i];
+          i:=i+OffDep;
+          xi:=i;
+          RepCount:=0;
+		  
+		  IF ((i MOD 40)=0) & (cJeu = 0) THEN
+		  BEGIN
+		  	cBCouleur := 0;
+			cfm := FALSE;
+			cfd := FALSE;
+		  END;
+		  
+          { on regarde si on peut faire une repetition }
+          WHILE (i<NbCar) & (CompCar(TheCars[i],XCar)) DO
+               BEGIN
+                    i:=i+OffDep;
+                    RepCount:=RepCount+1;
+               END;
+
+          { repetition interressante ? }
+          IF (i=NbCar) THEN
+               BEGIN
+                    IF (CompCar(TheCars[i],XCar)) THEN
+                      BEGIN
+                       IF (RepCount+1)>2 THEN
+                         AddRep(MonVCode,RepCount+1,XCar.ValG01)
+                         ELSE
+                           FOR k:=1 TO RepCount+1 DO
+                                AddCarG012(MonVCode,XCar.ValG01);
+                       i:=NbCar+1;
+                      END
+					  ELSE
+					  BEGIN
+                       IF (RepCount)>2 THEN
+                         AddRep(MonVCode,RepCount,XCar.ValG01)
+                         ELSE
+                           FOR k:=1 TO RepCount DO
+                                AddCarG012(MonVCode,XCar.ValG01);
+					  END
+               END
+          ELSE
+               BEGIN
+                    IF (RepCount)>2 THEN
+                      AddRep(MonVCode,RepCount,XCar.ValG01)
+                    ELSE
+                      FOR k:=1 TO RepCount DO
+                           AddCarG012(MonVCode,XCar.ValG01);
+               END;
+     END;
+
+     Compact:=MonVCode;
+END;
+
+
+{==============================================================================}
+{			        D E C O M P A C T			       }
+{==============================================================================}
+
+PROCEDURE DeCompact(VAR TheCars: ACar; VcodeH: Handle);
+
+     VAR  i, offDep, k, PosCode	   : Integer;
+          C,Cx,Cy		   : Char;
+          RepCar		   : TCar;
+          { clignotement, disjoint, masquage, inverse, incrustation }
+          cfc,cfd,cfm,cfi,cfn	   : boolean;
+          cTaille,
+          cCouleur,
+          cBCouleur,
+          cJeu			   : integer;
+
+     FUNCTION GetNextCar: Char;
+     BEGIN
+          IF PosCode = GetHandleSize(VCodeH) THEN
+               BEGIN
+                    GetNextCar:=chr(0);
+                    EXIT(GetNextCar);
+               END;
+          GetNextCar:=Chr(Ptr(Ord4(VCodeH^)+PosCode)^);
+          PosCode:=PosCode+1;
+     END;
+
+BEGIN
+
+     { attributs de depart }
+     OffDep:=1;
+     cfc:=False;
+     cfd:=False;
+     cfm:=False;
+     cfi:=False;
+     cfn:=False;
+     cTaille:=0;
+     cCouleur:=7;
+     cBCouleur:=0;
+     cJeu:=0;
+
+     i:=0;
+     PosCode:=0;
+
+     { decompactage }
+     REPEAT
+          c:=GetNextCar;
+          IF c<>Chr(0) THEN
+          BEGIN
+               CASE c OF
+               RS,FF:
+                    BEGIN
+                         { initialisation }
+                         IF C=FF THEN
+                              FOR i:=0 TO Nbcar DO
+                                   TheCars[i]:=CarNeutre;
+
+                         i:=0;
+
+                         { reset attributs }
+                         OffDep:=1;
+                         cfc:=False;
+                         cfd:=False;
+                         cfm:=False;
+                         cfi:=False;
+                         cfn:=False;
+                         cTaille:=0;
+                         cCouleur:=7;
+                         cBCouleur:=0;
+                         cJeu:=0;
+                    END;
+               ESC:
+                    BEGIN
+                         cx:=GetNextCar;
+                         CASE ord(cx) OF
+                              $48: cfc:=true;
+                              $49: cfc:=false;
+                              $5A: cfd:=true;
+                              $59: cfd:=false;
+                              $5F: cfm:=true;
+                              $58: cfm:=false;
+                              $5D: cfi:=true;
+                              $5C: cfi:=false;
+                              $4B: cfn:=true;
+                              $4A: cfn:=false;
+                              $40..$47: cCouleur :=ord(Cx)-$40;
+                              $50..$57: cBCouleur:=ord(Cx)-$50;
+                              $4C..$4F:
+                                   BEGIN
+                                        cTaille:=ord(Cx)-$4C;
+                                        CASE cTaille OF
+                                             0,1: OffDep:=1;
+                                             2,3: OffDep:=2;
+                                        END;
+                                   END;
+                         END;
+                    END;
+               REP:
+                    BEGIN
+                         cx:=GetNextCar;
+
+                         RepCar:=CarNeutre;
+                         IF i>0 THEN RepCar:=TheCars[i-1];
+
+                         FOR k:=1 TO ord(cx)-$40 DO
+                              BEGIN
+                                   IF i<=nbcar THEN TheCars[i]:=RepCar;
+                                   i:=i+OffDep;
+                              END;
+                         IF i>nbcar THEN i:=nbcar;
+                    END;
+               US:
+                    BEGIN
+                         { nouvelle position }
+                         cx:=GetNextCar;
+                         cy:=GetNextCar;
+                         i:= (ord(cx)-$41)*40 + (ord(cy)-$41);
+                         IF i>nbcar THEN i:=nbcar;
+
+                         { reset attributs }
+                         OffDep:=1;
+                         cfc:=False;
+                         cfd:=False;
+                         cfm:=False;
+                         cfi:=False;
+                         cfn:=False;
+                         cTaille:=0;
+                         cCouleur:=7;
+                         cBCouleur:=0;
+                         cJeu:=0;
+                    END;
+               SS2:
+                    BEGIN
+                         C:=GetNextCar;
+                         WITH TheCars[i] DO
+                           BEGIN
+                              VFlags:=SetAttrib(cfc,cfd,cfm,cfi,cfn);
+                              VTaille:=cTaille;
+                              VCouleur:=cCouleur;
+                              VBCouleur:=cBCouleur;
+                              VJeu:=0;
+							  ValG01:=C;
+                              IF (C IN ['A'..'K']) THEN
+                                 BEGIN
+                                   C:=GetNextCar;
+								   CASE C OF
+								   'a': CASE ValG01 OF
+								        'A': ValG01:='√†';
+										'B': ValG01:='√°';
+								        'C': ValG01:='√¢';
+										'H': ValG01:='√§';
+										END;
+								   'e': CASE ValG01 OF
+								        'A': ValG01:='√®';
+								        'B': ValG01:='√©';
+								        'C': ValG01:='√™';
+								        'H': ValG01:='√´';
+										END;
+								   'i': CASE ValG01 OF
+								   		'A': ValG01:='√¨';
+										'B': ValG01:='√≠';
+								        'C': ValG01:='√Æ';
+								        'H': ValG01:='√Ø';
+										END;
+								   'o': CASE ValG01 OF
+								        'A': ValG01:='√≤';
+										'B': ValG01:='√≥';
+								        'C': ValG01:='√¥';
+								        'H': ValG01:='√∂';
+										END;
+								   'u': CASE ValG01 OF
+								        'A': ValG01:='√π';
+										'B': ValG01:='√∫';
+								        'C': ValG01:='√ª';
+								        'H': ValG01:='√º';
+										END;
+									'c': IF ValG01='K' THEN ValG01:='√ß';
+									OTHERWISE ValG01:=' ';
+								   END;
+                                 END
+								 ELSE
+								 	CASE ValG01 OF
+									'#': ValG01:=chr($83);
+									'&': ValG01:='#';
+									'''': ValG01:=chr($86);
+									',': ValG01:=chr($A7);
+									'-': ValG01:=chr($A8);
+									'.': ValG01:=chr($A9);
+									'/': ValG01:=chr($AA);
+									'0': ValG01:=chr($A1);
+									'1': ValG01:=chr($B1);
+									'8': ValG01:=chr($D6);
+									'<': ValG01:=chr($AB);
+									'=': ValG01:=chr($AC);
+									'>': ValG01:=chr($AD);
+									'j': ValG01:=chr($CE);
+									'z': ValG01:=chr($CF);
+									OTHERWISE
+										ValG01:=' ';
+								 	END;
+                           END;
+                         i:=i+OffDep;
+                         IF i>nbcar THEN i:=nbcar;
+                    END;
+               SO:
+                    BEGIN
+                         cJeu:=1;
+                         cTaille:=0;
+                         OffDep:=1;
+                         cfn:=False;
+                    END;
+               SI:
+                    BEGIN
+                         cJeu:=0;
+                    END;
+			   CR:
+                    BEGIN
+                         i:=(i DIV 40) * 40;
+                    END;
+			   LF:
+                    BEGIN
+                         i:=(i + 40) MOD nbCar;
+                    END;
+			   BS:
+                    BEGIN
+                         i:= i- 1;
+						 IF i<0 THEN i:=nbCar-1;
+                    END;
+			   HT:
+                    BEGIN
+                         i:= (i+1) MOD nbCar;
+                    END;
+			   VT:
+                    BEGIN
+                         i:= (i - 40);
+						 IF i<0 THEN i:=nbCar-i;
+                    END;
+               OTHERWISE { it is a normal char }
+                    BEGIN
+                         WITH TheCars[i] DO
+                           BEGIN
+                              VFlags:=SetAttrib(cfc,cfd,cfm,cfi,cfn);
+                              VTaille:=cTaille;
+                              VCouleur:=cCouleur;
+                              VBCouleur:=cBCouleur;
+                              VJeu:=cJeu;
+                              ValG01:=C;
+                           END;
+                         i:=i+OffDep;
+                         IF i>nbcar THEN i:=nbcar;
+                    END;
+               END
+          END
+     UNTIL c=chr(0);
+
+END;
+
+END. { Implementation }
+

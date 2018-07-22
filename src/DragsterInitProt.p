@@ -1,1 +1,86 @@
-UNIT DragsterInitProt;{$SETC DEBUG=FALSE}{$IFC UNDEFINED DEMO}{$SETC DEMO=FALSE}{$ENDC}INTERFACEUSES MemTypes, ToolIntf, OsIntf, Packages;VAR	NbLocal			: LONGINT;	{ nombre de voies AppleTalk }	NbX25key		: LONGINT;	{Ênb de voies X25 }	NB4D				: LONGINT;	{Ênb de liaisons 4D }	NbLocal2		: integer;	{ nombre de voies AppleTalk }	{$IFC DEMO=FALSE}		PROCEDURE GetNbLocal;	FUNCTION IsLicOk(key: Str255):BOOLEAN;{$ENDC}IMPLEMENTATION	FUNCTION IsLicOk(key: Str255):BOOLEAN;		VAR		check, check2: LONGINT;		s:	Str255;		i: INTEGER;			BEGIN		{ contr™le de la validitŽ du numŽro de sŽrie }		check := 0;		FOR i := 1 TO 16 DO		BEGIN			check := check*(17-i)+ord(key[i]);			IF (check > 1000000) THEN				check := check MOD 1000000;		END;		s := key; Delete(s,1,16);		StringToNum(s, check2);		IsLicOk := (check=check2);	END;			PROCEDURE GetNbLocal;		{		On doit positionner les variables globales NbLocal et NBX25Key		}	VAR		keyH		: StringHandle;		key			: Str255;		check		: LONGINT;		check2	: LONGINT;		s				: Str255;		i				: INTEGER;			BEGIN		NbLocal := 0;		NbLocal2 := 255;		NbX25key := 0;		nb4D := 0;				keyH := StringHandle(GetResource('DRGK',128));		IF (keyH <> NIL) THEN		BEGIN			key := keyH^^;			IF IsLicOK(key) THEN			BEGIN				s := key; Delete(s,3,20);				StringToNum(s, nbX25Key);				s := key; Delete(s,1,2); Delete(s,3,18);				StringToNum(s, NbLocal);				s := key; Delete(s,1,4); Delete(s,3,16);				StringToNum(s, nb4D);				NbLocal2 := 0;			END;		END;	END;	{Êof GetNBLocal }	END.	{Êof UNIT }
+UNIT DragsterInitProt;
+
+{$SETC DEBUG=FALSE}
+{$IFC UNDEFINED DEMO}
+{$SETC DEMO=FALSE}
+{$ENDC}
+
+INTERFACE
+
+USES MemTypes, ToolIntf, OsIntf, Packages;
+
+VAR
+	NbLocal			: LONGINT;	{ nombre de voies AppleTalk }
+	NbX25key		: LONGINT;	{Â nb de voies X25 }
+	NB4D				: LONGINT;	{Â nb de liaisons 4D }
+
+	NbLocal2		: integer;	{ nombre de voies AppleTalk }
+	
+{$IFC DEMO=FALSE}	
+	PROCEDURE GetNbLocal;
+	FUNCTION IsLicOk(key: Str255):BOOLEAN;
+{$ENDC}
+
+IMPLEMENTATION
+
+
+	FUNCTION IsLicOk(key: Str255):BOOLEAN;
+	
+	VAR
+		check, check2: LONGINT;
+		s:	Str255;
+		i: INTEGER;
+		
+	BEGIN
+		{ contrÃ´le de la validitÃ© du numÃ©ro de sÃ©rie }
+		check := 0;
+		FOR i := 1 TO 16 DO
+		BEGIN
+			check := check*(17-i)+ord(key[i]);
+			IF (check > 1000000) THEN
+				check := check MOD 1000000;
+		END;
+		s := key; Delete(s,1,16);
+		StringToNum(s, check2);
+		IsLicOk := (check=check2);
+	END;
+	
+	
+	PROCEDURE GetNbLocal;
+	
+	{
+		On doit positionner les variables globales NbLocal et NBX25Key	
+	}
+	VAR
+		keyH		: StringHandle;
+		key			: Str255;
+		check		: LONGINT;
+		check2	: LONGINT;
+		s				: Str255;
+		i				: INTEGER;
+		
+	BEGIN
+		NbLocal := 0;
+		NbLocal2 := 255;
+		NbX25key := 0;
+		nb4D := 0;
+		
+		keyH := StringHandle(GetResource('DRGK',128));
+		IF (keyH <> NIL) THEN
+		BEGIN
+			key := keyH^^;
+			IF IsLicOK(key) THEN
+			BEGIN
+				s := key; Delete(s,3,20);
+				StringToNum(s, nbX25Key);
+				s := key; Delete(s,1,2); Delete(s,3,18);
+				StringToNum(s, NbLocal);
+				s := key; Delete(s,1,4); Delete(s,3,16);
+				StringToNum(s, nb4D);
+				NbLocal2 := 0;
+			END;
+		END;
+	END;	{Â of GetNBLocal }
+	
+
+END.	{Â of UNIT }

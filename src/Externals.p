@@ -1,1 +1,565 @@
-UNIT ExternTest;INTERFACEUSES Types,Memory;	PROCEDURE MACSBUG;	PROCEDURE MACSBUGSTR(VAR Str:Str255);	FUNCTION	DRGINSERT(VAR Chaine1, Chaine2: Str255; Position: LONGINT):Str255;	FUNCTION  DRGDELETE(VAR Chaine1: Str255; Start,Len: LONGINT):Str255;	FUNCTION	DRGBITAND(N1,N2:LONGINT):LONGINT;	FUNCTION	DRGBITOR(N1,N2:LONGINT):LONGINT;	FUNCTION	DRGBITXOR(N1,N2: LONGINT):LONGINT;	FUNCTION	DRGBITNOT(N1:LONGINT):LONGINT;	FUNCTION	DRGBITCLR(N1,N2:LONGINT):LONGINT;	FUNCTION	DRGBITSET(N1,N2:LONGINT):LONGINT;	FUNCTION	DRGBITTST(N1,N2:LONGINT):LONGINT;	FUNCTION	DRGBITROTATE(N1,N2:LONGINT):LONGINT;	FUNCTION	DRGBITSHIFT(N1,N2:LONGINT):LONGINT;	FUNCTION	BIN(N,Long:LONGINT):Str255;	FUNCTION	HEX(N,Long:LONGINT):Str255;	FUNCTION DayOfWeek(VAR Date:Str255):LONGINT;	FUNCTION DayOf(VAR Date:Str255):LONGINT;	FUNCTION MonthOf(VAR Date:Str255):LONGINT;	FUNCTION YearOf(VAR Date:Str255):LONGINT;	FUNCTION Secs2LongDate(JT:Ptr; dateTime,form:LONGINT):Str255;	PROCEDURE FileMove(JT:Ptr; VAR name, source, dest:Str255);	FUNCTION GetSysFolder(JT:Ptr; VAR TypeDoss:Str255):Str255;	PROCEDURE TestAll(JT:Ptr);		PROCEDURE EnableInterrupt(JT:Ptr);	PROCEDURE DisableInterrupt(JT:Ptr);		PROCEDURE MACALERT(JT:Ptr; VAR Message:Str255);	PROCEDURE MACBEEP(JT:Ptr);		IMPLEMENTATION{$R-}USES ToolUtils, Files, EveLib, Folders, Errors, Packages;{$I DragsterExt.inc2.p }		{ définition des CallBacks de Dragster }FUNCTION PathNameFromDirID (DirID:longint; vRefnum:integer; JT:PTr):str255;	FORWARD;FUNCTION DirIDFromPathName(path:Str255; VAR DirID:longint; VAR vRefnum:integer; JT:Ptr):OsErr;	FORWARD;PROCEDURE MACSBUG;BEGIN	Debugger;END;PROCEDURE MacsbugStr(VAR Str:Str255);BEGIN	DebugStr(str);END;FUNCTION	DRGINSERT(VAR Chaine1, Chaine2: Str255; Position: LONGINT):Str255;BEGIN	Insert(Chaine1,Chaine2,Position);	DrgInsert := Chaine2;END;FUNCTION  DRGDELETE(VAR Chaine1: Str255; Start,Len: LONGINT):Str255;BEGIN	Delete(Chaine1,Start,Len);	DrgDelete := Chaine1;END;FUNCTION	DRGBITAND(N1,N2:LONGINT):LONGINT;BEGIN	DRGBITAND := BitAnd(N1,n2);END;FUNCTION	DRGBITOR(N1,N2:LONGINT):LONGINT;BEGIN	DRGBITOR := BitOr(N1,n2);END;FUNCTION	DRGBITXOR(N1,N2: LONGINT):LONGINT;BEGIN	DRGBITXOR := BitXor(N1,n2);END;FUNCTION	DRGBITNOT(N1:LONGINT):LONGINT;	BEGIN	DRGBITNOT := BitNot(N1);END;FUNCTION	DRGBITCLR(N1,N2:LONGINT):LONGINT;	BEGIN	BClr(N1,N2);	DrgBitClr := N1;END;FUNCTION	DRGBITSET(N1,N2:LONGINT):LONGINT;	BEGIN	BSet(N1,N2);	DrgBitSet := N1;END;FUNCTION	DRGBITTST(N1,N2:LONGINT):LONGINT;	BEGIN	DRGBITTST := LONGINT(BTST(N1,N2));END;FUNCTION	DRGBITROTATE(N1,N2:LONGINT):LONGINT;BEGIN	IF N2=0 THEN EXIT(DrgBitRotate);	IF N2>0 THEN		DrgBitRotate := BRotL(N1,N2 MOD 32)	ELSE		DrgBitRotate := BRotR(N1,-N2 MOD 32);END;		FUNCTION	DRGBITSHIFT(N1,N2:LONGINT):LONGINT;BEGIN	IF N2=0 THEN EXIT(DrgBitShift);	IF N2>0 THEN		DrgBitShift := BSL(N1,N2 MOD 32)	ELSE		DrgBitShift := BSR(N1,-N2 MOD 32);END;		FUNCTION BIN(N,Long:LONGINT):Str255;VAR	i: INTEGER;	BEGIN	IF Long < 1 THEN Long := 1;	IF Long > 4 THEN Long := 4;	FOR i := 0 TO Long *8-1 DO		BIN[Long*8-i] := Chr($30+LONGINT(BTst(N,i)));	BIN[0] := Char(Long*8);END;FUNCTION HEX(N,Long:LONGINT):Str255;VAR	i,x: INTEGER;	BEGIN	IF Long < 1 THEN Long := 1;	IF Long > 4 THEN Long := 4;	FOR i := 0 TO (Long*2)-1 DO	BEGIN		X := INTEGER(BitAnd(N,$F));		N := BRotR(N,4);		IF X>9 THEN X:=X+7;		Hex[Long*2-i] := Chr($30+x);	END;	Hex[0] := Chr(Long*2);END;{ ••••• F I L E M O V E ••••• }PROCEDURE FileMove;VAR	block: RECORD			task: TCBPTr;			pb: CMovePbRec;		END;		err: OsErr;		i: INTEGER;		BEGIN	Err := DirIDfromPathName(source,block.pb.ioDirID,block.pb.iovRefNum, JT);	IF Err=NoErr THEN	BEGIN		Err := DirIDFromPathNAme(dest,block.pb.ioNewDirID,i, JT);		IF i<>block.pb.iovRefNum THEN Err:= paramErr;		IF Err=NoErr THEN		BEGIN			block.pb.ioNewName:=NIL;			block.pb.ioNamePtr := @name;			Err := Drg_PBCall(ReqCatMove,@block,JT);		END;	END;	Drg_GetTCB(JT)^.Error := Err;END;FUNCTION DoOrtho(VAR Chaine1: Str255):Str255; FORWARD;FUNCTION Ortho(chaine1:Str255):Str255;BEGIN	Ortho := DoOrtho(Chaine1);END;FUNCTION DoOrtho(VAR Chaine1: Str255):Str255;VAR 	Index:INTEGER;	Chaine2:Str255; 	Consonnes: STRING[26];	Car,Car2,LastCar:CHAR;	PROCEDURE Ajoute(lecar:CHAR);		BEGIN		IF Chaine2[length(Chaine2)] <> lecar THEN		BEGIN			Chaine2[0] := CHR(ORD(Chaine2[0])+1);			Chaine2[length(Chaine2)] := lecar;			Lastcar := lecar;		END;	END;BEGIN  Consonnes := '01110111011111011111011101';  LastCar := CHR(0);	Chaine2:='';		FOR Index := 1 TO ORD(Chaine1[0]) DO	BEGIN		Car := Chaine1[Index];		IF (Car >= 'a') AND (Car <= 'z') THEN Car := CHR(ORD(Car)-32);		IF Car > 'z' THEN Car := 'A';		IF Car = 'Z' THEN Car := 'S';		IF Car = 'H' THEN IF LastCar = 'C' THEN Ajoute(Car)		  ELSE		  BEGIN		    IF LastCar = 'P' THEN		      BEGIN		        Chaine2[0] := CHR(ORD(Chaine2[0])-1);		        Ajoute('F');			  END;		  END		ELSE		  BEGIN		    IF (Car < 'A') OR (Car > 'Z') THEN Ajoute(' ') ELSE Car2 := CHR(ORD(Car)-64);		    IF Consonnes[ORD(Car2)] = '1' THEN Ajoute(Car) ELSE Ajoute('*');		  END;	END;	DoOrtho := Chaine2;END;FUNCTION DayOfWeek(VAR Date:Str255):LONGINT;{ calcule le numéro du jour de la semaine pour une date donnée…	Entrée: Date ou vide (=aujourd'hui)	Sortie: 1=Lundi, 2=Mardi… 7=Dimanche}VAR Num1: LONGINT; DTRec: DateTimeRec;	BEGIN	CASE Length(Date) OF		0: GetDateTime(Num1);	{ on prend la date d'aujourd'hui }		6:	{ AAMMJJ }		BEGIN			WITH DTRec DO			BEGIN			 day:= (ord(Date[5])-ord('0'))*10+(ord(Date[6])-ord('0'));			 month:=(ord(Date[3])-ord('0'))*10+(ord(Date[4])-ord('0'));			 year:=	(ord(Date[1])-ord('0'))*10+(ord(Date[2])-ord('0'))+1900;			 hour:=	0;			 minute:=0;			 second:=0;			END;			Date2Secs(DTRec,Num1);		END;		8,16:	{ JJ/MM/AA[HH:MM:SS] }		BEGIN			WITH DTRec DO			BEGIN			 day:=	(ord(Date[1])-ord('0'))*10+(ord(Date[2])-ord('0'));			 month:= (ord(Date[4])-ord('0'))*10+(ord(Date[5])-ord('0'));			 year:=	(ord(Date[7])-ord('0'))*10+(ord(Date[8])-ord('0'))+1900;			 hour:=	0;			 minute:=0;			 second:=0;			END;			Date2Secs(DTRec,Num1);		END;	END;	{ CASE }	Secs2Date(Num1,DTRec);	IF DTRec.DayOfWeek = 1 THEN		DayOfWeek := 7	ELSE		DayOfWeek := DTRec.DayOfWeek-1;END;FUNCTION DayOf(VAR Date:Str255):LONGINT;{ extrait le numéro du jour pour une date donnée…	Entrée: Date ou vide (=aujourd'hui)	Sortie: numéro du jour (1…31)}VAR d:DateTimeRec;BEGIN	CASE Length(Date) OF		0:		BEGIN			GetTime(d);	{ on prend la date d'aujourd'hui }			dayOf := d.Day;		END;				6:	{ AAMMJJ }			dayof:= (ord(Date[5])-ord('0'))*10+(ord(Date[6])-ord('0'));					8,16:	{ JJ/MM/AA[HH:MM:SS] }			dayof:=	(ord(Date[1])-ord('0'))*10+(ord(Date[2])-ord('0'));	END;	{ CASE }END;FUNCTION MonthOf(VAR Date:Str255):LONGINT;{ extrait le numéro du mois pour une date donnée…	Entrée: Date ou vide (=aujourd'hui)	Sortie: numéro du mois (1…12)}VAR d:DateTimeRec;BEGIN	CASE Length(Date) OF		0:		BEGIN			GetTime(d);	{ on prend la date d'aujourd'hui }			MonthOf := d.Month;		END;				6:	{ AAMMJJ }			MonthOf := (ord(Date[3])-ord('0'))*10+(ord(Date[4])-ord('0'));					8,16:	{ JJ/MM/AA[HH:MM:SS] }			MonthOf :=	(ord(Date[4])-ord('0'))*10+(ord(Date[5])-ord('0'));	END;	{ CASE }END;FUNCTION YearOf(VAR Date:Str255):LONGINT;{ extrait le numéro de l'année pour une date donnée…	Entrée: Date ou vide (=aujourd'hui)	Sortie: numéro de l'année}VAR d:DateTimeRec;BEGIN	CASE Length(Date) OF		0:		BEGIN			GetTime(d);	{ on prend la date d'aujourd'hui }			YearOf := d.Year-1900;		END;				6:	{ AAMMJJ }			YearOf:= (ord(Date[1])-ord('0'))*10+(ord(Date[2])-ord('0'));					8,16:	{ JJ/MM/AA[HH:MM:SS] }			YearOf:=	(ord(Date[7])-ord('0'))*10+(ord(Date[8])-ord('0'));	END;	{ CASE }END;FUNCTION Secs2LongDate(JT:Ptr; dateTime,form:LONGINT):Str255;VAR	result: Str255;BEGIN	Drg_SetRunMode(kNoInterrupt,JT);	IUDateString(dateTime,DateForm(form),result);	Drg_SetRunmode(kInterrupt,JT);	Secs2LongDate := result;END;PROCEDURE TestAll(JT:Ptr);VAR h: Handle;		old: Longint;		BEGIN	h:=Drg_NewHandle(4096,JT);	IF h=NIL THEN	BEGIN		Drg_PrintStr('Err on NewHandle',JT);		EXIT(TestAll);	END;	SetHandleSize(h,8192);	IF MemError<>NoErr THEN Drg_PrintStr('Prob. sur SetHandleSize',JT);	old:=Ord4(h);	IF Drg_StoreData(Ptr(h),'Test/Datas',JT)<>NoErr THEN Drg_PrintStr('Err on StoreData',JT);;	h:=Handle(Drg_RestoreData('Test/Datas',JT));	IF ord4(h)<>old THEN Drg_PrintStr('Restore incorrect',JT) ELSE Drg_PrintStr('ok',JT);	Drg_KillData('Test/Datas',JT);	DisposHandle(h);END;FUNCTION GetSysFolder(JT:Ptr; VAR TypeDoss:Str255):Str255;VAR	Err: OsErr;		foundVRefNum: INTEGER;		foundDirID: LONGINT;		folderType: OSType;		BEGIN	Drg_SetRunMode(kNoInterrupt,JT);	{ pas d'IT svp }	BlockMove(@TypeDoss[1],@FolderType,4);	Err := FindFolder(kOnSystemDisk,FolderType,TRUE,foundVRefNum,foundDirID);	Drg_SetRunMode(kInterrupt,JT);		{ ok pour les IT }	IF Err=NoErr THEN		GetSysFolder:=PathNameFromDirID(foundDirID,foundVRefNum,JT)	ELSE		GetSysFolder := '';END;FUNCTION DirIDFromPathName(path:Str255; VAR DirID:longint; VAR vRefnum:integer; JT:Ptr):OsErr;VAR	block: RECORD						task: TCBPtr;						pb: CInfoPBRec;					END;		name: Str255;		Err: OsErr;		BEGIN	{ •• on récupère le vRefNum de base… •• }	name := Path;	WITH Block.pb DO	BEGIN		ioNamePtr := @name;		iovRefNum := 0;		ioFDirIndex := -1;	END;	Err := Drg_PBCall(ReqGetVinfo,@block,JT);		{ •• on descend dossier par dossier… •• }	WHILE (pos(':',path)>0) & (Err=NoErr) DO	BEGIN		name := copy(path,1,pos(':',path));	{ nom du dossier… }		Delete(path,1,pos(':',path)+1);		WITH block.pb DO		BEGIN			ioNamePtr := @Name;			ioFDirIndex := 0;			ioDrDirID := 0;		END;		Err := Drg_PBCall(ReqGetCat,@block,JT);		IF BTst(block.Pb.IOFlAttrib, 4)=FALSE THEN { c'est un fichier !! }		BEGIN			IF pos(':',path)=0 THEN Err := NoErr ELSE Err := dirNFErr;			Leave;		END;	END;		IF Err=NoErr THEN	BEGIN		vRefNum := block.pb.iovRefNum;		DirID := block.pb.ioDrDirID;	END	ELSE	BEGIN		vRefNum := 0;		DirID := 0;	END;END;FUNCTION PathNameFromDirID (DirID:longint; vRefnum:integer; JT:Ptr):str255;VAR	Block : RECORD						task: TCBPtr;	{ pour le PBCall… }						pb: CInfoPBRec;					END;	directoryName, FullPathName : str255;	Err: OsErr;	BEGIN	FullPathName := '';	WITH block.pb DO BEGIN		ioNamePtr := @directoryName;		ioDrParID := DirId;	END;	REPEAT		WITH block.pb DO BEGIN			ioVRefNum := vRefNum;			ioFDirIndex := -1;			ioDrDirID := ioDrParID;	{ on remonte d'un niveau… }		END;		err := Drg_PBCall(ReqGetCat,@Block,JT);		directoryName := concat(directoryName,':');		fullPathName := concat(directoryName,fullPathName);	UNTIL (block.pb.ioDrDirID = 2);	PathNameFromDirID := fullPathName;END;PROCEDURE EnableInterrupt(JT:Ptr);BEGIN	Drg_SetRunMode(kInterrupt,JT);END;PROCEDURE DisableInterrupt(JT:Ptr);BEGIN	Drg_SetRunMode(kNoInterrupt,JT);END;PROCEDURE MACALERT(JT:Ptr; VAR message:Str255 );BEGIN	END;PROCEDURE MACBEEP(JT:Ptr);BEGIN	Drg_SetRunMode(kNoInterrupt,JT);	SysBeep(60);	Drg_SetRunMode(kInterrupt,JT);END;END.
+UNIT ExternTest;
+
+INTERFACE
+
+USES Types,Memory;
+
+	PROCEDURE MACSBUG;
+	PROCEDURE MACSBUGSTR(VAR Str:Str255);
+	FUNCTION	DRGINSERT(VAR Chaine1, Chaine2: Str255; Position: LONGINT):Str255;
+	FUNCTION  DRGDELETE(VAR Chaine1: Str255; Start,Len: LONGINT):Str255;
+	FUNCTION	DRGBITAND(N1,N2:LONGINT):LONGINT;
+	FUNCTION	DRGBITOR(N1,N2:LONGINT):LONGINT;
+	FUNCTION	DRGBITXOR(N1,N2: LONGINT):LONGINT;
+	FUNCTION	DRGBITNOT(N1:LONGINT):LONGINT;
+	FUNCTION	DRGBITCLR(N1,N2:LONGINT):LONGINT;
+	FUNCTION	DRGBITSET(N1,N2:LONGINT):LONGINT;
+	FUNCTION	DRGBITTST(N1,N2:LONGINT):LONGINT;
+	FUNCTION	DRGBITROTATE(N1,N2:LONGINT):LONGINT;
+	FUNCTION	DRGBITSHIFT(N1,N2:LONGINT):LONGINT;
+	FUNCTION	BIN(N,Long:LONGINT):Str255;
+	FUNCTION	HEX(N,Long:LONGINT):Str255;
+
+	FUNCTION DayOfWeek(VAR Date:Str255):LONGINT;
+	FUNCTION DayOf(VAR Date:Str255):LONGINT;
+	FUNCTION MonthOf(VAR Date:Str255):LONGINT;
+	FUNCTION YearOf(VAR Date:Str255):LONGINT;
+	FUNCTION Secs2LongDate(JT:Ptr; dateTime,form:LONGINT):Str255;
+
+	PROCEDURE FileMove(JT:Ptr; VAR name, source, dest:Str255);
+	FUNCTION GetSysFolder(JT:Ptr; VAR TypeDoss:Str255):Str255;
+
+	PROCEDURE TestAll(JT:Ptr);
+	
+	PROCEDURE EnableInterrupt(JT:Ptr);
+	PROCEDURE DisableInterrupt(JT:Ptr);
+	
+	PROCEDURE MACALERT(JT:Ptr; VAR Message:Str255);
+	PROCEDURE MACBEEP(JT:Ptr);
+	
+	
+IMPLEMENTATION
+{$R-}
+
+USES ToolUtils, Files, EveLib, Folders, Errors, Packages;
+
+{$I DragsterExt.inc2.p }		{ d√©finition des CallBacks de Dragster }
+
+FUNCTION PathNameFromDirID (DirID:longint; vRefnum:integer; JT:PTr):str255;
+	FORWARD;
+FUNCTION DirIDFromPathName(path:Str255; VAR DirID:longint; VAR vRefnum:integer; JT:Ptr):OsErr;
+	FORWARD;
+
+PROCEDURE MACSBUG;
+
+BEGIN
+	Debugger;
+END;
+
+PROCEDURE MacsbugStr(VAR Str:Str255);
+
+BEGIN
+	DebugStr(str);
+END;
+
+
+FUNCTION	DRGINSERT(VAR Chaine1, Chaine2: Str255; Position: LONGINT):Str255;
+
+BEGIN
+	Insert(Chaine1,Chaine2,Position);
+	DrgInsert := Chaine2;
+END;
+
+
+FUNCTION  DRGDELETE(VAR Chaine1: Str255; Start,Len: LONGINT):Str255;
+
+BEGIN
+	Delete(Chaine1,Start,Len);
+	DrgDelete := Chaine1;
+END;
+
+
+FUNCTION	DRGBITAND(N1,N2:LONGINT):LONGINT;
+
+BEGIN
+	DRGBITAND := BitAnd(N1,n2);
+END;
+
+FUNCTION	DRGBITOR(N1,N2:LONGINT):LONGINT;
+
+BEGIN
+	DRGBITOR := BitOr(N1,n2);
+END;
+
+
+FUNCTION	DRGBITXOR(N1,N2: LONGINT):LONGINT;
+
+BEGIN
+	DRGBITXOR := BitXor(N1,n2);
+END;
+
+
+FUNCTION	DRGBITNOT(N1:LONGINT):LONGINT;
+	
+BEGIN
+	DRGBITNOT := BitNot(N1);
+END;
+
+
+FUNCTION	DRGBITCLR(N1,N2:LONGINT):LONGINT;
+	
+BEGIN
+	BClr(N1,N2);
+	DrgBitClr := N1;
+END;
+
+
+FUNCTION	DRGBITSET(N1,N2:LONGINT):LONGINT;
+	
+BEGIN
+	BSet(N1,N2);
+	DrgBitSet := N1;
+END;
+
+
+FUNCTION	DRGBITTST(N1,N2:LONGINT):LONGINT;
+	
+BEGIN
+	DRGBITTST := LONGINT(BTST(N1,N2));
+END;
+
+
+FUNCTION	DRGBITROTATE(N1,N2:LONGINT):LONGINT;
+
+BEGIN
+	IF N2=0 THEN EXIT(DrgBitRotate);
+	IF N2>0 THEN
+		DrgBitRotate := BRotL(N1,N2 MOD 32)
+	ELSE
+		DrgBitRotate := BRotR(N1,-N2 MOD 32);
+END;
+
+		
+FUNCTION	DRGBITSHIFT(N1,N2:LONGINT):LONGINT;
+
+BEGIN
+	IF N2=0 THEN EXIT(DrgBitShift);
+	IF N2>0 THEN
+		DrgBitShift := BSL(N1,N2 MOD 32)
+	ELSE
+		DrgBitShift := BSR(N1,-N2 MOD 32);
+END;
+
+		
+
+FUNCTION BIN(N,Long:LONGINT):Str255;
+
+VAR
+	i: INTEGER;
+	
+BEGIN
+	IF Long < 1 THEN Long := 1;
+	IF Long > 4 THEN Long := 4;
+	FOR i := 0 TO Long *8-1 DO
+		BIN[Long*8-i] := Chr($30+LONGINT(BTst(N,i)));
+	BIN[0] := Char(Long*8);
+END;
+
+
+FUNCTION HEX(N,Long:LONGINT):Str255;
+
+VAR
+	i,x: INTEGER;
+	
+BEGIN
+	IF Long < 1 THEN Long := 1;
+	IF Long > 4 THEN Long := 4;
+	FOR i := 0 TO (Long*2)-1 DO
+	BEGIN
+		X := INTEGER(BitAnd(N,$F));
+		N := BRotR(N,4);
+		IF X>9 THEN X:=X+7;
+		Hex[Long*2-i] := Chr($30+x);
+	END;
+	Hex[0] := Chr(Long*2);
+END;
+
+{¬†‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†F I L E M O V E ‚Ä¢‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+PROCEDURE FileMove;
+
+VAR	block: RECORD
+			task: TCBPTr;
+			pb: CMovePbRec;
+		END;
+		err: OsErr;
+		i: INTEGER;
+		
+BEGIN
+	Err := DirIDfromPathName(source,block.pb.ioDirID,block.pb.iovRefNum, JT);
+	IF Err=NoErr THEN
+	BEGIN
+		Err := DirIDFromPathNAme(dest,block.pb.ioNewDirID,i, JT);
+		IF i<>block.pb.iovRefNum THEN Err:= paramErr;
+		IF Err=NoErr THEN
+		BEGIN
+			block.pb.ioNewName:=NIL;
+			block.pb.ioNamePtr := @name;
+			Err := Drg_PBCall(ReqCatMove,@block,JT);
+		END;
+	END;
+	Drg_GetTCB(JT)^.Error := Err;
+END;
+
+
+
+FUNCTION DoOrtho(VAR Chaine1: Str255):Str255; FORWARD;
+
+FUNCTION Ortho(chaine1:Str255):Str255;
+
+BEGIN
+	Ortho := DoOrtho(Chaine1);
+END;
+
+
+FUNCTION DoOrtho(VAR Chaine1: Str255):Str255;
+
+VAR 
+	Index:INTEGER;
+	Chaine2:Str255;
+ 	Consonnes: STRING[26];
+	Car,Car2,LastCar:CHAR;
+
+	PROCEDURE Ajoute(lecar:CHAR);
+	
+	BEGIN
+		IF Chaine2[length(Chaine2)] <> lecar THEN
+		BEGIN
+			Chaine2[0] := CHR(ORD(Chaine2[0])+1);
+			Chaine2[length(Chaine2)] := lecar;
+			Lastcar := lecar;
+		END;
+	END;
+
+
+BEGIN
+  Consonnes := '01110111011111011111011101';
+  LastCar := CHR(0);
+	Chaine2:='';
+	
+	FOR Index := 1 TO ORD(Chaine1[0]) DO
+	BEGIN
+		Car := Chaine1[Index];
+		IF (Car >= 'a') AND (Car <= 'z') THEN Car := CHR(ORD(Car)-32);
+		IF Car > 'z' THEN Car := 'A';
+		IF Car = 'Z' THEN Car := 'S';
+		IF Car = 'H' THEN IF LastCar = 'C' THEN Ajoute(Car)
+		  ELSE
+		  BEGIN
+		    IF LastCar = 'P' THEN
+		      BEGIN
+		        Chaine2[0] := CHR(ORD(Chaine2[0])-1);
+		        Ajoute('F');
+			  END;
+		  END
+		ELSE
+		  BEGIN
+		    IF (Car < 'A') OR (Car > 'Z') THEN Ajoute(' ') ELSE Car2 := CHR(ORD(Car)-64);
+		    IF Consonnes[ORD(Car2)] = '1' THEN Ajoute(Car) ELSE Ajoute('*');
+		  END;
+	END;
+	DoOrtho := Chaine2;
+END;
+
+
+FUNCTION DayOfWeek(VAR Date:Str255):LONGINT;
+
+{ calcule le num√©ro du jour de la semaine pour une date donn√©e‚Ä¶
+	Entr√©e: Date ou vide (=aujourd'hui)
+	Sortie: 1=Lundi, 2=Mardi‚Ä¶ 7=Dimanche
+}
+
+VAR Num1: LONGINT; DTRec: DateTimeRec;
+	
+BEGIN
+	CASE Length(Date) OF
+		0: GetDateTime(Num1);	{ on prend la date d'aujourd'hui }
+		6:	{ AAMMJJ }
+		BEGIN
+			WITH DTRec DO
+			BEGIN
+			 day:= (ord(Date[5])-ord('0'))*10+(ord(Date[6])-ord('0'));
+			 month:=(ord(Date[3])-ord('0'))*10+(ord(Date[4])-ord('0'));
+			 year:=	(ord(Date[1])-ord('0'))*10+(ord(Date[2])-ord('0'))+1900;
+			 hour:=	0;
+			 minute:=0;
+			 second:=0;
+			END;
+			Date2Secs(DTRec,Num1);
+		END;
+		8,16:	{ JJ/MM/AA[HH:MM:SS] }
+		BEGIN
+			WITH DTRec DO
+			BEGIN
+			 day:=	(ord(Date[1])-ord('0'))*10+(ord(Date[2])-ord('0'));
+			 month:= (ord(Date[4])-ord('0'))*10+(ord(Date[5])-ord('0'));
+			 year:=	(ord(Date[7])-ord('0'))*10+(ord(Date[8])-ord('0'))+1900;
+			 hour:=	0;
+			 minute:=0;
+			 second:=0;
+			END;
+			Date2Secs(DTRec,Num1);
+		END;
+	END;	{ CASE }
+	Secs2Date(Num1,DTRec);
+	IF DTRec.DayOfWeek = 1 THEN
+		DayOfWeek := 7
+	ELSE
+		DayOfWeek := DTRec.DayOfWeek-1;
+END;
+
+FUNCTION DayOf(VAR Date:Str255):LONGINT;
+
+{ extrait le num√©ro du jour pour une date donn√©e‚Ä¶
+	Entr√©e: Date ou vide (=aujourd'hui)
+	Sortie: num√©ro du jour (1‚Ä¶31)
+}
+
+VAR d:DateTimeRec;
+
+BEGIN
+	CASE Length(Date) OF
+		0:
+		BEGIN
+			GetTime(d);	{ on prend la date d'aujourd'hui }
+			dayOf := d.Day;
+		END;
+		
+		6:	{ AAMMJJ }
+			dayof:= (ord(Date[5])-ord('0'))*10+(ord(Date[6])-ord('0'));
+			
+		8,16:	{ JJ/MM/AA[HH:MM:SS] }
+			dayof:=	(ord(Date[1])-ord('0'))*10+(ord(Date[2])-ord('0'));
+	END;	{ CASE }
+END;
+
+
+FUNCTION MonthOf(VAR Date:Str255):LONGINT;
+
+{ extrait le num√©ro du mois pour une date donn√©e‚Ä¶
+	Entr√©e: Date ou vide (=aujourd'hui)
+	Sortie: num√©ro du mois (1‚Ä¶12)
+}
+
+VAR d:DateTimeRec;
+
+BEGIN
+	CASE Length(Date) OF
+		0:
+		BEGIN
+			GetTime(d);	{ on prend la date d'aujourd'hui }
+			MonthOf := d.Month;
+		END;
+		
+		6:	{ AAMMJJ }
+			MonthOf := (ord(Date[3])-ord('0'))*10+(ord(Date[4])-ord('0'));
+			
+		8,16:	{ JJ/MM/AA[HH:MM:SS] }
+			MonthOf :=	(ord(Date[4])-ord('0'))*10+(ord(Date[5])-ord('0'));
+	END;	{ CASE }
+END;
+
+
+FUNCTION YearOf(VAR Date:Str255):LONGINT;
+
+{ extrait le num√©ro de l'ann√©e pour une date donn√©e‚Ä¶
+	Entr√©e: Date ou vide (=aujourd'hui)
+	Sortie: num√©ro de l'ann√©e
+}
+
+VAR d:DateTimeRec;
+
+BEGIN
+	CASE Length(Date) OF
+		0:
+		BEGIN
+			GetTime(d);	{ on prend la date d'aujourd'hui }
+			YearOf := d.Year-1900;
+		END;
+		
+		6:	{ AAMMJJ }
+			YearOf:= (ord(Date[1])-ord('0'))*10+(ord(Date[2])-ord('0'));
+			
+		8,16:	{ JJ/MM/AA[HH:MM:SS] }
+			YearOf:=	(ord(Date[7])-ord('0'))*10+(ord(Date[8])-ord('0'));
+	END;	{ CASE }
+END;
+
+
+FUNCTION Secs2LongDate(JT:Ptr; dateTime,form:LONGINT):Str255;
+
+VAR	result: Str255;
+
+BEGIN
+	Drg_SetRunMode(kNoInterrupt,JT);
+	IUDateString(dateTime,DateForm(form),result);
+	Drg_SetRunmode(kInterrupt,JT);
+	Secs2LongDate := result;
+END;
+
+
+PROCEDURE TestAll(JT:Ptr);
+
+VAR h: Handle;
+		old: Longint;
+		
+BEGIN
+	h:=Drg_NewHandle(4096,JT);
+	IF h=NIL THEN
+	BEGIN
+		Drg_PrintStr('Err on NewHandle',JT);
+		EXIT(TestAll);
+	END;
+	SetHandleSize(h,8192);
+	IF MemError<>NoErr THEN Drg_PrintStr('Prob. sur SetHandleSize',JT);
+	old:=Ord4(h);
+	IF Drg_StoreData(Ptr(h),'Test/Datas',JT)<>NoErr THEN Drg_PrintStr('Err on StoreData',JT);;
+	h:=Handle(Drg_RestoreData('Test/Datas',JT));
+	IF ord4(h)<>old THEN Drg_PrintStr('Restore incorrect',JT) ELSE Drg_PrintStr('ok',JT);
+	Drg_KillData('Test/Datas',JT);
+	DisposHandle(h);
+END;
+
+
+FUNCTION GetSysFolder(JT:Ptr; VAR TypeDoss:Str255):Str255;
+
+VAR	Err: OsErr;
+		foundVRefNum: INTEGER;
+		foundDirID: LONGINT;
+		folderType: OSType;
+		
+BEGIN
+	Drg_SetRunMode(kNoInterrupt,JT);	{ pas d'IT svp }
+	BlockMove(@TypeDoss[1],@FolderType,4);
+	Err := FindFolder(kOnSystemDisk,FolderType,TRUE,foundVRefNum,foundDirID);
+	Drg_SetRunMode(kInterrupt,JT);		{ ok pour les IT }
+
+	IF Err=NoErr THEN
+		GetSysFolder:=PathNameFromDirID(foundDirID,foundVRefNum,JT)
+	ELSE
+		GetSysFolder := '';
+END;
+
+
+FUNCTION DirIDFromPathName(path:Str255; VAR DirID:longint; VAR vRefnum:integer; JT:Ptr):OsErr;
+
+VAR	block: RECORD
+						task: TCBPtr;
+						pb: CInfoPBRec;
+					END;
+		name: Str255;
+		Err: OsErr;
+		
+BEGIN
+	{¬†‚Ä¢‚Ä¢¬†on r√©cup√®re le vRefNum de base‚Ä¶¬†‚Ä¢‚Ä¢¬†}
+	name := Path;
+	WITH Block.pb DO
+	BEGIN
+		ioNamePtr := @name;
+		iovRefNum := 0;
+		ioFDirIndex := -1;
+	END;
+	Err := Drg_PBCall(ReqGetVinfo,@block,JT);
+	
+	{ ‚Ä¢‚Ä¢¬†on descend dossier par dossier‚Ä¶¬†‚Ä¢‚Ä¢¬†}
+	WHILE (pos(':',path)>0) & (Err=NoErr) DO
+	BEGIN
+		name := copy(path,1,pos(':',path));	{ nom du dossier‚Ä¶¬†}
+		Delete(path,1,pos(':',path)+1);
+		WITH block.pb DO
+		BEGIN
+			ioNamePtr := @Name;
+			ioFDirIndex := 0;
+			ioDrDirID := 0;
+		END;
+		Err := Drg_PBCall(ReqGetCat,@block,JT);
+		IF BTst(block.Pb.IOFlAttrib, 4)=FALSE THEN { c'est un fichier !! }
+		BEGIN
+			IF pos(':',path)=0 THEN Err := NoErr ELSE Err := dirNFErr;
+			Leave;
+		END;
+	END;
+	
+	IF Err=NoErr THEN
+	BEGIN
+		vRefNum := block.pb.iovRefNum;
+		DirID := block.pb.ioDrDirID;
+	END
+	ELSE
+	BEGIN
+		vRefNum := 0;
+		DirID := 0;
+	END;
+END;
+
+
+FUNCTION PathNameFromDirID (DirID:longint; vRefnum:integer; JT:Ptr):str255;
+
+VAR
+	Block : RECORD
+						task: TCBPtr;	{ pour le PBCall‚Ä¶¬†}
+						pb: CInfoPBRec;
+					END;
+	directoryName, FullPathName : str255;
+	Err: OsErr;
+	
+BEGIN
+	FullPathName := '';
+	WITH block.pb DO BEGIN
+		ioNamePtr := @directoryName;
+		ioDrParID := DirId;
+	END;
+
+	REPEAT
+		WITH block.pb DO BEGIN
+			ioVRefNum := vRefNum;
+			ioFDirIndex := -1;
+			ioDrDirID := ioDrParID;	{ on remonte d'un niveau‚Ä¶¬†}
+		END;
+		err := Drg_PBCall(ReqGetCat,@Block,JT);
+
+		directoryName := concat(directoryName,':');
+		fullPathName := concat(directoryName,fullPathName);
+
+	UNTIL (block.pb.ioDrDirID = 2);
+
+	PathNameFromDirID := fullPathName;
+END;
+
+PROCEDURE EnableInterrupt(JT:Ptr);
+
+BEGIN
+	Drg_SetRunMode(kInterrupt,JT);
+END;
+
+PROCEDURE DisableInterrupt(JT:Ptr);
+
+BEGIN
+	Drg_SetRunMode(kNoInterrupt,JT);
+END;
+
+PROCEDURE MACALERT(JT:Ptr; VAR message:Str255 );
+
+BEGIN
+	
+END;
+
+
+PROCEDURE MACBEEP(JT:Ptr);
+
+BEGIN
+	Drg_SetRunMode(kNoInterrupt,JT);
+	SysBeep(60);
+	Drg_SetRunMode(kInterrupt,JT);
+END;
+
+END.

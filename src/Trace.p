@@ -1,1 +1,210 @@
-{	File:		Trace.p	Contains:	routine de Trace dans un fichier TEXT	Written by:	Christian QUEST / JCA Télématique	Copyright:	1991 JCA Télématique	Change History (most recent first):				16/02/91	CQ		Première version}UNIT Trace;INTERFACEUSES	MemTypes, Memory, Files, Packages, Errors;		PROCEDURE TraceOpen(FileName: Str255; vol: INTEGER; creator: OSType);				PROCEDURE TraceClose;				PROCEDURE TraceLn;		PROCEDURE TraceStr(TheStr: Str255);		PROCEDURE TraceStrLn(TheStr: Str255);		PROCEDURE TraceN(TheNum, TheLen: Longint;										 FlagPad: Boolean);		PROCEDURE TraceHN(TheNum, TheLen: Longint;											FlagPad: Boolean);		PROCEDURE TraceNLn(TheNum, TheLen: Longint;											 FlagPad: Boolean);		IMPLEMENTATIONUSES TextUtils;{$S TRACE}VAR	TraceFile: INTEGER; { refnum du fichier de Trace }	TraceErr: INTEGER;	{ dernière erreur détectée }{============ routine de trace dans le fichier TraceFile ===========}		PROCEDURE TraceOpen(FileName: Str255; vol: INTEGER; creator: OSType);				BEGIN			IF TraceFile <> 0 THEN TraceErr := FSClose(TraceFile);			TraceErr := Create(fileName,vol,creator,'TEXT');			IF (TraceErr = NoErr) | (TraceErr = dupFNErr) THEN			BEGIN				TraceErr := FSOpen(fileName,vol,TraceFile);				TraceErr := SetEOF(tracefile,0);			END;			IF TraceErr <> NoErr THEN TraceFile := 0;		END;						PROCEDURE TraceClose;				BEGIN			IF TraceFile = 0 THEN EXIT(TraceClose);			TraceErr := FSClose(TraceFile);		END;						PROCEDURE TraceLn;			VAR				TheChar: Char;				Len2Write: Longint;			BEGIN				IF TraceFile = 0 THEN EXIT(TraceLn);				Len2Write := 1;				TheChar := chr(13);				TraceErr := FSWrite(TraceFile, Len2Write, Ptr(Ord4(@TheChar) + 1));			END;		PROCEDURE TraceStr(TheStr: Str255);			VAR				TheChar: Char;				Len2Write: Longint;			BEGIN				IF TraceFile = 0 THEN EXIT(TraceStr);				Len2Write := length(TheStr);				TraceErr := FSWrite(TraceFile, Len2Write, Ptr(Ord4(@TheStr) + 1));			END;		PROCEDURE TraceStrLn(TheStr: Str255);			VAR				TheChar: Char;				Len2Write: Longint;			BEGIN				IF TraceFile = 0 THEN EXIT(TraceStrLn);				Len2Write := length(TheStr);				TraceErr := FSWrite(TraceFile, Len2Write, Ptr(Ord4(@TheStr) + 1));				TraceLn;			END;		PROCEDURE TraceN(TheNum, TheLen: Longint;										 FlagPad: Boolean);			VAR				TheChar: Char;				Len2Write: Longint;				TheStr: Str255;				A, i: Integer;			BEGIN				IF TraceFile = 0 THEN EXIT(TraceN);				NumToString(TheNum, TheStr);				IF TheLen > 255 THEN TheLen := 255;				IF TheLen < 0 THEN TheLen := 0;				IF length(TheStr) < TheLen THEN					BEGIN					A := TheLen - length(TheStr);					BlockMoveData(Ptr(Ord4(@TheStr) + 1), Ptr(Ord4(@TheStr) +																								1 + TheLen - length(TheStr)),										length(TheStr));					TheStr[0] := chr(TheLen);					IF FlagPad THEN						FOR i := 1 TO A DO TheStr[i] := '0'					ELSE						FOR i := 1 TO A DO TheStr[i] := ' ';					END;				Len2Write := length(TheStr);				TraceErr := FSWrite(TraceFile, Len2Write, Ptr(Ord4(@TheStr) + 1));			END;		PROCEDURE TraceHN(TheNum, TheLen: Longint;											FlagPad: Boolean);			VAR				TheChar: Char;				Len2Write: Longint;				TheStr: Str255;				A: Longint;				i: Integer;				termine: Boolean;			BEGIN { la sortie est en Hexa }				IF TraceFile = 0 THEN EXIT(TraceHN);				TheStr[0] := chr(8);				FOR i := 1 TO 8 DO					BEGIN					A := BAnd(BRotL(TheNum, i * 4), 15);					IF A < 10 THEN						TheStr[i] := chr(ord('0') + A)					ELSE						TheStr[i] := chr(ord('A') + A - 10);					END;				{ on vire les '0' non significatifs }				i := 0;				termine := false;				WHILE (i < 8) AND NOT termine DO					BEGIN					IF TheStr[i + 1] = '0' THEN						i := i + 1					ELSE						termine := TRUE;					END;				IF i > 0 THEN					BEGIN					BlockMoveData(Ptr(Ord4(@TheStr) + i + 1), Ptr(Ord4(@TheStr) + 1), 8 - i);					TheStr[0] := chr(8 - i);					END;				IF TheLen > 255 THEN TheLen := 255;				IF TheLen < 0 THEN TheLen := 0;				IF length(TheStr) < TheLen THEN					BEGIN					A := TheLen - length(TheStr);					BlockMoveData(Ptr(Ord4(@TheStr) + 1), Ptr(Ord4(@TheStr) +																								1 + TheLen - length(TheStr)),										length(TheStr));					TheStr[0] := chr(TheLen);					IF FlagPad THEN						FOR i := 1 TO A DO TheStr[i] := '0'					ELSE						FOR i := 1 TO A DO TheStr[i] := ' ';					END;				Len2Write := length(TheStr);				TraceErr := FSWrite(TraceFile, Len2Write, Ptr(Ord4(@TheStr) + 1));			END;		PROCEDURE TraceNLn(TheNum, TheLen: Longint;											 FlagPad: Boolean);			BEGIN				IF TraceFile = 0 THEN EXIT(TraceNLn);				TraceN(TheNum, TheLen, FlagPad);				TraceLn;			END;END.
+{
+	File:		Trace.p
+
+	Contains:	routine de Trace dans un fichier TEXT
+
+	Written by:	Christian QUEST / JCA T√©l√©matique
+
+	Copyright:	1991 JCA T√©l√©matique
+
+	Change History (most recent first):
+
+				16/02/91	CQ		Premi√®re version
+
+}
+
+UNIT Trace;
+
+INTERFACE
+
+USES	MemTypes, Memory, Files, Packages, Errors;
+
+
+		PROCEDURE TraceOpen(FileName: Str255; vol: INTEGER; creator: OSType);
+		
+		PROCEDURE TraceClose;
+		
+		PROCEDURE TraceLn;
+
+		PROCEDURE TraceStr(TheStr: Str255);
+
+		PROCEDURE TraceStrLn(TheStr: Str255);
+
+		PROCEDURE TraceN(TheNum, TheLen: Longint;
+										 FlagPad: Boolean);
+
+		PROCEDURE TraceHN(TheNum, TheLen: Longint;
+											FlagPad: Boolean);
+
+		PROCEDURE TraceNLn(TheNum, TheLen: Longint;
+											 FlagPad: Boolean);
+
+		
+IMPLEMENTATION
+
+USES TextUtils;
+
+
+{$S TRACE}
+
+VAR
+	TraceFile: INTEGER; { refnum du fichier de Trace }
+	TraceErr: INTEGER;	{ derni√®re erreur d√©tect√©e }
+
+{============ routine de trace dans le fichier TraceFile ===========}
+
+		PROCEDURE TraceOpen(FileName: Str255; vol: INTEGER; creator: OSType);
+		
+		BEGIN
+			IF TraceFile <> 0 THEN TraceErr := FSClose(TraceFile);
+			TraceErr := Create(fileName,vol,creator,'TEXT');
+			IF (TraceErr = NoErr) | (TraceErr = dupFNErr) THEN
+			BEGIN
+				TraceErr := FSOpen(fileName,vol,TraceFile);
+				TraceErr := SetEOF(tracefile,0);
+			END;
+			IF TraceErr <> NoErr THEN TraceFile := 0;
+		END;
+		
+		
+		PROCEDURE TraceClose;
+		
+		BEGIN
+			IF TraceFile = 0 THEN EXIT(TraceClose);
+			TraceErr := FSClose(TraceFile);
+		END;
+		
+		
+		PROCEDURE TraceLn;
+
+			VAR
+				TheChar: Char;
+				Len2Write: Longint;
+
+			BEGIN
+				IF TraceFile = 0 THEN EXIT(TraceLn);
+				Len2Write := 1;
+				TheChar := chr(13);
+				TraceErr := FSWrite(TraceFile, Len2Write, Ptr(Ord4(@TheChar) + 1));
+			END;
+
+		PROCEDURE TraceStr(TheStr: Str255);
+
+			VAR
+				TheChar: Char;
+				Len2Write: Longint;
+
+			BEGIN
+				IF TraceFile = 0 THEN EXIT(TraceStr);
+				Len2Write := length(TheStr);
+				TraceErr := FSWrite(TraceFile, Len2Write, Ptr(Ord4(@TheStr) + 1));
+			END;
+
+		PROCEDURE TraceStrLn(TheStr: Str255);
+
+			VAR
+				TheChar: Char;
+				Len2Write: Longint;
+
+			BEGIN
+				IF TraceFile = 0 THEN EXIT(TraceStrLn);
+				Len2Write := length(TheStr);
+				TraceErr := FSWrite(TraceFile, Len2Write, Ptr(Ord4(@TheStr) + 1));
+				TraceLn;
+			END;
+
+		PROCEDURE TraceN(TheNum, TheLen: Longint;
+										 FlagPad: Boolean);
+
+			VAR
+				TheChar: Char;
+				Len2Write: Longint;
+				TheStr: Str255;
+				A, i: Integer;
+
+			BEGIN
+				IF TraceFile = 0 THEN EXIT(TraceN);
+				NumToString(TheNum, TheStr);
+				IF TheLen > 255 THEN TheLen := 255;
+				IF TheLen < 0 THEN TheLen := 0;
+				IF length(TheStr) < TheLen THEN
+					BEGIN
+					A := TheLen - length(TheStr);
+					BlockMoveData(Ptr(Ord4(@TheStr) + 1), Ptr(Ord4(@TheStr) +
+																								1 + TheLen - length(TheStr)),
+										length(TheStr));
+					TheStr[0] := chr(TheLen);
+					IF FlagPad THEN
+						FOR i := 1 TO A DO TheStr[i] := '0'
+					ELSE
+						FOR i := 1 TO A DO TheStr[i] := ' ';
+					END;
+				Len2Write := length(TheStr);
+				TraceErr := FSWrite(TraceFile, Len2Write, Ptr(Ord4(@TheStr) + 1));
+			END;
+
+		PROCEDURE TraceHN(TheNum, TheLen: Longint;
+											FlagPad: Boolean);
+
+			VAR
+				TheChar: Char;
+				Len2Write: Longint;
+				TheStr: Str255;
+				A: Longint;
+				i: Integer;
+				termine: Boolean;
+
+			BEGIN { la sortie est en Hexa }
+				IF TraceFile = 0 THEN EXIT(TraceHN);
+				TheStr[0] := chr(8);
+				FOR i := 1 TO 8 DO
+					BEGIN
+					A := BAnd(BRotL(TheNum, i * 4), 15);
+					IF A < 10 THEN
+						TheStr[i] := chr(ord('0') + A)
+					ELSE
+						TheStr[i] := chr(ord('A') + A - 10);
+					END;
+				{ on vire les '0' non significatifs }
+				i := 0;
+				termine := false;
+				WHILE (i < 8) AND NOT termine DO
+					BEGIN
+					IF TheStr[i + 1] = '0' THEN
+						i := i + 1
+					ELSE
+						termine := TRUE;
+					END;
+				IF i > 0 THEN
+					BEGIN
+					BlockMoveData(Ptr(Ord4(@TheStr) + i + 1), Ptr(Ord4(@TheStr) + 1), 8 - i);
+					TheStr[0] := chr(8 - i);
+					END;
+				IF TheLen > 255 THEN TheLen := 255;
+				IF TheLen < 0 THEN TheLen := 0;
+				IF length(TheStr) < TheLen THEN
+					BEGIN
+					A := TheLen - length(TheStr);
+					BlockMoveData(Ptr(Ord4(@TheStr) + 1), Ptr(Ord4(@TheStr) +
+																								1 + TheLen - length(TheStr)),
+										length(TheStr));
+					TheStr[0] := chr(TheLen);
+					IF FlagPad THEN
+						FOR i := 1 TO A DO TheStr[i] := '0'
+					ELSE
+						FOR i := 1 TO A DO TheStr[i] := ' ';
+					END;
+				Len2Write := length(TheStr);
+				TraceErr := FSWrite(TraceFile, Len2Write, Ptr(Ord4(@TheStr) + 1));
+			END;
+
+		PROCEDURE TraceNLn(TheNum, TheLen: Longint;
+											 FlagPad: Boolean);
+
+			BEGIN
+				IF TraceFile = 0 THEN EXIT(TraceNLn);
+				TraceN(TheNum, TheLen, FlagPad);
+				TraceLn;
+			END;
+
+END.

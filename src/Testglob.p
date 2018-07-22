@@ -1,1 +1,2 @@
-(* variables locales a chaque tache *)
+(* variables locales a chaque tache *)
+

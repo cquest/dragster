@@ -1,1 +1,185 @@
-;;	File:		Protect.a;;	Contains:	blocage et déblocage des débuggers;								SEG		'INITDRAG'								SuspendDebugger	PROC	EXPORT					; PROCEDURE KillDebugger (saveSpaceH: Handle); EXTERNAL;;; Pascal Procedure to kill the debuggers; 	- Size of saveSpaceH is 64 bytes			LINK		A6,#$0			MOVEM.L		A0-A4/D0-D7,-(A7)			; Stack Status			; 	Handle			; 	Return address			; 	OldA6			;	Saved registers						MOVEA.L		$8(A6),A2		; A2 = saveSpaceH									MOVEA.L		(A2),A2			; A2 = saveSpaceP					MOVE.W		#$54C,D1			ROR.W		#1,D1				EXT.L		D1			MOVEA.L		D1,A3			MOVEQ		#$8,D1			; D1 = 8			ADDA.L		D1,A3			; A3 = 2AE			MOVEA.L		(A3),A3			; A3 = ROM Base									SF			D2								CMPI.B		#$2,$12F			BMI.S		@0			ST			D2				; D2.B true if at least 68020 there@0			ADDA.L		D1,A3			ADDQ.L		#$2,A3			; A3 = ROM Base + A			MOVEA.L		A3,A1			MOVE.W		#$7FFF,D0@1			ADDQ.L		#$2,A1			CMPI.W		#$4E73,(A1)	; Recherche d'un RTE			BEQ.S		@2						; found			DBF			D0,@1						MOVEA.L		A3,A1			; not found, A1 = A3@2			MOVEA.L		D1,A0			; A0= 8					MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)+		; Bus Err ($08)			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)+		; Address Err ($0C)			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)+		; Illegal ins ($10)			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)+		; Divide by 0 ($14)			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)+		; CHK ins ($18)			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)+		; TRAPV ($1C)			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)+		; Privilege v ($20)			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)+		; Trace ($24)					ADDQ.L		#4,A0		  			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)			; Opcode 1111 ($2C)			ADDA.L		#$34,A0			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)			; Spurious ($60)			ADDA.L		#$10,A0						TST.B		D2			BNE.S		@3				; at least 68020 there			MOVE.L		(A0),(A2)+			MOVE.L		A1,(A0)			; level 4	($70)			MOVE.L		(A0),(A2)+			MOVE.L		A1,4(A0)		; level 5	($74)				MOVE.L		(A0),(A2)+			MOVE.L		A1,8(A0)		; level 6	($78)@3						ADDA.L		#$C,A0			MOVE.L		(A0),(A2)+			MOVE.L		A1,(A0)			; level 7	($7C)						ADDA.L		#$3C,A0			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)+		; TRAP 1E ($B8)			MOVE.L		(A0),(A2)+			MOVE.L		A3,(A0)			; TRAP 1F ($BC)						MOVEM.L		(A7)+,A0-A4/D0-D7			UNLK		A6			MOVEA.L		(A7)+,A0			ADDA.L		#$4,A7			JMP			(A0)			ENDPROC		;------------------------------------------------------------------------						RestoreDebugger	PROC	EXPORT					; PROCEDURE RestoreDebugger (saveSpaceH: Handle); EXTERNAL;;; Pascal Procedure to restore the debuggers; 	- Size of saveSpaceH is 64 bytes			LINK		A6,#$0			MOVEM.L		A0-A4/D0-D7,-(A7)			; Stack Status			; Handle			; Return address			; OldA6						MOVEA.L		$8(A6),A2		; A2 = saveSpaceH									MOVEA.L		(A2),A2			; A2 = saveSpaceP					MOVEQ		#$8,D1			; D1 = 8			SF			D2								CMPI.B		#$2,$12F			BMI.S		@1			ST			D2				; D2.B true if at least 68020 there@1			MOVEA.L		D1,A0			; A0= 8					MOVE.L		(A2)+,(A0)+		; Bus Err 			($08)			MOVE.L		(A2)+,(A0)+		; Address Err 		($0C)			MOVE.L		(A2)+,(A0)+		; Illegal ins 		($10)			MOVE.L		(A2)+,(A0)+		; Divide by 0 		($14)			MOVE.L		(A2)+,(A0)+		; CHK ins 			($18)			MOVE.L		(A2)+,(A0)+		; TRAPV				($1C)			MOVE.L		(A2)+,(A0)+		; Privilege v		($20)			MOVE.L		(A2)+,(A0)		; Trace				($24)					ADDQ.L		#8,A0		  			MOVE.L		(A2)+,(A0)		; Opcode 1111		($2C)			ADDA.L		#$34,A0			MOVE.L		(A2)+,(A0)		; Spurious			($60)			ADDA.L		#$10,A0			TST.B		D2			BNE.S		@3				; branch if at least 68020 there						MOVE.L		(A2)+,(A0)		; level 4 			($70)			MOVE.L		(A2)+,4(A0)		; level 5 			($74)			MOVE.L		(A2)+,8(A0)		; level 6 			($78)@3						ADDA.L		#$C,A0			MOVE.L		(A2)+,(A0)		; level 7 			($7C)									ADDA.L		#$3C,A0			MOVE.L		(A2)+,(A0)+		; TRAP 1E 			($B8)			MOVE.L		(A2)+,(A0)		; TRAP 1E 			($BC)						MOVEM.L		(A7)+,A0-A4/D0-D7			UNLK		A6			MOVEA.L		(A7)+,A0			ADDA.L		#$4,A7			JMP			(A0)					ENDPROC;------------------------------------------------------------------------			END
+;
+;	File:		Protect.a
+;
+;	Contains:	blocage et d√©blocage des d√©buggers
+;
+
+								SEG		'INITDRAG'
+								
+SuspendDebugger	PROC	EXPORT					
+
+
+; PROCEDURE KillDebugger (saveSpaceH: Handle); EXTERNAL;
+;
+; Pascal Procedure to kill the debuggers
+; 	- Size of saveSpaceH is 64 bytes
+
+
+			LINK		A6,#$0
+			MOVEM.L		A0-A4/D0-D7,-(A7)
+
+			; Stack Status
+			; 	Handle
+			; 	Return address
+			; 	OldA6
+			;	Saved registers
+			
+			MOVEA.L		$8(A6),A2		; A2 = saveSpaceH						
+			MOVEA.L		(A2),A2			; A2 = saveSpaceP
+		
+			MOVE.W		#$54C,D1
+			ROR.W		#1,D1	
+			EXT.L		D1
+			MOVEA.L		D1,A3
+			MOVEQ		#$8,D1			; D1 = 8
+			ADDA.L		D1,A3			; A3 = 2AE
+			MOVEA.L		(A3),A3			; A3 = ROM Base			
+			
+			SF			D2					
+			CMPI.B		#$2,$12F
+			BMI.S		@0
+			ST			D2				; D2.B true if at least 68020 there
+@0
+			ADDA.L		D1,A3
+			ADDQ.L		#$2,A3			; A3 = ROM Base + A
+
+			MOVEA.L		A3,A1
+			MOVE.W		#$7FFF,D0
+@1
+			ADDQ.L		#$2,A1
+			CMPI.W		#$4E73,(A1)	; Recherche d'un RTE
+			BEQ.S		@2						; found
+			DBF			D0,@1
+			
+			MOVEA.L		A3,A1			; not found, A1 = A3
+@2
+			MOVEA.L		D1,A0			; A0= 8
+		
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)+		; Bus Err ($08)
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)+		; Address Err ($0C)
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)+		; Illegal ins ($10)
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)+		; Divide by 0 ($14)
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)+		; CHK ins ($18)
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)+		; TRAPV ($1C)
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)+		; Privilege v ($20)
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)+		; Trace ($24)		
+
+			ADDQ.L		#4,A0		  
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)			; Opcode 1111 ($2C)
+
+			ADDA.L		#$34,A0
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)			; Spurious ($60)
+
+			ADDA.L		#$10,A0			
+			TST.B		D2
+			BNE.S		@3				; at least 68020 there
+
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A1,(A0)			; level 4	($70)
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A1,4(A0)		; level 5	($74)	
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A1,8(A0)		; level 6	($78)
+@3			
+			ADDA.L		#$C,A0
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A1,(A0)			; level 7	($7C)
+			
+			ADDA.L		#$3C,A0
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)+		; TRAP 1E ($B8)
+			MOVE.L		(A0),(A2)+
+			MOVE.L		A3,(A0)			; TRAP 1F ($BC)
+			
+			MOVEM.L		(A7)+,A0-A4/D0-D7
+			UNLK		A6
+			MOVEA.L		(A7)+,A0
+			ADDA.L		#$4,A7
+			JMP			(A0)
+
+			ENDPROC
+		
+;------------------------------------------------------------------------
+			
+			
+RestoreDebugger	PROC	EXPORT					
+
+
+; PROCEDURE RestoreDebugger (saveSpaceH: Handle); EXTERNAL;
+;
+; Pascal Procedure to restore the debuggers
+; 	- Size of saveSpaceH is 64 bytes
+
+			LINK		A6,#$0
+			MOVEM.L		A0-A4/D0-D7,-(A7)
+
+			; Stack Status
+			; Handle
+			; Return address
+			; OldA6
+			
+			MOVEA.L		$8(A6),A2		; A2 = saveSpaceH						
+			MOVEA.L		(A2),A2			; A2 = saveSpaceP
+		
+			MOVEQ		#$8,D1			; D1 = 8
+
+			SF			D2					
+			CMPI.B		#$2,$12F
+			BMI.S		@1
+			ST			D2				; D2.B true if at least 68020 there
+@1
+			MOVEA.L		D1,A0			; A0= 8
+		
+			MOVE.L		(A2)+,(A0)+		; Bus Err 			($08)
+			MOVE.L		(A2)+,(A0)+		; Address Err 		($0C)
+			MOVE.L		(A2)+,(A0)+		; Illegal ins 		($10)
+			MOVE.L		(A2)+,(A0)+		; Divide by 0 		($14)
+			MOVE.L		(A2)+,(A0)+		; CHK ins 			($18)
+			MOVE.L		(A2)+,(A0)+		; TRAPV				($1C)
+			MOVE.L		(A2)+,(A0)+		; Privilege v		($20)
+			MOVE.L		(A2)+,(A0)		; Trace				($24)
+		
+			ADDQ.L		#8,A0
+		  
+			MOVE.L		(A2)+,(A0)		; Opcode 1111		($2C)
+
+			ADDA.L		#$34,A0
+			MOVE.L		(A2)+,(A0)		; Spurious			($60)
+
+			ADDA.L		#$10,A0
+
+			TST.B		D2
+			BNE.S		@3				; branch if at least 68020 there
+			
+			MOVE.L		(A2)+,(A0)		; level 4 			($70)
+			MOVE.L		(A2)+,4(A0)		; level 5 			($74)
+			MOVE.L		(A2)+,8(A0)		; level 6 			($78)
+@3			
+			ADDA.L		#$C,A0
+			MOVE.L		(A2)+,(A0)		; level 7 			($7C)
+						
+			ADDA.L		#$3C,A0
+			MOVE.L		(A2)+,(A0)+		; TRAP 1E 			($B8)
+			MOVE.L		(A2)+,(A0)		; TRAP 1E 			($BC)
+			
+			MOVEM.L		(A7)+,A0-A4/D0-D7
+			UNLK		A6
+			MOVEA.L		(A7)+,A0
+			ADDA.L		#$4,A7
+			JMP			(A0)
+		
+			ENDPROC
+;------------------------------------------------------------------------
+
+
+			END

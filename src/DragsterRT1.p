@@ -1,1 +1,5362 @@
-{$SETC TEST=TRUE}{$SETC DEBUG=FALSE}{$IFC UNDEFINED DEMO}	{$SETC DEMO=FALSE}{$ENDC}{$SETC ADSP=TRUE}{$SETC DEBUGHAYES=FALSE}{$SETC PILOTE=FALSE}{$IFC DEMO=TRUE}	{$SETC MUX=FALSE}	{$SETC HAYES=FALSE}{$ELSEC}	{$SETC MUX=TRUE}	{$SETC HAYES=TRUE}{$ENDC}UNIT DragsterRT;INTERFACE{$DECL DrgTree}{$SETC DrgTree = TRUE}USES MemTypes, OSIntf, ToolIntf, PackIntf, AppleTalk, ADSP, SysEqu, TextUtils,	{$U :Wintree:DrgTree.p} DrgTree;{$D+}{$R+}TYPE	Pstr255 = ^Str255;	LIPtr = ^LONGINT;	PROCEDURE MyCompletion(ThePtr: Ptr);PROCEDURE Scheduler(ThePTable: Ptr);PROCEDURE RunTask;PROCEDURE TimeIt;FUNCTION SeekScreen(VAR Str1: Str255): Longint;PROCEDURE CarPrint(C: Char);PROCEDURE NumPrint(Num1: Longint);PROCEDURE StrPrint(VAR Str1: Str255);PROCEDURE SZone(ZPosX, ZPosY, ZLen: Longint; TheVar: Ptr; ZTkVar: Integer; TheColor: Longint);PROCEDURE Wait(NumZ: Longint);PROCEDURE Locate(X, Y: Longint);PROCEDURE SBackColor(Num1: Longint);PROCEDURE SForeColor(Num1: Longint);PROCEDURE Font(Num1: Longint);PROCEDURE Cls;PROCEDURE SCursor(Num1: Longint);PROCEDURE WaitDelay(Num1: Longint);PROCEDURE Disconnect;PROCEDURE Draw;PROCEDURE Flash(Num1: Longint);PROCEDURE SInput(PStr2: Pstr255; Num1: Longint; VarPtr: Ptr);PROCEDURE Inverse(Num1: Longint);PROCEDURE SSize(Num1: Longint);PROCEDURE SUnderLine(Num1: Longint);PROCEDURE WaitConnect(WTime: Longint);PROCEDURE Message(Num1, Num2, Num3: Longint; VAR Str1: Str255);PROCEDURE CanEol(Num1, Num2: Longint);PROCEDURE DrawScreen(TheVScreen: Ptr);FUNCTION SPend(VAR ScrutX: Longint; Num1: Longint): Longint;PROCEDURE SPost(VAR ScrutX: Longint; Num1, Num2: Longint);PROCEDURE ControlSN(VAR Str1: Str255);PROCEDURE Dial(Str1: Str255);PROCEDURE StartTask;PROCEDURE FrontScreen(Num1: Longint);PROCEDURE SGetMinId(VAR Str2: Str255; Num1: Longint);PROCEDURE SSetMinId(Num1: Longint; VAR Str2: Str255);PROCEDURE SStatus(VAR Str2: Str255);FUNCTION TaskNumber: Longint;FUNCTION GetPriority: Longint;PROCEDURE SetPriority(Num1: Longint);PROCEDURE YieldCpu;PROCEDURE Request(Num1: Longint; VAR ScrutX, PatX: Longint);PROCEDURE SWModem;FUNCTION Connected: Longint;PROCEDURE SCurPos(VAR Str2: Str255);PROCEDURE SScroll(Num1: Longint);PROCEDURE SLower(Num1: Longint);PROCEDURE CanBlock(Num1, Num2, Num3: Longint);FUNCTION SModNumber: Longint;FUNCTION SStarFlag: Longint;PROCEDURE MessDLoad(VAR Str1: Str255; Num1: Longint);PROCEDURE MessULoad(Num1: Longint; VAR Str2: Str255);PROCEDURE SSysParm(Num1, Num2, Num3, Num4: Longint);{ enqueue dequeue et printscreen }PROCEDURE PrintScreen(VAR Str1: Str255);PROCEDURE SEnqueue(ToVoie: Longint; VAR Str1: Str255);PROCEDURE SDequeue(VAR Str1: Str255);FUNCTION Similarity(VAR Str1, Str2: Str255): Longint;PROCEDURE ResetQueue;FUNCTION QueueSize: Longint;PROCEDURE SGet(VAR AdStr: Str255; Num1: Longint);PROCEDURE SGetPaq(VAR AdStr: Str255; Num1, Num2, Ch1, Ch2: Longint);PROCEDURE SSerConfig(Num1, Num2, Num3, Num4, Num5: Longint);PROCEDURE FlushBuffer;FUNCTION Rnd(Num1: Longint): Longint;PROCEDURE OpenSer(NumFile, Num1, Num2, Num3, Num4, Num5: Longint);PROCEDURE TrPrint(TheFlag: Longint);PROCEDURE InputMode(SilentFlag, BuffFlag: Longint);PROCEDURE RunFlags(VAR Str1: Str255);PROCEDURE Echo(Num1: Longint);FUNCTION SSVal(VAR Str1: Str255): Longint;IMPLEMENTATION{$SETC STARNUMBER := TRUE }{$I DragsterTCB.p}{$D+}CONST	ErrSyntax = 1; { Erreur de syntaxe }	ErrVParam = 2; { Mauvaise valeur de parametre }	ErrLabel = 3; { Etiquette utilisée et non définie }	ErrDef = 4; { Redéfinition d'une étiquette ou d'une var }	ErrType = 5; { Mauvais type de parametre }	ErrMissing = 6; { Mauvais nombre de parametres }	ErrFor = 7; { For sans Next }	ErrNext = 8; { Next sans For }	ErrWhile = 9; { While sans Wend }	ErrWend = 10; { Wend sans While }	ErrZero = 11; { Division par zero }	ErrReturn = 12; { Return sans Gosub }	ErrLigne = 13; { pb de tokenisation }	ErrCall = 14; { mauvais appel de la fonction }	ErrConf = 15; { conflit de types }	ErrImbWF = 16; { trop d'imbrications de while/for }	ErrImbIf = 17; { trop d'imbrications de If }	ErrElse = 18; { Else sans If }	ErrEndif = 19; { Endif sans If }	ErrBreak = 20; { Break sans for/while }	ErrCont = 21; { Continue sans for/while }	ErrNonXFile = 22; { Tentative d'exec d'un fichier non exec }	ErrDDef = 23; { Double définition d'une étiquette }	ErrBadNum = 24; { Mauvais numero de fichier }	ErrNotOpen = 25; { Fichier non ouvert }	ErrFileOpen = 26; { Fichier déja ouvert }	ErrQEmpty = 29; { Queue vide }	ErrQFull = 30; { queue pleine }	ErrQTx = 31; { tache inexistante }	ErrTime = 128; { timeOut }	CRepetition = 129;	CEnvoi = 130;	CGuide = 131;	CSommaire = 132;	CSuite = 133;	CRetour = 134;	CAnnulation = 135;	CCorrection = 136;	CAutre = 137;	CKSuite = 138;	CIgnore = 255;	NUL = chr(0);	SOH = chr(1);	STX = chr(2);	ETX = chr(3);	EOT = chr(4);	ENQ = chr(5);	BELL = chr(7);	BS = chr(8);	LF = chr(10);	FF = chr(12);	RC = chr(13);	SO = chr(14);	SI = chr(15);	DLE = chr(16);	DC1 = chr(17);	Con = chr(17);	REP = chr(18);	SEP = chr(19);	DC4 = chr(20);	Coff = chr(20);	SS2 = chr(22);	ETB = chr($17);	CAN = chr(24);	ACC = chr(25);	SUB = chr(26);	ESC = chr(27);	RS = chr(30);	US = chr(31);	SP = chr(32);	START = chr($69);	STOP = chr($6A);	IDEN1 = chr($78);	IDEN2 = chr($79);	ENQRAM = chr($7A);	ENQROM = chr($7B);	PRO1 = chr($39);	PRO2 = chr($3A);	PRO3 = chr($3B);	{ Caractères utilisés pour les zones de saisie }	CarZone = '.';		{ remplissage de zone }	CarZoneMask = 'X';	{ remplissage de zone masquée }	CarMask = '*';		{ car de masquage }	DataFrame	=	chr($30);	CallFrame	= chr($31);	LibFrame	=	chr($32);	ComFrame	=	chr($33);	ErrFrame	=	chr($34);	IndispFrame	=	chr($35);	DispFrame	=	chr($36);	CritLFrame	=	chr($37);	RDispFrame	=	chr($38);	X29Frame	=	chr($39);	X29FrameNAMTEL = chr($3A);	NextDataFrame = chr($40);		{ données à suivre bit M=1 (Hyptek) }	NextX29Frame = chr($49);		{ message X29 à suivre bit M=1 Q=1 }{$IFC DEBUG}FUNCTION Str(n:LONGINT):Str255;VAR	s:Str255;BEGIN	NumToString(n,s);	str := s;END;{$ENDC}PROCEDURE MyConst;	EXTERNAL;FUNCTION GetStPtr: TPtr;{ GetStPtr rend TheStPtr, qui pointe sur la chaine des TCB occupes }	EXTERNAL;PROCEDURE SetStPtr(ThePtr: TPtr);{ SetCurSt met a jour CurStPtr, qui pointe sur le TCB actif }	EXTERNAL;FUNCTION GetCurSt: TPtr;{ GetCurSt rend CurStPtr, qui pointe sur le TCB actif }	EXTERNAL;PROCEDURE SetTheSt(ThePtr: TPtr);{ SetTheSt met a jour TheStPtr, qui pointe sur la chaine des TCB occupes }	EXTERNAL;PROCEDURE SetCurSt(ThePtr: TPtr);{ SetCurSt met a jour CurStPtr, qui pointe sur le TCB actif }	EXTERNAL;PROCEDURE SetNilSt;{ SetNilSt resette CurStPtr }	EXTERNAL;PROCEDURE SaveRegs(AdRegs: Ptr);{ InitRegs va mettre les valeurs des registres à l'adresse AdRegs }	EXTERNAL;PROCEDURE SwapTasks(AdRegs1, AdRegs2: Ptr);{ Sauvegarde contexte courant dans AdRegs1 et restaure AdRegs2 }	EXTERNAL;PROCEDURE AsmCompletion;{ IOCompletion qui donne l'adresse de la tache appelante }	EXTERNAL;FUNCTION ReadyToRun(ThePtr: TPtr): boolean;	EXTERNAL;PROCEDURE SetPtr(TheP: Ptr;								 ThePtr: TPtr);	EXTERNAL;PROCEDURE PaqPrep(VAR TheBuffer: Str255; ComChar: Char);	FORWARD;	PROCEDURE SendControlFrame(VAR TheBuffer: Str255; ComChar: Char);	FORWARD;PROCEDURE Break;	INLINE $FACE;PROCEDURE StrBreak(str: Str255);	INLINE $201F, $FACE;PROCEDURE WordAlign; FORWARD;PROCEDURE BuffDataFrame(TheBuffer: Ptr; Count: Longint);FORWARD;PROCEDURE MyCompletion(ThePtr: Ptr);BEGIN	WITH TPtr(ThePtr)^ DO		BEGIN			IOCompFlag := 0;			StatusWord := ReadyCst;		END;END;PROCEDURE WaitDelay(Num1: Longint);BEGIN	FlushBuffer;	IF Num1 > 0 THEN {•••• pas de DELAY < 1 ••••}		WITH GetCurSt^ DO			BEGIN				DelayValue := Num1;				StatusWord := DelayCst;			END;	YieldCpu;END;PROCEDURE WaitLong(Num1: Longint);BEGIN	IF Num1 > 0 THEN {•••• pas de DELAY < 1 ••••}		WITH GetCurSt^ DO			BEGIN				DelayValue := Num1;				StatusWord := DelayCst;			END;	YieldCpu;END;PROCEDURE TEnQueue(QNum: Integer; VAR pb: TQERec);BEGIN	WITH GetCurSt^, GetCurSt^.TheQueues^[QNum] DO		BEGIN			pb.EOwner := GetCurSt;			pb.QLink := NIL;			IF (QNumber = 0) OR (QFirst = NIL) THEN				BEGIN					QFirst := @pb;					QEnd := @pb;				END			ELSE				BEGIN					QEnd^.QLink := @pb;					QEnd := @pb;				END;			QNumber := QNumber + 1;			YieldCpu;		END;END;FUNCTION Concatnum(str:str255; num:longint):str255;VAR	tempStr:Str255;BEGIN	numtostring(num,tempstr);	concatnum := concat(str,tempstr);END;PROCEDURE DebugNum(str: Str255; Num: Longint; Go: boolean);VAR	Chaine: Str255;BEGIN	NumToString(Num, Chaine);	IF Go THEN Chaine := Concat(Chaine, ';G');	DebugStr(Concat(str, Chaine));END;PROCEDURE SetIOWait;BEGIN	WITH GetCurST^ DO		BEGIN			IOCompFlag := 1;			StatusWord := IOWaitCst;		END;END;{$IFC PILOTE}FUNCTION prepTramePilote(typeTrame: INTEGER; buffer: Ptr; count: INTEGER):StrTrame;VAR	temp: StrTrame;	BEGIN	temp[1]:=chr(typeTrame);	temp[2]:=chr($40+LoWord(GetCurSt^.ModNumber));	BlockMoveData(buffer,@temp[3],count);	temp[0]:=chr(count+2);	prepTramePilote := temp;END;{$ENDC}PROCEDURE AsRead(VAR ThePrompt, TheBuffer: Str255; TimeLimit: Longint; SkipEnt: boolean);{ uniquement appelé si HardType=ModemDrg }LABEL 0;VAR	Err: OSErr;	pb: TQERec;	CCon: Char;	NbCar: Integer;	XTimeLimit: Longint;BEGIN	IF GetCurSt^.HardType<>ModemDrg THEN EXIT(AsRead);		FlushBuffer;	XTimeLimit := TickCount + TimeLimit;	WITH GetCurSt^ DO		BEGIN			Error := NoErr;		0:			SetIOWait;			IF TimeLimit <> 0 THEN			BEGIN				StatusWord := IOTWaitCst;				DelayValue := 300;			END;			WITH pb DO			BEGIN				ECode := ReqOn;				EParam1 := @ThePrompt;				EParam2 := @TheBuffer;				ERet := ReqOn;			END;			TEnQueue(IOQueue, pb);			IF pb.ERet = ReqDone THEN				BEGIN					IF (theBuffer<>'') & SkipEnt THEN						BEGIN							{ les entetes de paquets sont deja retires }							CCon := TheBuffer[1];							NbCar := Length(TheBuffer) - 1;							BlockMoveData(Ptr(Ord4(@TheBuffer) + 2), Ptr(Ord4(@TheBuffer) + 1), NbCar);							TheBuffer[0] := chr(NbCar);							{ on vérifie la validité deconnexion }							IF CCon = 'F' THEN								BEGIN									ConFlag := False;									Error := ErrTime;									TheBuffer := '';									EXIT(AsRead);								END							ELSE IF CCon = 'c' THEN								BEGIN									XTimeLimit := TickCount + TimeLimit;								END;							IF XTimeLimit < TickCount THEN								BEGIN									Error := ErrTime;									TheBuffer := '';									EXIT(AsRead);								END;							IF Length(TheBuffer) = 0 THEN								BEGIN									WaitLong(2);									GOTO 0;								END;						END;				END			ELSE				BEGIN					WITH pb DO						BEGIN							ECode := ReqOff;							ERet := ReqOff;							TEnQueue(IOQueue, pb);						END;					WITH pb DO						WHILE (ERet <> ReqDone) AND (ERet <> ReqCanceled) DO WaitLong(1);					TheBuffer := '';					Error := ErrTime;				END;		END;END;PROCEDURE PrintRep(C:CHAR; count:INTEGER);BEGIN	IF Count > 0 THEN	BEGIN		CarPrint(C);		count := count-1;		WHILE Count > 0 DO		IF Count > 2 THEN			BEGIN				CarPrint(REP);				IF Count < 64 THEN					BEGIN						CarPrint(chr($40 + Count));						Count := 0;					END				ELSE					BEGIN						CarPrint(chr($40 + 63));						Count := Count - 63;					END;			END		ELSE			WHILE Count > 0 DO			BEGIN				CarPrint(C);				Count := count-1;			END;	END;END;PROCEDURE CheckFilter(VAR TheStr: Str255; KeepFlag: boolean);VAR	i, j: Integer;BEGIN	WITH GetCurSt^ DO	BEGIN		{•••• on coupe après un SEP x/y ••••}		i := Pos(SEP, TheStr);		IF (i > 0) & (i < Length(TheStr) - 1) THEN		BEGIN			TheStr[i] := chr(0);			TheStr[i + 1] := chr(0);		END;		i := 0;		j := 0;		WHILE i < Length(TheStr) DO		BEGIN			i := i + 1;			CASE theStr[i] OF				NUL,SUB:	{ caractères toujours filtrés }					i:=i+1;									ESC:	{ filtrage acquittements protocole }				IF FilterFlag THEN					CASE TheStr[i + 1] OF						'9': i := i + 2;						':': i := i + 3;						';': i := i + 4;					END;									ACC, SS2:	{ transcodage accents… }					BEGIN						j := j + 1;						IF (TheStr[i + 1] IN ['A'..'K']) THEN							BEGIN								CASE TheStr[i + 2] OF									'a':										CASE TheStr[i + 1] OF											'A': TheStr[j] := 'à';											'C': TheStr[j] := 'â';										END;									'e':										CASE TheStr[i + 1] OF											'A': TheStr[j] := 'è';											'B': TheStr[j] := 'é';											'C': TheStr[j] := 'ê';											'H': TheStr[j] := 'ë';										END;									'i':										CASE TheStr[i + 1] OF											'C': TheStr[j] := 'î';											'H': TheStr[j] := 'ï';										END;									'o':										CASE TheStr[i + 1] OF											'C': TheStr[j] := 'ô';										END;									'u':										CASE TheStr[i + 1] OF											'C': TheStr[j] := 'û';											'A': TheStr[j] := 'ù';										END;									'c':										CASE TheStr[i + 1] OF											'K': TheStr[j] := 'ç';										END;									OTHERWISE TheStr[j] := TheStr[i + 2];								END;								i := i + 2;							END						ELSE							BEGIN								CASE TheStr[i + 1] OF									'#': TheStr[j] := chr($A3);									'&': TheStr[j] := '#';									'''': TheStr[j] := chr($86);									',': TheStr[j] := chr($A7);									'-': TheStr[j] := chr($A8);									'.': TheStr[j] := chr($A9);									'/': TheStr[j] := chr($AA);									'0': TheStr[j] := chr($A1);									'1': TheStr[j] := chr($B1);									'8': TheStr[j] := chr($D6);									'<': TheStr[j] := chr($AB);									'=': TheStr[j] := chr($AC);									'>': TheStr[j] := chr($AD);									'j': TheStr[j] := chr($CE);									'z': TheStr[j] := chr($CF);									OTHERWISE TheStr[j] := ' ';								END;								i := i + 1;							END					END;	{ ACC, SS2 }								OTHERWISE					IF KeepFlag | (TheStr[i]>' ') THEN	{ car. conservés }					BEGIN						j := j + 1;						TheStr[j] := TheStr[i];					END;			END;	{ CASE }		END;	{ WHILE… }		TheStr[0] := chr(j);	END;	{ WITH… }END;(*PROCEDURE CheckFilter(VAR TheStr: Str255; KeepFlag: boolean);VAR	i, j: Integer;BEGIN	WITH GetCurSt^ DO		BEGIN			{•••• on coupe après un SEP x/y ••••}			i := Pos(SEP, TheStr);			IF (i > 0) & (i < Length(TheStr) - 1) THEN				BEGIN					TheStr[i] := chr(0);					TheStr[i + 1] := chr(0);				END;			i := 0;			j := 0;			WHILE i < Length(TheStr) DO				BEGIN					i := i + 1;					IF TheStr[i] >= ' ' THEN						BEGIN							j := j + 1;							TheStr[j] := TheStr[i];						END					ELSE IF TheStr[i] = SUB THEN						i := i + 1					ELSE IF (TheStr[i] = ESC) AND FilterFlag THEN						CASE TheStr[i + 1] OF							'9': i := i + 2;							':': i := i + 3;							';': i := i + 4;						END					ELSE IF (TheStr[i] = ACC) | (TheStr[i] = SS2) THEN						BEGIN							j := j + 1;							IF (TheStr[i + 1] IN ['A'..'K']) THEN								BEGIN									CASE TheStr[i + 2] OF										'a':											CASE TheStr[i + 1] OF												'A': TheStr[j] := 'à';												'C': TheStr[j] := 'â';											END;										'e':											CASE TheStr[i + 1] OF												'A': TheStr[j] := 'è';												'B': TheStr[j] := 'é';												'C': TheStr[j] := 'ê';												'H': TheStr[j] := 'ë';											END;										'i':											CASE TheStr[i + 1] OF												'C': TheStr[j] := 'î';												'H': TheStr[j] := 'ï';											END;										'o':											CASE TheStr[i + 1] OF												'C': TheStr[j] := 'ô';											END;										'u':											CASE TheStr[i + 1] OF												'C': TheStr[j] := 'û';												'A': TheStr[j] := 'ù';											END;										'c':											CASE TheStr[i + 1] OF												'K': TheStr[j] := 'ç';											END;										OTHERWISE TheStr[j] := TheStr[i + 2];									END;									i := i + 2;								END							ELSE								BEGIN									CASE TheStr[i + 1] OF										'#': TheStr[j] := chr($A3);										'&': TheStr[j] := '#';										'''': TheStr[j] := chr($86);										',': TheStr[j] := chr($A7);										'-': TheStr[j] := chr($A8);										'.': TheStr[j] := chr($A9);										'/': TheStr[j] := chr($AA);										'0': TheStr[j] := chr($A1);										'1': TheStr[j] := chr($B1);										'8': TheStr[j] := chr($D6);										'<': TheStr[j] := chr($AB);										'=': TheStr[j] := chr($AC);										'>': TheStr[j] := chr($AD);										'j': TheStr[j] := chr($CE);										'z': TheStr[j] := chr($CF);										OTHERWISE TheStr[j] := ' ';									END;									i := i + 1;								END						END					ELSE IF KeepFlag AND (TheStr[i] <> chr(0)) THEN { caractères de contrôles }						BEGIN							j := j + 1;							TheStr[j] := TheStr[i];						END;				END;			TheStr[0] := chr(j);		END;END;*)FUNCTION ReadCars(VAR Data: Str255; TimeLimit: Longint; NbCars: INTEGER): INTEGER;VAR	Err: OSErr;	TimeEnd: LONGINT;	ThePtr: TPtr;	Count: LONGINT;			PROCEDURE SerialRead;		VAR	PB: MyParamBlockRec;			SerSta: SerStaRec;				BEGIN		WITH GetCurSt^ DO		BEGIN			Err := SerGetBuf(SerRefIn,count);			IF Count > 0 THEN			BEGIN				SetIOWait;				WITH PB DO				BEGIN					TcbPtr := GetCurSt;					ioCompletion := @AsmCompletion;					ioRefNum := SerRefIn;					ioBuffer := @Data[1];					ioReqCount := NBCars;					ioPosMode := 0;				END;				Err := PBReadAsync(@PB.QLink);				YieldCpu;				Data[0] := CHR(PB.ioActCount);				IF HardType=SerialLink THEN	{ adaptation auto. de vitesse }				BEGIN					Err := SerStatus(SerRefIn,serSta);					IF serSta.cumErrs <> 0 THEN	{ changement de vitesse ? }					BEGIN						CASE SerSpeed OF							Baud1200:	{ 1200 -> 4800 }								SerSpeed := Baud4800;														Baud4800:	{ 4800 -> 1200 }								SerSpeed := Baud1200;						END;	{ CASE }						Err := SerReset(SerRefIn,SerSpeed+data7+stop10+evenparity);						Err := SerReset(SerRefOut,SerSpeed+data7+stop10+evenparity);					END;				END;							END			ELSE WaitDelay(6);		END;	{ WITH }	END;	{$IFC MUX}		PROCEDURE MuxRead;		VAR	Err					: OSErr;			XTimeLimit	: Longint;			xlink				: iBuffPtr;			nbRead			: INTEGER;				BEGIN		Data := '';		IF TimeLimit<0 THEN		BEGIN{$IFC DEBUG}DebugStr(Concatnum('TimeLimit<0 ! ',timelimit));{$ENDC}			TimeLimit := 3600;	{ on remet une minute par défaut… }		END;		XTimeLimit := TickCount + TimeLimit;		FlushBuffer;				WITH GetCurSt^ DO		REPEAT			{ on attends qu'il y ai des données dans le buffer }			IF (InBuffSt=NIL) | ((InBuffSt=InBuffEnd) & (WBuffFlag=TRUE)) THEN			BEGIN				DelayValue:=XTimeLimit-TickCount;	{ attente de données avec TimeOut }				IF DelayValue>0 THEN StatusWord:=WDataTCst;				YieldCpu;			END;			IF InBuffSt<>Nil THEN		{ il y a des données prêtes à lire ! }			BEGIN				nbRead := 0;				WITH InBuffSt^ DO				BEGIN					CASE NbCars OF						0: { lecture de tout ce qui est arrivé }							nbRead := length(InBuff);												-1:	{ lecture jusqu'à un SEP/xx ou un CR }						BEGIN							IF pos(char(13),InBuff)>0 THEN	{ on a trouvé un CR }								nbRead := pos(char(13),Inbuff)							ELSE								IF (pos(char(19),InBuff)>0) & (length(InBuff)>Pos(char(19),Inbuff)) THEN	{ on a trouvé un SEP/xx }									nbRead := Pos(char(19),Inbuff)+1;						END;							OTHERWISE							IF Length(InBuff)>=NbCars THEN	{ on a reçu assez de données }								nbRead := NbCars;					END;	{ CASE }										IF nbRead>0 THEN					BEGIN						BlockMoveData(@inBuff[1],@Data[1],nbRead);						Data[0] := chr(nbRead);						Delete(Inbuff,1,nbRead);					END;										IF length(InBuff)=0 THEN					{ on supprime ce buffer si il est vide }					BEGIN						xLink:=Link;										{ save pointer to next buffer }						Link:=InBuffPool^.Link;					{ link to first of free pool }						InBuffPool^.Link:=InBuffSt;			{ and become first of free pool }						InBuffSt:=xLink;								{ point to next buffer }						IF InBuffSt=Nil THEN InBuffEnd:=Nil;						InBuffNb:=InBuffNb-1;					END;				END;			END;		UNTIL (Conflag=FALSE) | (Data<>'') | ((TimeLimit<>0) & (TickCount>xTimeLimit));{$IFC DEBUG}IF Data='' THEN DebugStr(Concatnum('Data vide ! TimeLimit=',timelimit));{$ENDC}	END;{$ENDC}BEGIN		{ ReadCars }	Data := '';	TimeEnd := TickCount + TimeLimit;	ThePtr := GetCurSt;	WITH ThePtr^ DO	BEGIN		REPEAT			CASE HardType OF{$IFC ADSP}				ADSPLink:				BEGIN					IOCompFlag := 1;					StatusWord := ioWaitCst;					Infos^.pb.tcbPtr := ThePtr;					WITH Infos^.pb.ADSPPB DO						BEGIN							ioCompletion := ProcPtr(Ord4(@AsmCompletion));							csCode := dspStatus;						END;					Err := PBControlAsync(@Infos^.pb.ADSPPB);					YieldCpu;{$IFC DEBUG}IF Infos^.pb.ADSPPB.ioResult<>NoErr THEN	DebugNum ('ReadCars: ioResult=', Infos^.pb.ADSPPB.ioResult, FALSE);{$ENDC}					ConFlag := ConFlag & (Infos^.theCCB.State=sOpen) & (Infos^.pb.ADSPPB.ioResult=noErr);					IF Infos^.pb.ADSPPB.recvQPending > 0 THEN					BEGIN						IOCompFlag := 1;						StatusWord := ioWaitCst;						Infos^.pb.tcbPtr := ThePtr;						WITH Infos^.pb.ADSPPB DO							BEGIN								ioCompletion := ProcPtr(Ord4(@AsmCompletion));								csCode := dspRead;								reqCount := NbCars;								dataPtr := @Data[1];							END;						Err := PBControlAsync(@Infos^.pb.ADSPPB);						YieldCpu;												Data[0]:=chr(Infos^.pb.ADSPPB.ActCount);					END					ELSE WaitDelay(6);{$IFC DEBUG}IF Infos^.theCCB.UserFlags<>0 THENBEGIN	DebugNum ('ReadCars: userFlags=', Ord(Infos^.theCCB.UserFlags), FALSE);	Infos^.theCCB.UserFlags:=0;END;{$ENDC}				END;	{ ADSPLink }{$ENDC}					SerialLink: SerialRead;{$IFC MUX}				MuxAsm,MuxASMT: MuxRead;{$ENDC}{$IFC HAYES}				ModemHayes:				BEGIN					SerialRead;					IF Length(Data)<>0 THEN					BEGIN						IF Length(Data)>SZCall THEN							XCallDatas := copy(Data,Length(Data)-SZCall,SZCall)						ELSE							XCallDatas := copy(concat(XCallDatas,Data),1+length(data),SZCall);						IF (pos(concat('NO CARRIER',chr(13)),XCallDatas)<>0) OR (pos(concat('MANQUE PORTEUSE',chr(13)),XCallDatas)<>0) THEN						BEGIN{$IFC DEBUGHAYES}DebugStr('NO CARRIER');{$ENDC}							ConFlag := FALSE;							XCallDatas:='                          ';						END;					END;				END;{$ENDC}{$IFC PILOTE}				PiloteModem:				BEGIN					{ ### à faire ### }				END;{$ENDC}			END;	{ CASE }				UNTIL (Data <> '') | (TickCount>TimeEnd) | (Conflag=FALSE);		IF Data = '' THEN		BEGIN			ReadCars := ErrTime;{$IFC DEBUG}DebugStr('data vide dans Readcars');{$ENDC}		END		ELSE			ReadCars := NoErr;		{IF Data <>'' THEN CheckFilter(Data,FALSE);	}		IF ConFlag=FALSE THEN		BEGIN{$IFC DEBUG}DebugStr('Conflag=FALSE dans ReadCars');{$ENDC}			Error := ErrTime;			ReadCars := ErrTime;		END;	END;END;PROCEDURE ClearBuffer;BEGIN	WITH GetCurSt^ DO		IF OpPtr <> NIL THEN OpPtr^[0] := chr(0);END;PROCEDURE ComAsWrite(TheBuffer: Ptr; Count: Longint);VAR	Err: OSErr;	pb: MyParamblockrec;BEGIN	WITH GetCurSt^ DO		BEGIN			IF FrOutPut & (HardType <> ModemDrg) THEN EXIT(ComAsWrite);	{ FRONTSCREEN en cours }			SetIOWait;			WITH pb DO				BEGIN					tcbPtr := GetCurSt;					ioCompletion := @AsmCompletion;					ioRefNum := SerRefOut;					ioBuffer := TheBuffer;					ioReqCount := Count;					ioPosMode := 0;				END;			Err := PbWriteAsync(@pb.QLink);			YieldCpu;		END;END;PROCEDURE ComAsWriteStr(datas:PStr255);BEGIN	ComAsWrite(@datas^[1],length(Datas^));END;{$IFC MUX}PROCEDURE SendMuxFrame(TheBuffer: Ptr; count:LONGINT; FrameChar: Char);VAR	lePaquet: Str255;	i: INTEGER;	BEGIN	WITH GetCurSt^ DO	BEGIN		IF FrameChar IN [DataFrame,NextDataFrame,X29Frame,X29FrameNAMTEL,NextX29Frame] THEN		BEGIN			IF Count=0 THEN EXIT(SendMuxFrame);	{ trame de donnée vide !! }			REPEAT				IF (ConFlag=FALSE) | (FrOutput=TRUE) THEN EXIT(SendMuxFrame);				IF outputFlag=FALSE THEN WaitLong(30);				IF Connected=0 THEN EXIT(SendMuxFrame);	{ •18/2/94• déconnexion ? }			UNTIL OutputFlag=TRUE;		END;			CASE HardType OF			MuxASM:			BEGIN				lePaquet[0] := CHR(count+4);				lePaquet[1] := STX;				lePaquet[2] := FrameChar;				lePaquet[3] := CHR(LoWord(TheModem));				IF (theBuffer<>NIL) & (count>0) THEN BlockMoveData(theBuffer,@lePaquet[4],count);				lePaquet[count+4] := ETX;				{ transparence du protocole ASM/X pour les trames de données }				IF FrameChar IN [DataFrame,NextDataFrame,X29Frame,X29FrameNAMTEL,NextX29Frame] THEN				BEGIN					i := 4;					REPEAT						CASE ORD(lePaquet[i]) OF							2,3,16: { ajoute DLE devant STX/ETX/DLE }							BEGIN								Insert(DLE,lePaquet,i);								i := i+1;							END;						END;						i := i + 1;					UNTIL i>=Length(lePaquet);				END;			END;	{ MuxASM }						MuxASMT:			BEGIN{$IFC DEBUG}IF conflag=FALSE THEN	DebugStr(concat('SendMuxFrame: ',FrameChar,' cv=',str(TheModem)));{$ENDC}				lePaquet[0] := CHR(count+6);				lePaquet[1] := STX;				CASE FrameChar OF					DataFrame,NextDataFrame:	lePaquet[2] := DataFrame;					X29Frame,NextX29Frame:		lePaquet[2] := X29FrameNAMTEL;					OTHERWISE 								lePaquet[2] := FrameChar;				END;	{ CASE FrameChar }				lePaquet[3] := CHR(LoWord(TheModem));				lePaquet[4] := CHR(count DIV 128);				lePaquet[5] := CHR(count MOD 128);				IF (theBuffer<>NIL) & (count>0) THEN BlockMoveData(theBuffer,@lePaquet[6],count);				IF FrameChar IN [NextDataFrame, NextX29Frame] THEN					lePaquet[count+6] := ETB	{ bit M à 1 }				ELSE					lePaquet[count+6] := ETX;	{ bit M à 0 }			END;	{ MuxASMT }		END;	{ CASE HardType }	END;	{ WITH GetCurSt^ }	ComAsWrite(@lePaquet[1],length(lePaquet));END;{$ENDC}PROCEDURE Transp(thecount:INTEGER);	{ passe le minitel en transparence }VAR	theStr: STRING[3];BEGIN	IF (GetCurSt^.HardType=SerialLink) & (GetCurSt^.LocalMode = FALSE) THEN	BEGIN		theStr[0] := CHR($1B);		theStr[1] := CHR($3A);	{ PRO2 }		theStr[2] := CHR($66);	{ TRANSPARENCE }		theStr[3] := CHR(theCount);		ComAsWrite(@theStr[0],4);	END;END;PROCEDURE FlushBuffer;BEGIN	WITH GetCurSt^ DO	BEGIN		IF (OpPtr <> NIL) & (Length(OpPtr^) <> 0) THEN		BEGIN			CASE HardType OF			ModemDrg:				BEGIN					IF (ConFlag | FrOutPut) THEN SendControlFrame(Pstr255(OpPtr)^, '!');				END;					{$IFC ADSP}			ADSPLink:				BEGIN				END;	{$ENDC}				SerialLink, ModemHayes:				BEGIN					Transp(length(OpPtr^));					ComAsWriteStr(PStr255(OpPtr));				END;{$IFC MUX}							MuxAsm,MuxASMT:				IF ConFlag THEN SendMuxFrame(@OpPtr^[1],Length(PStr255(OpPtr)^),DataFrame);{$ENDC}{$IFC PILOTE}			PiloteModem:				BEGIN				END;{$ENDC}			END;	{ CASE }			OpPtr^[0] := chr(0); { on vide le buffer de sortie }		END;	END;END;PROCEDURE GetTheStatus(VAR Str2:Str255);	{ lit le status rendu par le modem ou Drg Télétel }VAR	Str1: Str255;BEGIN	WITH GetCurSt^ DO	BEGIN		IF HardType <> ModemDrg THEN EXIT(GetTheStatus);		Str1 := '';		PaqPrep(Str1, 'S');		AsRead(Str1, Str2, 30, False);		IF Str2[2]='F' THEN ConFlag := FALSE;	{ déconnecté ? }	END;END;PROCEDURE TestBuffer(count: INTEGER);	{ attend qu'il y ai de la place dans le buffer de DrgTélétel }VAR	Str:Str255;BEGIN	WITH GetCurSt^ DO	BEGIN		IF OpFlag>1024 THEN OpFlag := 0;		IF OpFlag<Count THEN		BEGIN			GetTheStatus(Str);			WHILE ConFlag & (Str[5] = '0') DO			BEGIN				WaitDelay(2*60);	{ 2 secondes d'attente }				GetTheStatus(Str);			END;			OpFlag := 128*(ORD(Str[5])-ORD('0'));		END		ELSE			OpFlag := OpFlag-count;	END;END;PROCEDURE SendControlFrame(VAR TheBuffer: Str255; ComChar: Char);{ uniquement appele pour HardType = ModemDrg }VAR	NbCar: Integer;BEGIN	IF GetCurSt^.HardType <> ModemDrg THEN EXIT(SendControlFrame);	NbCar := Length(TheBuffer);	IF ComChar <> '!' THEN FlushBuffer;	{ il reste peut-être des datas à envoyer }	{ on limite la taille de la trame }	IF Length(TheBuffer) > 251 THEN NbCar := 251;	BlockMoveData(Ptr(Ord4(@TheBuffer) + 1), Ptr(Ord4(@TheBuffer) + 3), NbCar);	TheBuffer[0] := chr(NbCar + 3);	TheBuffer[1] := chr($C0 + GetCurSt^.TheModem);	TheBuffer[2] := ComChar;	TheBuffer[NbCar + 3] := chr($80);	ComAsWriteStr(@TheBuffer);	TheBuffer := '';END;PROCEDURE SendCar(theCar:CHAR);	{ envoie un car. immédiatement sans transparence ! }VAR	Err: OsErr;BEGIN	WITH GetCurSt^ DO	CASE HardType OF	{$IFC ADSP}	ADSPLink:		BEGIN			IF (Conflag=FALSE) | (FrOutPut=TRUE) THEN EXIT(SendCar);			IOCompFlag := 1;			StatusWord := IOWaitCst;			Infos^.PB.tcbPtr := GetCurSt;			WITH Infos^.PB.ADSPPB DO			BEGIN				ioCompletion:=ProcPtr(Ord4(@AsmCompletion));				csCode := dspWrite;				dataPtr:=Ptr(ORD4(@TheCar)+1);				ReqCount:=1;				eom := 0;				flush := 1;			END;			Err:=PBControlAsync(@Infos^.PB.ADSPPB);			YieldCpu;		END;{$ENDC}	OTHERWISE		BEGIN			BuffDataFrame(Ptr(ORD4(@TheCar)+1),1);			FlushBuffer;		END;			END;	{ CASE}END;PROCEDURE BuffDataFrame(TheBuffer: Ptr; Count: Longint);VAR	Err: OsErr;		PROCEDURE SendBuffer(PROCEDURE SendIt(thePtr:Ptr; long:LONGINT; more: BOOLEAN); maxCount:INTEGER);		VAR		i: INTEGER;		BEGIN		WITH GetCurSt^ DO		BEGIN			i := Length(OpPtr^);			IF Count + i < maxCount THEN				BEGIN { on ajoute au buffer }					BlockMoveData(TheBuffer, Ptr(Ord4(OpPtr) + i + 1), Count);					OpPtr^[0] := chr(i + Count);				END			ELSE				BEGIN { on envoie maxCount car. }					BlockMoveData(TheBuffer, Ptr(Ord4(OpPtr) + i + 1), maxCount - i);					OpPtr^[0] := chr(maxCount);					SendIt(@OpPtr^[1],maxCount,TRUE);					IF Count > maxCount - i THEN	{ on met le reste dans le buffer }					BEGIN						BlockMoveData(Ptr(Ord4(TheBuffer) + maxCount - i), @OpPtr^[1], Count - (maxCount - i));						OpPtr^[0] := chr(Count - (maxCount - i));					END					ELSE						OpPtr^[0] := CHR(0);				END;		END;	{ WITH GetCurSt^ }	END;	{ SendBuffer }		PROCEDURE SendModem;		VAR		MyPaquet: Str255;		i, ToWrite: Integer;		BEGIN			WITH GetCurSt^ DO			BEGIN				IF HardType <> ModemDrg THEN { c'est bien une voie modem ? }					EXIT(BuffDataFrame);								{ pas connecté et pas de FrontScreen… on sort !! }				IF (ConFlag=FALSE) & (FrOutPut=FALSE) THEN				BEGIN					OpPtr^[0]:=Chr(0);					EXIT(BuffDataFrame);				END;					IF OpPtr <> NIL THEN					BEGIN						i := Length(OpPtr^);						IF Count + i < 128 THEN							BEGIN { on ajoute au buffer }								BlockMoveData(TheBuffer, Ptr(Ord4(OpPtr) + i + 1), Count);								OpPtr^[0] := chr(i + Count);							END						ELSE							BEGIN { on envoie 128 car. }								BlockMoveData(TheBuffer, Ptr(Ord4(OpPtr) + i + 1), 128 - i);								OpPtr^[0] := chr(128);								IF GetCurSt^.IsTeletel & (OutputFlag=FALSE) & ConFlag THEN TestBuffer(128);								IF (ConFlag | FrOutPut) THEN SendControlFrame(Pstr255(OpPtr)^, '!');								IF Count > 128 - i THEN								BEGIN { on met le reste dans le buffer }									BlockMoveData(Ptr(Ord4(TheBuffer) + 128 - i), @OpPtr^[1], Count - (128 - i));									OpPtr^[0] := chr(Count - (128 - i));								END								ELSE { sinon raz du buffer }									OpPtr^[0] := CHR(0);							END;					END				ELSE					BEGIN						BlockMoveData(TheBuffer, Ptr(Ord4(@MyPaquet) + 1), Count);						MyPaquet[0] := chr(Count);						IF GetCurSt^.IsTeletel & (OutputFlag=FALSE) & Conflag THEN TestBuffer(count);						IF (ConFlag | FrOutPut) THEN SendControlFrame(MyPaquet, '!');					END;			END;			{ !!!!!!!!!!!!!!!! PROTECTION !!!!!!!!!!!!!!! }		WITH GetCurSt^ DO			BEGIN				IF TheModem = 0 THEN					BEGIN						ProtCount := ProtCount - 1;						IF ProtCount < 0 THEN							BEGIN								ProtCount := 2000 - abs(TickCount) MOD 700;								WordAlign;							END;					END;			END;	END;{$IFC ADSP}	PROCEDURE SendADSP(theBuffer:Ptr; count:LONGINT; more: BOOLEAN);		BEGIN		WITH GetCurSt^ DO		BEGIN			IF FrOutPut | (conFlag=FALSE) THEN EXIT(SendADSP);			SetIOWait;			Infos^.PB.tcbPtr := GetCurSt;			WITH Infos^.PB.ADSPPB DO			BEGIN				ioCompletion := @AsmCompletion;				csCode := dspWrite;				dataPtr:=TheBuffer;				ReqCount:=Count;				eom := 0;				flush := 0;			END;			Err:=PBControl(@Infos^.PB.ADSPPB,TRUE);			YieldCpu;		END;	END;{$ENDC}	PROCEDURE SendSerial(theBuffer:Ptr; count:LONGINT; more: BOOLEAN);		BEGIN		IF GetCurSt^.FrOutPut THEN EXIT(SendSerial);		Transp(count);		ComAsWrite(TheBuffer, count);	END;{$IFC MUX}	PROCEDURE SendMuxAsm(theBuffer:Ptr; count:LONGINT; more: BOOLEAN);		VAR		TypePack: CHAR;			BEGIN		IF Byte(GetCurSt^.TrPrintFlag)=2 THEN			typePack := X29Frame				{ envoi trame X29 ou VideoPad (bitQ=1) }		ELSE			IF more & (count=128) THEN		{ 2/1/96 - données à suivre uniquement si on a un paquet plein ! }				TypePack := NextDataFrame	{ données à suivre… }			ELSE				TypePack := DataFrame;		{ données "normales" }						SendMuxFrame(theBuffer,count,typePack);	END;{$ENDC}{$IFC PILOTE}		PROCEDURE SendPilote(theBuffer: Ptr; count: LONGINT; more: BOOLEAN);		VAR		McErr: tsMcErr;			BEGIN		REPEAT			IF count>128 THEN			BEGIN				McErr := _MCWriteTrame (HiWord(GetCurSt^.ModNumber), prepTramePilote(DataFrame,thebuffer,128));				count := count-128;				theBuffer := Ptr(ORD4(theBuffer)+128);			END			ELSE			BEGIN				McErr := _MCWriteTrame (HiWord(GetCurSt^.ModNumber), prepTramePilote(DataFrame,thebuffer,count));				count := 0;			END;		UNTIL count=0;	END;{$ENDC}		BEGIN	{ BuffDataFrame }	WITH GetCurSt^ DO	BEGIN		IF  TaskNumber > MaxTasks THEN { c'est bien une voie de comm. ? }			EXIT(BuffDataFrame);		{ pas connecté et pas de FrontScreen… on sort !! }		IF (ConFlag=FALSE) & (FrOutPut=FALSE) THEN		BEGIN			IF OpPtr<>NIL THEN OpPtr^[0]:=Chr(0);			EXIT(BuffDataFrame);		END;			IF OpPtr<>NIL THEN		CASE HardType OF			ModemDrg:		SendModem;{$IFC ADSP}			ADSPLink:		SendADSP(theBuffer,count, FALSE);	{ ADSP s'occupe de la bufferisation ! }{$ENDC}			SerialLink,ModemHayes:	SendBuffer(SendSerial,128);{$IFC MUX}						MuxAsm,MuxASMT:				IF Byte(TrPrintFlag)=2 THEN	{ données X29 -> on envoie immédiatement }					SendMuxAsm(theBuffer,count, FALSE)				ELSE					SendBuffer(SendMuxAsm,128);{$ENDC}		END		ELSE	{ OpPtr=NIL donc pas de bufferisation }		CASE HardType OF			ModemDrg:				SendModem;			{$IFC ADSP}			ADSPLink:				SendADSP(theBuffer,count, FALSE);{$ENDC}				SerialLink,ModemHayes:				SendSerial(theBuffer,count, FALSE);{$IFC MUX}						MuxAsm,MuxASMT:				SendMuxAsm(theBuffer,count, FALSE);{$ENDC}{$IFC PILOTE}			PiloteModem:				SendPilote(theBuffer,count, FALSE);{$ENDC}		END;	END;	{ WITH GetCurSt^ }END;PROCEDURE PaqPrep(VAR TheBuffer: Str255; ComChar: Char);VAR	NbCar: Integer;BEGIN	NbCar := Length(TheBuffer);	IF NbCar > 251 THEN NbCar := 251;	BlockMoveData(Ptr(Ord4(@TheBuffer) + 1), Ptr(Ord4(@TheBuffer) + 3), NbCar);	TheBuffer[1] := chr($C0 + GetCurSt^.TheModem);	TheBuffer[2] := ComChar;	TheBuffer[NbCar + 3] := chr($80);	TheBuffer[0] := chr(NbCar + 3);END;PROCEDURE PrintScreen(VAR Str1: Str255);LABEL 0;CONST	MaxSize = 512;	VAR	Err: OSErr;	ThePtr: TPtr;	pb: MyParamblockrec;	Qpb: TQERec;	FileRef: Integer;	FilePos, FileLength, Count: Longint;	Paq: Str255;	FileType: OsType;	{ on temporise pour 1k en RTC }	LTime, LLen: Longint;BEGIN	{ FlushBuffer; }	ThePtr := GetCurSt;	LLen := 0;	LTime := TickCount;	WITH ThePtr^ DO		BEGIN			{ •••• GetInfo pour connaître le type de fichier •••• }			SetIOWait;			WITH pb DO				BEGIN					tcbPtr := ThePtr;					ioCompletion := ProcPtr(Ord4(@AsmCompletion));					ioNamePtr := @Str1;					ioVRefNum := 0;					ioVersNum := 0;					ioFDirIndex := 0;				END;			WITH Qpb DO				BEGIN					ECode := ReqGetFInfo;					EParam1 := @pb;				END;			TEnQueue(FileQ, Qpb);			Error := pb.ioResult;			IF Error <> NoErr THEN EXIT(PrintScreen);			FileType := pb.ioFlFndrInfo.fdType; { Type du fichier }			FileLength := pb.ioFlLgLen; { Longueur du fichier }			{ •••• On ouvre le fichier •••• }			SetIOWait;			WITH pb DO				BEGIN					tcbPtr := ThePtr;					ioCompletion := ProcPtr(Ord4(@AsmCompletion));					ioNamePtr := @Str1;					ioVRefNum := 0;					ioVersNum := 0;					ioPermssn := FsRdWrPerm;					ioMisc := NIL;				END;			WITH Qpb DO				BEGIN					ECode := ReqOpen;					EParam1 := @pb;					EMisc := 0;				END;			TEnQueue(FileQ, Qpb);			Error := pb.ioResult;			IF Error <> NoErr THEN				BEGIN					EXIT(PrintScreen);				END;			FileRef := Qpb.EMisc;	{ refNum interne de l'écran ouvert }			IF FileType = 'VCOD' THEN { •••• Format "VCOD" •••• }				BEGIN					SetIOWait;					WITH pb DO						BEGIN							tcbPtr := ThePtr;							ioCompletion := ProcPtr(Ord4(@AsmCompletion));							ioBuffer := @FileLength;							ioReqCount := 4;							ioPosMode := fsFromStart;							ioPosOffset := 0;						END;					WITH Qpb DO						BEGIN							ECode := ReqRead;							EParam1 := @pb;							EMisc := FileRef;						END;					TEnQueue(FileQ, Qpb);					Error := pb.ioResult;					IF Error <> NoErr THEN GOTO 0;				END { Format VCOD }			ELSE				pb.ioPosOffset := 0;	{ formet VTEX et autres… on part du début }							IF IsTeletel THEN			BEGIN				OutputFlag := FALSE;	{ testbuffer pour DrgTélétel }				opFlag := 0;			END;						{ READ and SEND datas }			REPEAT				FilePos := pb.ioPosOffset;				IF FileLength > 128 THEN					Count := 128				ELSE					Count := FileLength;				FileLength := FileLength - Count;				SetIOWait;				WITH pb DO					BEGIN						tcbPtr := ThePtr;						ioCompletion := ProcPtr(Ord4(@AsmCompletion));						ioBuffer := Ptr(Ord4(@Paq) + 1);						ioReqCount := Count;						ioPosMode := fsFromStart;						ioPosOffset := FilePos;					END;				WITH Qpb DO					BEGIN						ECode := ReqRead;						EParam1 := @pb;						EMisc := FileRef;					END;				TEnQueue(FileQ, Qpb);								Error := pb.ioResult;				IF Error <> NoErr THEN GOTO 0;								Paq[0] := chr(pb.ioActCount);				BuffDataFrame(Ptr(Ord4(@Paq) + 1), Length(Paq));								IF (HardType=ModemDrg) & (IsTeletel=FALSE) THEN				BEGIN					IF LLen > MaxSize THEN						BEGIN							WaitDelay((MaxSize DIV 2) - abs(TickCount - LTime));							LLen := 0;							LTime := TickCount;						END					ELSE						LLen := LLen + Count;				END;			UNTIL (FileLength = 0) | (pb.ioActCount = 0);			{ CLOSE }		0:			IF IsTeletel THEN OutputFlag := TRUE;	{ plus de testBuffer sur DrgTélétel }						SetIOWait;			WITH pb DO				BEGIN					tcbPtr := ThePtr;					ioCompletion := ProcPtr(Ord4(@AsmCompletion));				END;			WITH Qpb DO				BEGIN					ECode := ReqClose;					EParam1 := @pb;					EMisc := FileRef;				END;			TEnQueue(FileQ, Qpb);			Error := pb.ioResult;		END;END;PROCEDURE SEnqueue(ToVoie: Longint; VAR Str1: Str255);VAR	ThePtr: TPtr;	i: Integer;BEGIN	ThePtr := GetCurSt;	IF NOT (((ToVoie >= 1) AND (ToVoie <= MaxTasks)) OR ((ToVoie >= 256) AND		 (ToVoie < 256 + MaxAux))) THEN		BEGIN			ThePtr^.Error := ErrQTx;			EXIT(SEnqueue);		END;	IF ToVoie >= 256 THEN ToVoie := MaxTasks + ToVoie - 255;	WITH ThePtr^ DO		WITH TheMQueues^[ToVoie] DO			IF MPtr = NIL THEN				BEGIN					Error := ErrQTx;				END			ELSE { la tache existe }			IF (MFirst = MFree) AND (Mnb > 0) THEN				BEGIN { mais plus de place...}					Error := ErrQFull;				END			ELSE				BEGIN { peut etre assez de place }					IF MFree > MFirst THEN						i := MMax - (MFree - MFirst) + 1					ELSE						i := MFirst - MFree;					IF Mnb = 0 THEN i := MMax;					IF i <= Length(Str1) THEN						BEGIN							Error := ErrQFull;							EXIT(SEnqueue);						END;					FOR i := 0 TO Length(Str1) DO						BEGIN							MPtr^[MFree] := Str1[i];							MFree := MFree + 1;							IF MFree = MMax THEN MFree := 0;						END;					Mnb := Mnb + 1;				END;END;PROCEDURE SDequeue(VAR Str1: Str255);VAR	ThePtr: TPtr;	i, j: Integer;	TheVoie: Integer;BEGIN	ThePtr := GetCurSt;	TheVoie := ThePtr^.TaskNumber;	IF TheVoie >= 256 THEN TheVoie := MaxTasks + TheVoie - 255;	WITH ThePtr^ DO		WITH TheMQueues^[TheVoie] DO			IF Mnb = 0 THEN				BEGIN					Error := ErrQEmpty;					Str1 := '';				END			ELSE {il y a au moins un message }				BEGIN					Str1[0] := MPtr^[MFirst];					i := MFirst + 1;					j := 0;					WHILE j < Length(Str1) DO						BEGIN							IF i = MMax THEN i := 0;							j := j + 1;							Str1[j] := MPtr^[i];							i := i + 1;						END;					IF i = MMax THEN i := 0;					MFirst := i;					Mnb := Mnb - 1;				END;END;PROCEDURE ResetQueue;VAR	ThePtr: TPtr;	TheVoie: Integer;BEGIN	ThePtr := GetCurSt;	TheVoie := ThePtr^.TaskNumber;	IF TheVoie >= 256 THEN TheVoie := MaxTasks + TheVoie - 255;	WITH ThePtr^ DO		WITH TheMQueues^[TheVoie] DO			BEGIN				MFirst := 0;				MFree := 0;				Mnb := 0;			END;END;FUNCTION QueueSize: Longint;VAR	ThePtr: TPtr;	TheVoie: Integer;BEGIN	ThePtr := GetCurSt;	TheVoie := ThePtr^.TaskNumber;	IF TheVoie >= 256 THEN TheVoie := MaxTasks + TheVoie - 255;	WITH ThePtr^ DO WITH TheMQueues^[TheVoie] DO QueueSize := Mnb;END;FUNCTION Upc2(Str1: Str255): Str255;BEGIN	UpperString(Str1, True);	Upc2 := Str1;END;FUNCTION DSpcR2(Str1: Str255): Str255;BEGIN	WHILE (Length(Str1) > 0) AND (Str1[Length(Str1)] = ' ') DO		Str1[0] := chr(Ord(Str1[0]) - 1);	DSpcR2 := Str1;END;FUNCTION DSpcL2(Str1: Str255): Str255;BEGIN	WHILE (Length(Str1) > 0) AND (Str1[1] = ' ') DO Delete(Str1, 1, 1);	DSpcL2 := Str1;END;FUNCTION Similarity(VAR Str1, Str2: Str255): Longint;BEGIN	Similarity := Longint(DSpcR2(DSpcL2(Upc2(Str1))) = DSpcR2(DSpcL2(Upc2(Str2))));END;PROCEDURE SwapBits(VAR K: Longint; Bit1, Bit2: Integer);VAR	FBit1, FBit2: boolean;BEGIN	FBit1 := BTst(K, Bit1);	FBit2 := BTst(K, Bit2);	IF FBit1 THEN		BSET(K, Bit2)	ELSE		BCLR(K, Bit2);	IF FBit2 THEN		BSET(K, Bit1)	ELSE		BCLR(K, Bit1);END;PROCEDURE WordAlign;LABEL 0;VAR	Key, keyB, IdC: Longint;	Str1, Str2: Str255;	i: Integer;	ThePtr: TPtr;	NbRetrys: Integer; { 5 tentatives maximum }	InBuff: Str255; { buffer d'entrée }	WBuffFlag: boolean; { vrai si remplissage du buffer en cours }BEGIN	ThePtr := GetCurSt;	ThePtr^.Error := 0;	IF ThePtr^.HardType <> ModemDrg THEN EXIT(WordAlign);		NbRetrys := 0;	REPEAT		{break;}		NbRetrys := NbRetrys + 1;		{ test du numero de serie du modem }		Key := BXOR(BRotL(TickCount, BAnd(TickCount, $0F)), $47DA2E51);		Str1 := '@@@@@@@@';		FOR i := 1 TO 8 DO Str1[i] := chr($40 + BAnd(BSR(Key, 32 - (i * 4)), $0F));		PaqPrep(Str1, '0');		AsRead(Str1, Str2, 600, False);		{ test erreur }		IF ThePtr^.Error <> 0 THEN GOTO 0;		keyB := 0;		FOR i := 1 TO 8 DO			keyB := BOR(keyB, BSL(BAnd(Ord(Str2[1 + i]), $0F), 32 - (i * 4)));		{ keyB est la clé de cryptage }		IdC := 0;		FOR i := 1 TO 8 DO			IdC := BOR(IdC, BSL(BAnd(Ord(Str2[9 + i]), $0F), 32 - (i * 4)));		{ Idc est crypte avec ma cle }		{ je triture ma clé }		Key := BXOR(Key, $A720351D);		i := BAnd(BSR(Key, 16), 31) + 1;		Key := BRotL(Key, i);		SwapBits(Key, 3, 15);		SwapBits(Key, 7, 13);		SwapBits(Key, 10, 28);		SwapBits(Key, 22, 31);		IdC := BXOR(IdC, Key);		{Break;}		IF IdC <> ThePtr^.RTId THEN ThePtr^.Error := 1;		IF ThePtr^.Error <> 0 THEN GOTO 0;		{ j'encrypte avec la clé qu'on m'a donné }		Key := keyB;		{ je triture ma clé }		Key := BXOR(Key, $A720351D);		i := BAnd(BSR(Key, 16), 31) + 1;		Key := BRotL(Key, i);		SwapBits(Key, 3, 15);		SwapBits(Key, 7, 13);		SwapBits(Key, 10, 28);		SwapBits(Key, 22, 31);		Key := BXOR(ThePtr^.RTId, Key);		Str1 := '@@@@@@@@';		FOR i := 1 TO 8 DO Str1[i] := chr($40 + BAnd(BSR(Key, 32 - (i * 4)), $0F));		SendControlFrame(Str1, '2');		ThePtr^.Error := 0;	0:	UNTIL (ThePtr^.Error = 0) OR (NbRetrys >= 5);	{IF ThePtr^.Error <> 0 THEN DebugStr('Pb de protection;g');}END;PROCEDURE CarPrint(C: Char);BEGIN	IF ORD(c)<128 THEN BuffDataFrame(Ptr(Ord4(@C) + 1), 1);END;PROCEDURE NumPrint(Num1: Longint);VAR	Str1: Str255;BEGIN	{•••• Bouge la mémoire !!!! ••••}	NumToString(Num1, Str1);	BuffDataFrame(Ptr(Ord4(@Str1) + 1), Length(Str1));END;PROCEDURE StrPrint(VAR Str1: Str255);VAR	Str2: Str255;	i, j, xi: Integer;	termine: boolean;	LastCar: Char;BEGIN		{ PROCEDURE StrPrint }	CASE Byte(GetCurSt^.TrPrintFlag) OF		0,3:	{ print normal (transcodage et répet) ou juste transcodage }		BEGIN			{ compactage de la chaine Str1 -> Str2 }			i := 0;			j := 0;			WHILE i < Length(Str1) DO			BEGIN				i := i + 1;				j := j + 1;				{ on checke les accents }				LastCar := Str1[i];				IF Ord(LastCar) > 127 THEN				CASE LastCar OF					chr(130):						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'K';							Str2[j + 2] := 'C';							j := j + 2						END;					chr(131):						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'B';							Str2[j + 2] := 'E';							j := j + 2						END;					'à':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'A';							Str2[j + 2] := 'a';							j := j + 2						END;					'â':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'C';							Str2[j + 2] := 'a';							j := j + 2						END;					'ä':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'H';							Str2[j + 2] := 'a';							j := j + 2						END;					'ç':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'K';							Str2[j + 2] := 'c';							j := j + 2						END;					'é':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'B';							Str2[j + 2] := 'e';							j := j + 2						END;					'è':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'A';							Str2[j + 2] := 'e';							j := j + 2						END;					'ê':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'C';							Str2[j + 2] := 'e';							j := j + 2						END;					'ë':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'H';							Str2[j + 2] := 'e';							j := j + 2						END;					'î':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'C';							Str2[j + 2] := 'i';							j := j + 2						END;					'ï':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'H';							Str2[j + 2] := 'i';							j := j + 2						END;					'ô':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'C';							Str2[j + 2] := 'o';							j := j + 2						END;					'ù':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'A';							Str2[j + 2] := 'u';							j := j + 2						END;					'ü':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'H';							Str2[j + 2] := 'u';							j := j + 2						END;					'û':						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'C';							Str2[j + 2] := 'u';							j := j + 2						END;					chr(163): {£}						BEGIN							Str2[j] := SS2;							Str2[j + 1] := '#';							j := j + 1						END;					chr(207): {œ}						BEGIN							Str2[j] := SS2;							Str2[j + 1] := 'z';							j := j + 1						END;					OTHERWISE Str2[j] := ' ';				END	{ CASE }				ELSE					Str2[j] := LastCar;								{ on regarde le nombre de cars identiques }				xi := i;				termine := (Byte(GetCurSt^.TrPrintFlag)<>0);	{ on ne cherche pas les repet. si TrPrint=3}				WHILE (i < Length(Str1)) AND (NOT termine) DO				BEGIN					IF (Str1[i + 1] = LastCar) & (LastCar>=' ') THEN						i := i + 1					ELSE						termine := True;				END;	{ WHILE }							{ le nombre de cars repeter est egal a i-xi }				xi := i - xi;				IF (xi > 2) OR ((Ord(LastCar) > 127) AND (xi > 0)) THEN				BEGIN					IF xi < 64 THEN					BEGIN						Str2[j + 1] := REP;						Str2[j + 2] := chr($40 + xi);						j := j + 2;					END					ELSE					BEGIN						Str2[j + 1] := REP;						Str2[j + 2] := chr($40 + 63);						j := j + 2;						i := i - xi + 63;						CYCLE;					END;				END				ELSE					{ on recopie les 2 cars max }					IF xi > 0 THEN					BEGIN						Str2[j + 1] := LastCar;						IF xi > 1 THEN Str2[j + 2] := LastCar;						j := j + xi;					END;					{ on envoie Str2 si supérieur ou egal a 128 cars }				IF j >= 128 THEN				BEGIN					{ on met a jour la longueur de la chaine resultante }					Str2[0] := chr(j);					{ envoi de la chaine }					BuffDataFrame(Ptr(Ord4(@Str2) + 1), Length(Str2));					j := 0;				END;			END;	{ WHILE }				IF j > 0 THEN			BEGIN				{ on met a jour la longueur de la chaine resultante }				Str2[0] := chr(j);				{ envoi de la chaine }				BuffDataFrame(Ptr(Ord4(@Str2) + 1), Length(Str2));			END;				END;	{ print normal }				1:	{ print transparent -> adaptation 80col }		BEGIN			{ envoi de la chaine }			Str2 := Str1;			FOR i := 1 TO Length(Str2) DO			BEGIN				IF Ord(Str2[i]) > 127 THEN	{ filtrage pour le 80col }				CASE Str2[i] OF					'é', 'è', 'ê', 'ë': Str2[i] := 'e';					'à', 'â', 'ä': Str2[i] := 'a';					'î', 'ï': Str2[i] := 'i';					'ô', 'ö': Str2[i] := 'o';					'ù', 'û', 'ü': Str2[i] := 'u';					'ç': Str2[i] := 'c';					OTHERWISE Str2[i] := ' ';				END;			END;				BuffDataFrame(Ptr(Ord4(@Str2) + 1), Length(Str2));			EXIT(StrPrint);		END;			2:	{ envoi de commande X29/Vidéopad, aucune transformation ! }		BEGIN			BuffDataFrame(@Str1[1], Length(Str1));		END;	END; { CASE }END;	{ PROCEDURE StrPrint }FUNCTION Zinput(VAR Str1: Str255;								PosX, PosY, MaxLen, Attribs: Integer;								MaxTime: Longint;								BackCar: Char;								ReqInput: boolean): Integer;VAR	termine: boolean;	ThePtr: TPtr;	NbCar: Integer;	i: Integer;		PROCEDURE ZoneModem;		VAR	Requete: Str255;			FUNCTION GetVChar: Integer;	{ trouve le code erreur correspondant à la touche }			VAR			Count: Longint;			Err: OSErr;			BEGIN			IF Length(Str1) >= 2 THEN				BEGIN					IF Str1[Length(Str1) - 1] = SEP THEN						BEGIN							CASE Str1[Length(Str1)] OF								'A': GetVChar := CEnvoi;								'B': GetVChar := CRetour;								'C': GetVChar := CRepetition;								'D': GetVChar := CGuide;								'E': GetVChar := CAnnulation;								'F': GetVChar := CSommaire;								'G': GetVChar := CCorrection;								'H': GetVChar := CSuite;								OTHERWISE									BEGIN										GetVChar := CAutre;										EXIT(GetVChar);									END							END;							Delete(Str1, Length(Str1) - 1, 2);						END					ELSE						BEGIN							CASE Str1[Length(Str1)] OF								RC: GetVChar := CEnvoi;								LF: GetVChar := CIgnore;								OTHERWISE									BEGIN										GetVChar := CAutre;										EXIT(GetVChar);									END							END;							Delete(Str1, Length(Str1), 1);						END;				END			ELSE				BEGIN					CASE Str1[Length(Str1)] OF						chr(13): GetVChar := CEnvoi;						LF: GetVChar := CIgnore;						OTHERWISE							BEGIN								GetVChar := CAutre;								EXIT(GetVChar);							END					END;					Delete(Str1, Length(Str1), 1);				END;		END;	BEGIN		{ PROCEDURE ZoneModem }		Attribs := BAND(Attribs,255);	{ on vire les nouveaux flags }		WITH ThePtr^ DO		IF NOT ReqInput THEN			BEGIN { saisie de zone }				{ envoyer la commande de saisie de zone }				Requete := 'XYLLAAER';				IF MaxLen > 240 THEN MaxLen := 240;				IF NOT(PosX IN [0..64]) THEN PosX := 0;				IF NOT(PosY IN [0..64]) THEN PosY := 0;				Requete[1] := chr($40 + PosX);				Requete[2] := chr($40 + PosY);				Requete[3] := chr($40 + MaxLen DIV 16);				Requete[4] := chr($40 + MaxLen MOD 16);				Requete[5] := chr($40 + Attribs DIV 16);				Requete[6] := chr($40 + Attribs MOD 16);				IF EchoFlag THEN					Requete[7] := chr($7F)		{ echo normal }				ELSE					Requete[7] := CarMask;		{ '*' }									IF EchoFlag THEN					Requete[8] := CarZone		{ '.' }				ELSE					Requete[8] := CarZoneMask;	{ 'X' }				NbCar := Length(Str1);				IF NbCar > 240 THEN NbCar := 240;					{•••• bug des accents pour les modems ••••}				{FOR i := 1 TO NbCar DO ReQuete[i+8] := chr(9);}				BlockMoveData(Ptr(Ord4(@Str1) + 1), Ptr(Ord4(@Requete) + 9), NbCar);					Requete[0] := chr(NbCar + Length(Requete));				SendControlFrame(Requete, 'Z');			END		ELSE { saisie Input }			BEGIN				{ envoyer la commande d'input }				Requete := 'E';				IF EchoFlag THEN					Requete[1] := chr($7F)				ELSE					Requete[1] := CarMask;				SendControlFrame(Requete, 'U');			END;			{ preparer la requete de demande d'etat de saisie }		Requete := '';		PaqPrep(Requete, '?');			WITH ThePtr^ DO			BEGIN				termine := False;				REPEAT					AsRead(Requete, Str1, MaxTime, True);					IF Error <> 0 THEN						termine := True					ELSE						BEGIN							Error := GetVChar;							IF Error <> CIgnore THEN termine := True;						END;				UNTIL termine;				CheckFilter(Str1, True);			END;	END;	{ PROCEDURE ZoneModem }	PROCEDURE DrawZone(total: BOOLEAN);			PROCEDURE LocateZone;			BEGIN			Locate(PosX + (PosY+Length(Str1)-1) DIV 40, 1+(PosY + Length(Str1)-1) MOD 40);			i := BAnd(Attribs, 7);			IF i <> 7 THEN sForeColor(i);			i := BAnd(BSR(Attribs, 4), 1);			IF i <> 0 THEN Flash(i);			i := BAnd(BSR(Attribs, 5), 1);			IF i <> 0 THEN Inverse(i);			i := BAnd(BSR(Attribs, 6), 3);			IF i <> 0 THEN SSize(i);		END;	BEGIN		{ PROCEDURE DrawZone }		LocateZone;		IF Total THEN		BEGIN			PrintRep(CarZone,MaxLen-length(Str1));			LocateZone;		END;		IF ThePtr^.EchoFlag=FALSE THEN		{ 2/04/96 }			CarPrint(SO);	{ on passe en graphique pour empêcher l'écho }		IF BAND(Attribs,8)=0 THEN SendCar(Con);	END;		{ PROCEDURE DrawZone }			PROCEDURE ZoneNormal;		VAR	theCar: CHAR;		i: INTEGER;		Err: OsErr;		SepFlag: BOOLEAN;	{ indique si on vient de recevoir un SEP }		EscFlag: BOOLEAN;	{ indique si on vient de recevoir un ESC }		theCars: Str255;		nbTrans: INTEGER;	{ nombre de car. à ne pas renvoyer en echo }		PROCEDURE DoCorrection;				BEGIN			WITH ThePtr^ DO			IF MaxLen =0 THEN				Error := CCorrection			ELSE				IF Str1<>'' THEN				BEGIN					SendCar(BS);					SendCar(CarZone);					SendCar(BS);					IF (length(Str1) > 2) & ((Str1[length(Str1)-2]=SS2) | (Str1[length(Str1)-2]=ACC)) THEN						Str1[0] := CHR(ORD(Str1[0])-3)					ELSE						Str1[0] := PRED(Str1[0]);				END;		END;		PROCEDURE DoAnnulation;				BEGIN			WITH ThePtr^ DO			IF MaxLen = 0 THEN				Error := CAnnulation			ELSE			BEGIN				Str1 := '';				DrawZone(TRUE);			END;		END;					BEGIN		{ PROCEDURE ZoneNormal }		WITH ThePtr^ DO		BEGIN			DrawZone(FALSE);			SepFlag := FALSE;			EscFlag := FALSE;			Error := NoErr;			FlushBuffer;			nbTrans := 0;						REPEAT				IF Connected<>0 THEN				BEGIN					theCars := '';					theCar := Chr(0);					Err := ReadCars(theCars,MaxTime,1);					IF theCars<>'' THEN theCar := theCars[1];					CASE Err OF						ErrTime:							BEGIN{$IFC DEBUG}DebugStr('ErrTime dans ZoneNormal');{$ENDC}								Error := ErrTime;								Termine := TRUE;							END;													NoErr:							BEGIN								IF SepFlag THEN	{ SEP/xx }								BEGIN									CASE theCar OF									'A': Error := CEnvoi;									'B': Error := CRetour;									'C': Error := CRepetition;									'D': Error := CGuide;									'E': DoAnnulation;									'F': Error := CSommaire;									'G': DoCorrection;									'H': Error := CSuite;									'I','S':	{ Shift-Connexion ou Déconnexion sur port série }										IF HardType = SerialLink THEN										BEGIN											SendCar(cOff);											Disconnect;											Error := ErrTime;										END;									END;									SepFlag := FALSE;								END								ELSE								BEGIN									SepFlag := FALSE;									{ filtrage des réponses protocole }									IF EscFlag THEN	{ ESC xx }									BEGIN										CASE ORD(theCar) OF											$39..$3B:												BEGIN													nbTrans := ORD(theCar)-$38;													EscFlag := FALSE;												END;											$20..$2F:												BEGIN												END;											$30..$38,$3C..$3F:												BEGIN													nbTrans := 1;													EscFlag := FALSE;												END;											OTHERWISE												BEGIN													nbTrans := 0;													EscFlag := FALSE;												END;										END;									END									ELSE	{ réception de car. }									IF (theCar >= ' ') OR (theCar=SS2) OR (theCar=ACC) THEN									BEGIN										IF nbTrans=0 THEN	{ on ne filtre pas }										BEGIN											IF (length(Str1)<MaxLen) | (HardType IN [MuxAsm,MuxASMT]) THEN											BEGIN												IF theCar=ACC THEN theCar := SS2;												Str1 := concat(Str1, theCar);												IF NOT (HardType IN [MuxAsm,MuxASMT]) THEN SendCar(theCar);											END											ELSE												IF NOT (HardType IN [MuxAsm,MuxASMT]) THEN SendCar(BELL);										END										ELSE	{ on filtre }											nbTrans := nbTrans-1;									END									ELSE										CASE theCar OF	{ car. spéciaux }											ESC:												EscFlag := TRUE;																					BS:												DoCorrection;																							RC:												IF (HardType IN [MuxAsm,MuxASMT]) & (length(Str1)>0) THEN												BEGIN													CASE Str1[length(str1)] OF														'A': Error := CEnvoi;														'B': Error := CRetour;														'C': Error := CRepetition;														'D': Error := CGuide;														'E': DoAnnulation;														'F': Error := CSommaire;														'G':														BEGIN															Str1[0] := pred(Str1[0]);	{ 2/04/96 - bug sur Correction }															DoCorrection;															Str1[0] := succ(Str1[0]);	{ 2/04/96 - bug sur Correction }														END;														'H': Error := CSuite;														OTHERWISE Error := cAutre;													END;													IF (Error<>cAutre) & (Str1<>'') THEN														Str1[0] := pred(Str1[0]);	{ on retire le car. en trop }												END												ELSE													Error := CEnvoi;																							SEP:												SepFlag := TRUE;																							OTHERWISE	{ caractères de contrôle }												Str1 := concat(Str1, theCar);										END;								END;							END;						END;	{ CASE }					END					ELSE					BEGIN		{ connected = 0, utilisateur déconnecté }{$IFC DEBUG}DebugStr('connected=0 dans ZoneNormal');{$ENDC}						Error := ErrTime;						Termine := TRUE;					END;			UNTIL Error<>NoErr;			CheckFilter(Str1,TRUE);			IF BAND(Attribs,8)=0 THEN CarPrint(Coff);		END;	{ WITH ThePtr^ }	END;		{ PROCEDURE ZoneNormal }	PROCEDURE InputNormal;		VAR	theCar: CHAR;		i: INTEGER;		Err: OsErr;		SepFlag: BOOLEAN;		theCars: Str255;		PROCEDURE DoCorrection;				BEGIN			WITH ThePtr^ DO			IF Str1<>'' THEN			BEGIN				SendCar(BS);				SendCar(' ');				SendCar(BS);				Str1[0] := PRED(Str1[0]);			END			ELSE Error := CCorrection;		END;		PROCEDURE DoAnnulation;				BEGIN			WITH ThePtr^ DO			IF Str1<>'' THEN			BEGIN				WHILE length(Str1)>0 DO DoCorrection;			END			ELSE Error := CAnnulation;		END;					BEGIN		{ PROCEDURE InputNormal }		WITH ThePtr^ DO		BEGIN			SepFlag := FALSE;			Error := NoErr;			CarPrint(Con);			FlushBuffer;						REPEAT				IF Connected<>0 THEN				BEGIN					Err := ReadCars(theCars,MaxTime,1);					IF TheCars <> '' THEN theCar := theCars[1];					CASE Err OF						ErrTime: Error := ErrTime;							NoErr:							BEGIN								IF SepFlag THEN								BEGIN									CASE theCar OF									'A': Error := CEnvoi;									'B': Error := CRetour;									'C': Error := CRepetition;									'D': Error := CGuide;									'E': DoAnnulation;									'F': Error := CSommaire;									'G': DoCorrection;									'H': Error := CSuite;									'I','S':	{ Shift-Connexion ou Déconnexion }										BEGIN											SendCar(cOff);											Disconnect;											Error := ErrTime;										END;									END;									SepFlag := FALSE;								END								ELSE								IF (theCar >= ' ') OR (theCar=SS2) OR (theCar=ACC) THEN								BEGIN									IF length(Str1)<MaxStrLen THEN									BEGIN										IF theCar=ACC THEN theCar := SS2;										IF NOT (HardType IN [MuxAsm,MuxASMT]) THEN SendCar(theCar);										Str1 := concat(Str1, theCar);									END									ELSE										IF NOT (HardType IN [MuxAsm,MuxASMT]) THEN SendCar(BELL);								END								ELSE									CASE theCar OF										BS:											DoCorrection;																					RC:											IF (HardType IN [MuxAsm,MuxASMT]) & (length(Str1)>0) THEN											BEGIN												CASE Str1[length(str1)] OF													'A': Error := CEnvoi;													'B': Error := CRetour;													'C': Error := CRepetition;													'D': Error := CGuide;													'E': DoAnnulation;													'F': Error := CSommaire;													'G': DoCorrection;													'H': Error := CSuite;													OTHERWISE Error := cAutre;												END;												IF (Error<>cAutre) & (Str1<>'') THEN													Str1[0] := pred(Str1[0]);	{ on retire le car. en trop }											END											ELSE												Error := CEnvoi;																					SEP:											SepFlag := TRUE;																					OTHERWISE	{ code contrôle }											Str1 := concat(Str1, theCar);																				END;	{ CASE theCar }							END;	{ Car. reçus }					END;	{ CASE }				END				ELSE				BEGIN					Error := ErrTime;					Termine := TRUE;				END;			UNTIL Error<>NoErr;			CheckFilter(Str1,TRUE);			CarPrint(Coff);		END;	END;		{ PROCEDURE InputNormal }BEGIN		{ FUNCTION ZInput }	ThePtr := GetCurSt;		CASE ThePtr^.HardType OF		ModemDrg: ZoneModem;		OTHERWISE			IF ReqInput THEN InputNormal ELSE ZoneNormal;	END; { CASE HardType }	Zinput := ThePtr^.Error;END;		{ FUNCTION ZInput }PROCEDURE Message(Num1, Num2, Num3: Longint; VAR Str1: Str255);BEGIN	Locate(Num1, Num2);	StrPrint(Str1);	WaitDelay(Num3);	CanEol(Num1, Num2);	IF Num1 = 0 THEN CarPrint(LF); { •••• retour dans la page •••• }END;PROCEDURE CanEol(Num1, Num2: Longint);BEGIN	Locate(Num1, Num2);	CarPrint(CAN);END;PROCEDURE CanBlock(Num1, Num2, Num3: Longint);VAR	i: Integer;BEGIN	CanEol(Num1, Num3); { •••• optimisation Canblock •••• }	FOR i := Num1 + 1 TO Num2 DO		BEGIN			CarPrint(LF);			CarPrint(CAN);		END;END;PROCEDURE SZone(ZPosX, ZPosY, ZLen: Longint; TheVar: Ptr; ZTkVar: Integer; TheColor: Longint);BEGIN { ajout d'une zone }	WITH GetCurSt^ DO		IF NBZones < MaxZones THEN			BEGIN				NBZones := NBZones + 1;				WITH TheZones[NBZones] DO					BEGIN						IF (BAND(Byte(GetCurSt^.InSilentFlag),2)<>0) & (ZPosX=0) THEN ZPosX := 1;	{ 20/4/95 }						PosX := ZPosX;						PosY := ZPosY;						IF ZLen > 240 THEN ZLen := 240;						IF ZLen < 0 THEN ZLen := 0;						Len := ZLen;						TkVar := ZTkVar;						AdVar := TheVar;						Color := TheColor;					END;			END;END;PROCEDURE Wait(NumZ: Longint);LABEL 0;VAR	Num1: Longint;	Str1,Str2: Str255;	C: Char;	i, K, NumZone, NextZone: Integer;	termine: boolean;	Count: Integer;	ThePtr: TPtr;	XEchoFlag: boolean;	FlagKilo: boolean;	PROCEDURE AffZone(NumZone: Integer; CheckRedraw: boolean);	VAR		Count, K: Integer;		StrTemp: Str255;			BEGIN		{ affichage des valeurs par defaut et des pointilles }		WITH ThePtr^, ThePtr^.TheZones[NumZone] DO			BEGIN				IF CheckRedraw THEN IF Bitand(Color, 512) = 0 THEN EXIT(AffZone);				IF TkVar = 1 THEN					Str1 := Pstr255(AdVar)^				ELSE					BEGIN						Num1 := LongintPtr(AdVar)^;						IF Num1 = 0 THEN							Str1 := ''						ELSE							NumToString(Num1, Str1);					END;				IF Length(Str1) > Len THEN Str1[0] := chr(Len);				{ positionnement }				Locate(PosX, PosY);				{ ========= affichage des attributs ========= }				IF XEchoFlag=FALSE THEN		{ 2/04/96 }					CarPrint(SO);	{ on passe en graphique pour empêcher l'écho }				{ ***** Couleur ***** }				IF BAnd(Color, 7) <> 7 THEN sForeColor(BAnd(Color, 7));				{ ***** Taille ***** }				K := BAnd(BSR(Color, 6), 3);				IF K <> 0 THEN SSize(K);				{ ***** Inversion ***** }				K := BAnd(BSR(Color, 5), 1);				IF K <> 0 THEN Inverse(K);				{ ***** Clignotement ***** }				K := BAnd(BSR(Color, 4), 1);				IF K <> 0 THEN Flash(K);				{ valeur par défaut }				StrTemp := Str1;				IF NOT XEchoFlag THEN FOR K := 1 TO Length(StrTemp) DO Str2[K] := CarMask;				StrPrint(StrTemp);				IF CheckRedraw THEN IF Bitand(Color, 1024) <> 0 THEN CarPrint(chr(24));								{ pointillés }				IF XEchoFlag THEN					C := CarZone				ELSE					C := CarZoneMask;									IF XEchoFlag=FALSE THEN		{ 2/04/96 }					CarPrint(SI);	{ on passe en texte pour afficher les points }				PrintRep(C,Len - Length(Str1));			END;	END;	PROCEDURE SelectZone(i, j: Integer);	BEGIN		IF j <> 0 THEN			BEGIN				IF ThePtr^.TheZones[j].TkVar = 1 THEN					BEGIN						BlockMoveData(@Str1, ThePtr^.TheZones[j].AdVar, Length(Str1) + 1);					END				ELSE					BEGIN						Num1 := SSVal(Str1);						BlockMoveData(@Num1, ThePtr^.TheZones[j].AdVar, 4);					END;				IF i <> j THEN AffZone(j, True);			END;		IF i = 0 THEN EXIT(SelectZone);		WITH ThePtr^, ThePtr^.TheZones[i] DO			BEGIN				IF TkVar = 1 THEN					BlockMoveData(AdVar, @Str1, 256)				ELSE					BEGIN						Num1 := LongintPtr(Ord4(AdVar))^;						IF Num1 = 0 THEN							Str1 := ''						ELSE							NumToString(Num1, Str1);					END;				IF Length(Str1) > Len THEN Str1[0] := chr(Len);			END;	END;	PROCEDURE ResetVars;	VAR		j: Integer;	BEGIN		Num1 := 0;		WITH ThePtr^ DO			FOR j := 1 TO NBZones DO BlockMoveData(@Num1, TheZones[j].AdVar, 4);	END;BEGIN		{ WAIT }	ThePtr := GetCurSt;	XEchoFlag := ThePtr^.EchoFlag;	FlagKilo := False;	WITH ThePtr^ DO	BEGIN		IF (NBZones = 0) THEN			BEGIN				ZoneNumber := 0;				Error := ErrTime;				EXIT(Wait);			END;				{ sélection de la zone de départ }		NumZone := NumZ;		IF NumZ = 0 THEN NumZone := ZoneNumber;	{ on reprend la dernière zone }		IF NumZ < 0 THEN NumZone := -NumZ;		IF NumZone > ThePtr^.NBZones THEN NumZone := ThePtr^.NBZones;	END;0:	{ affichage des valeurs par defaut et des pointilles }	IF NumZ>=0 THEN WITH ThePtr^ DO FOR i := 1 TO NBZones DO AffZone(i, False);	XEchoFlag := ThePtr^.EchoFlag;	Str2:='';	SelectZone(NumZone, 0);	{ entree de la zone }	termine := False;	WITH ThePtr^ DO		REPEAT			FlagKilo := False;			WITH TheZones[NumZone] DO				Error := Zinput(Str1, PosX, PosY, Len, Color, MaxTime, '.', False);						StarFlag := (Str1[Length(Str1)] = '*');						{ saisie au kilometre }			WHILE (NbZones>1) & (NumZone<NbZones) & (Length(Str1)>TheZones[NumZone].Len)				& (BitAnd(TheZones[NumZone].Color,256)<>0) DO			BEGIN	{ saisie trop longue }				BlockMoveData(@Str1[TheZones[NumZone].Len+1],@Str2[1],length(Str1)-TheZones[NumZone].Len);				Str2[0]:=CHR(length(Str1)-TheZones[NumZone].Len);				Str1[0]:=CHR(TheZones[NumZone].Len);				SelectZone(NumZone+1,NumZone);				Str1 := Str2;				NumZone := NumZone+1;			END;			{ IF StarFlag THEN Str1[0] := chr(Length(Str1) - 1); }						CASE Error OF				ErrTime, CEnvoi, CGuide, CSommaire, CAutre, CRepetition:					BEGIN						termine := True;					END;				CCorrection:					BEGIN						IF TheZones[NumZone].Len = 0 THEN							termine := True						ELSE IF (Length(Str1) = 0) AND (NumZone > 1) THEN							BEGIN								IF Bitand(TheZones[NumZone - 1].Color, 256) <> 0 THEN									BEGIN										{ Correction sur zone précédente }										FlagKilo := True;										SelectZone(NumZone - 1, NumZone);										NumZone := NumZone - 1;										IF Length(Str1) > 0 THEN											BEGIN												Str1[0] := chr(Length(Str1) - 1);												CarPrint(BS);												CarPrint(CarZone);												CarPrint(BS);											END;									END;							END;					END;				CAnnulation:					IF StarFlag THEN	{ annulation de toutes les zones }						BEGIN							SendCar(DC4);							ResetVars;							NumZone := 1;							GOTO 0;						END					ELSE						termine := True;				CSuite:					BEGIN						IF Bitand(TheZones[NumZone].Color, 4096) <> 0 THEN							BEGIN								termine := True;							END						ELSE IF NBZones = 1 THEN							termine := True						ELSE							BEGIN								IF NumZone = NBZones THEN									NextZone := 1								ELSE									NextZone := NumZone + 1;																{ on saute les zones de longueur nulle }								WHILE TheZones[NextZone].len = 0 DO								BEGIN									NextZone:= NextZone+1;									IF NextZone>NBZones THEN NextZone := 1;								END;																SelectZone(NextZone, NumZone);								NumZone := NextZone;							END;					END;				CKSuite:	{ frappe au kilometre = SUITE automatique }					BEGIN						Error := CSuite;						IF Bitand(TheZones[NumZone].Color, 4096) <> 0 THEN							BEGIN								termine := True;							END						ELSE IF NBZones = 1 THEN							termine := True						ELSE							BEGIN								IF NumZone = NBZones THEN									NextZone := 1								ELSE									BEGIN										FlagKilo := (Bitand(TheZones[NumZone].Color, 256) <> 0);										NextZone := NumZone + 1;									END;								SelectZone(NextZone, NumZone);								NumZone := NextZone;							END;					END;				CRetour:					BEGIN						IF Bitand(TheZones[NumZone].Color, 8192) <> 0 THEN							BEGIN								termine := True;							END						ELSE IF NBZones = 1 THEN							termine := True						ELSE							BEGIN								IF NumZone = 1 THEN									NextZone := NBZones								ELSE									NextZone := NumZone - 1;								{ on saute les zones de longueur nulle }								WHILE TheZones[NextZone].len = 0 DO								BEGIN									NextZone:= NextZone-1;									IF NextZone<1 THEN NextZone := NbZones;	{ on repasse à la dernière }								END;																SelectZone(NextZone, NumZone);								NumZone := NextZone;							END;					END;			END;		UNTIL termine;	SelectZone(0, NumZone);	ThePtr^.ZoneNumber := NumZone;	SendCar(DC4);	{ on supprime le curseur… }	{ plus de zones de saisie }	IF ThePtr^.HardType = ModemDrg THEN	BEGIN		Str1 := '';		SendControlFrame(Str1, 'z');	END;END;PROCEDURE Locate(X, Y: Longint);VAR	Str1: Str255;BEGIN	IF (BAND(Byte(GetCurSt^.InSilentFlag),2)<>0) & (x=0) THEN		X := 1;	{ 20/4/95 }	IF (X<0) | (X>$3f) | (y<0) | (y>$3f) THEN EXIT(Locate);	IF (X <> 1) | (Y <> 1) THEN { •••• Optimisation pour 1,1 •••• }		BEGIN			Str1[0] := chr(3);			Str1[1] := US;			Str1[2] := chr($40 + X);			Str1[3] := chr($40 + Y);			StrPrint(Str1);		END	ELSE		CarPrint(RS);END;PROCEDURE Echo(Num1: Longint);VAR	TheStr: Str255;BEGIN	GetCurSt^.EchoFlag := Num1 <> 0;	TheStr := '';END;PROCEDURE SGet(VAR AdStr: Str255; Num1: Longint);VAR	TheCount: Longint;	Str1: Str255;	Err: Integer;	AuxRefIn: Integer;BEGIN	AdStr := '';	IF (Num1 = 0) THEN { voie Videotex }	CASE GetCurSt^.HardType OF		ModemDrg:		BEGIN			Str1 := '';			PaqPrep(Str1, '?');			AsRead(Str1, AdStr, 120, False);			AdStr[0] := chr(Ord(AdStr[0]) - 1);			BlockMoveData(Ptr(Ord4(@AdStr) + 2), Ptr(Ord4(@AdStr) + 1), Length(AdStr));		END;{$IFC MUX}		MuxAsm,MuxASMT:		BEGIN			FlushBuffer;			Err := ReadCars(ADStr,30,0);		END;{$ENDC}		OTHERWISE		BEGIN			FlushBuffer;			TheCount := TickCount + 30;			WHILE TheCount > TickCount DO			BEGIN				Err := ReadCars(Str1,6,1);				IF Str1 <> '' THEN ADStr := concat(ADStr,Str1) ELSE WaitDelay(1);			END;		END;			END	{ CASE }	ELSE		WITH GetCurSt^ DO	{ deuxième port série }			BEGIN				IF SerRefIn = - 6 THEN					AuxRefIn := - 8				ELSE					AuxRefIn := - 6;				TheCount := 0;				Err := SerGetBuf(AuxRefIn, TheCount);				Error := Err;				IF TheCount > 255 THEN TheCount := 255;				IF TheCount > 0 THEN					BEGIN						Err := FSRead(AuxRefIn, TheCount, Ptr(Ord4(@AdStr) + 1));						Error := Err;						AdStr[0] := chr(TheCount);					END;			END;END;PROCEDURE SGetPaq(VAR AdStr: Str255;									Num1, Num2, Ch1, Ch2: Longint);VAR	TheCount: Longint;	Err: Integer;	termine: boolean;	TheMax: Longint;	Index: Integer;	Automate: Integer;	TheChar: Integer;	ThePtr: TPtr;	AuxRefIn: Integer;BEGIN	ThePtr := GetCurSt;	IF ThePtr^.SerRefIn = - 6 THEN		AuxRefIn := - 8	ELSE		AuxRefIn := - 6;	{TimeOut}	IF Num1 <= 0 THEN Num1 := ThePtr^.MaxTime;	{Maxlen}	IF (Num2 > MaxStrLen) OR (Num2 <= 0) THEN Num2 := MaxStrLen;	AdStr := '';	termine := False;	TheChar := 0;	TheMax := TickCount + Num1;	Automate := 0;	Index := 0;	REPEAT		TheCount := 0;		Err := SerGetBuf(AuxRefIn, TheCount);		ThePtr^.Error := Err;		IF TheCount > 0 THEN			BEGIN				TheCount := 1;				Err := FSRead(AuxRefIn, TheCount, Ptr(Ord4(@TheChar) + 1));				ThePtr^.Error := Err;				CASE Automate OF					0:						BEGIN { on attend syncstart }							IF (Ch1 = TheChar) OR (Ch1 < 0) THEN { synchro trouve }								BEGIN									Index := Index + 1;									AdStr[Index] := chr(TheChar);									Automate := 1;								END;						END;					1:						BEGIN { on est synchro }							Index := Index + 1;							AdStr[Index] := chr(TheChar);							IF Index = Num2 THEN termine := True;							IF TheChar = Ch2 THEN termine := True;						END;				END;				TheMax := TickCount + Num1;			END		ELSE			WaitDelay(4);	UNTIL termine OR (TheMax < TickCount);	AdStr[0] := chr(Index);	IF TheMax < TickCount THEN ThePtr^.Error := ErrTime;END;FUNCTION Rnd(Num1: Longint): Longint;VAR	Temp: LONGINT;	BEGIN	IF Num1<>0 THEN		WITH GetCurSt^ DO		BEGIN			GetDateTime(temp);			Rnd := abs(BXOR(BXOR(BXOR(BXOR(BXOR(TickCount, temp), Ord4(NextTCB)),						 Ord4(PTLVars)), Ord4(TheNScreen)), $A5A5A5A5)) MOD Num1;		END	ELSE		Rnd:=0;END;PROCEDURE OpenSer(NumFile, Num1, Num2, Num3, Num4, Num5: Longint);VAR	AuxRefIn: Integer;BEGIN	SSerConfig(Num1, Num2, Num3, Num4, Num5);	WITH GetCurSt^ DO		BEGIN			IF SerRefIn = - 6 THEN				AuxRefIn := - 8			ELSE				AuxRefIn := - 6;			IF (NumFile < 1) OR (NumFile > MaxFile) THEN				BEGIN					Error := ErrBadNum;					EXIT(OpenSer);				END;			IF TheFiles[NumFile].FileRef <> 0 THEN				BEGIN					Error := ErrFileOpen;					EXIT(OpenSer);				END;			TheFiles[NumFile].FileRef := AuxRefIn;			TheFiles[NumFile].BaseFlag := False;		END;END;PROCEDURE SSerConfig(Num1, Num2, Num3, Num4, Num5: Longint);VAR	TheConfig: Integer;	Err: Integer;	Flags: SerShk;	ThePtr: TPtr;	AuxRefIn: Integer;	AuxRefOut: Integer;	AuxPort: Integer;BEGIN	ThePtr := GetCurSt;	IF ThePtr^.SerRefIn = - 6 THEN		AuxPort := 2	ELSE		AuxPort := 1;	TheConfig := 0;	CASE Num1 DIV 100 OF		3: TheConfig := baud300;		6: TheConfig := baud600;		12: TheConfig := baud1200;		18: TheConfig := baud1800;		24: TheConfig := baud2400;		36: TheConfig := baud3600;		48: TheConfig := baud4800;		72: TheConfig := baud7200;		192: TheConfig := baud19200;		576: TheConfig := baud57600;		OTHERWISE TheConfig := baud9600;	END;	CASE Num2 OF		5: TheConfig := TheConfig + data5;		6: TheConfig := TheConfig + data6;		7: TheConfig := TheConfig + data7;		OTHERWISE TheConfig := TheConfig + data8;	END;	CASE Num3 OF		1: TheConfig := TheConfig + oddParity;		2: TheConfig := TheConfig + evenParity;		OTHERWISE TheConfig := TheConfig + noParity;	END;	CASE Num4 OF		15: TheConfig := TheConfig + stop15;		20: TheConfig := TheConfig + stop20;		OTHERWISE TheConfig := TheConfig + stop10;	END;	CASE AuxPort OF		1: { Port Modem }			BEGIN				Err := OpenDriver('.AOut', AuxRefOut);				Err := OpenDriver('.AIn', AuxRefIn);			END;		2: { Port Imprimante }			BEGIN				Err := OpenDriver('.BOut', AuxRefOut);				Err := OpenDriver('.BIn', AuxRefIn);			END;	END;	Err := SerReset(AuxRefIn, TheConfig);	Err := SerReset(AuxRefOut, TheConfig);	Err := SerSetBuf(AuxRefIn, ThePtr^.TheAuxBuffPtr, SerBufSz);	CASE Num5 OF		0:	{ no handshaking }		BEGIN			WITH Flags DO			BEGIN				fXon := 0;				finX := 0;				xOn := chr(19);				xOff := chr(17);				fcts := 0;				errs := 0;				evts := 0;				fDTR := 0;			END;			Err := SerHShake(AuxRefIn, Flags);			Err := SerHShake(AuxRefOut, Flags);				END;				1: { Xon/Xoff}			BEGIN				WITH Flags DO					BEGIN						fXon := 1;						finX := 1;						xOn := chr(19);						xOff := chr(17);						fcts := 0;						errs := 0;						evts := 0;						fDTR := 0;					END;				Err := SerHShake(AuxRefIn, Flags);				Err := SerHShake(AuxRefOut, Flags);			END;		2: { CTS }			BEGIN				WITH Flags DO					BEGIN						fXon := 0;						finX := 0;						xOn := chr(19);						xOff := chr(17);						fcts := 1;						errs := 0;						evts := 0;						fDTR := 1;					END;				Err := SerHShake(AuxRefIn, Flags);				Err := SerHShake(AuxRefOut, Flags);			END;	END;END;PROCEDURE SBackColor(Num1: Longint);VAR	Str1: Str255;BEGIN	IF (Num1 >= 0) & (Num1 < 8) THEN		BEGIN			CASE Num1 OF				1: Num1 := 4;				2: Num1 := 1;				3: Num1 := 5;				4: Num1 := 2;				5: Num1 := 6;				6: Num1 := 3;			END;			Str1 := '  ';			Str1[1] := ESC;			Str1[2] := chr($50 + Num1);			StrPrint(Str1);		END;END;PROCEDURE SForeColor(Num1: Longint);VAR	Str1: Str255;BEGIN	IF (Num1 >= 0) & (Num1 < 8) THEN		BEGIN			CASE Num1 OF				1: Num1 := 4;				2: Num1 := 1;				3: Num1 := 5;				4: Num1 := 2;				5: Num1 := 6;				6: Num1 := 3;			END;			Str1 := '  ';			Str1[1] := ESC;			Str1[2] := chr($40 + Num1);			StrPrint(Str1);		END;END;PROCEDURE Font(Num1: Longint);VAR	Str1: Str255;BEGIN	Str1 := ' ';	IF Num1 > 0 THEN		Str1[1] := SO	ELSE		Str1[1] := SI;	StrPrint(Str1);END;PROCEDURE Cls;VAR	Str1: Str255;	i: Integer;BEGIN	ClearBuffer;	IF BAND(Byte(GetCurSt^.InSilentFlag),2)<>0 THEN		{ 20/4/95 }		Str1 := concat('  ',FF)	ELSE		Str1 := concat('  ',FF,US,'@A',CAN,LF);	StrPrint(Str1);END;PROCEDURE SCursor(Num1: Longint);VAR	Str1: Str255;BEGIN	Str1 := ' ';	IF Num1 > 0 THEN		Str1[1] := DC1	ELSE		Str1[1] := DC4;	StrPrint(Str1);END;PROCEDURE Draw;CONST	MaxSize = 512;	VAR	LgC, LgV, CurPos: Longint;	LTime, LLen: Longint;BEGIN	{FlushBuffer;}	WITH GetCurSt^ DO	BEGIN		LLen := 0;		LTime := TickCount;		CurPos := 0;		LgV := LongintPtr(TheVScreen)^;		IF IsTeletel THEN		BEGIN			OutputFlag := FALSE;			OpFlag := 0;		END;		WHILE CurPos < LgV DO		BEGIN			LgC := LgV - CurPos;			IF LgC > 128 THEN LgC := 128;			BuffDataFrame(Ptr(Ord4(TheVScreen) + CurPos + 4), LgC);			CurPos := CurPos + LgC;			IF (HardType=ModemDrg) & (IsTeletel=FALSE) THEN			BEGIN				IF LLen >= MaxSize THEN				BEGIN					WaitDelay((MaxSize DIV 2) - abs(TickCount - LTime));					LLen := 0;					LTime := TickCount;				END				ELSE					LLen := LLen + LgC;			END;		END;		IF IsTeletel THEN OutputFlag := TRUE;	END;END;PROCEDURE DrawScreen(TheVScreen: Ptr);CONST	MaxSize = 512;	VAR	LgC, LgV, CurPos: Longint;	LTime, LLen: Longint;	{ nouvelle version, on temporise pour 1k }BEGIN	CurPos := 0;	LgV := LongintPtr(TheVScreen)^;	LLen := 0;	LTime := TickCount;	WITH GetCurSt^ DO		IF IsTeletel THEN		BEGIN			OutputFlag := FALSE;			opFlag := 0;		END;			WHILE CurPos < LgV DO	BEGIN		LgC := LgV - CurPos;		IF LgC > 128 THEN LgC := 128;		BuffDataFrame(Ptr(Ord4(TheVScreen) + CurPos + 4), LgC);		CurPos := CurPos + LgC;		WITH GetCurSt^ DO		IF (HardType=ModemDrg) & (IsTeletel=FALSE) THEN		BEGIN			IF LLen > MaxSize THEN			BEGIN				WaitDelay((MaxSize DIV 2) - abs(TickCount - LTime));				LLen := 0;				LTime := TickCount;			END			ELSE				LLen := LLen + LgC;		END;	END;	WITH GetCurSt^ DO IF IsTeletel THEN OutputFlag := TRUE;END;PROCEDURE FrontScreen(Num1: Longint);VAR	Str1: Str255;BEGIN	IF Num1=0 THEN FlushBuffer;	{ fin de FRONTSCREEN, on vide le buffer de sortie }		GetCurSt^.FrOutPut := (Num1=1);	IF GetCurSt^.HardType <>ModemDrg THEN EXIT(FrontScreen);		{ on met l'entete dans le buffer }	IF Num1 = 0 THEN		BEGIN			Str1 := '';			SendControlFrame(Str1, 't');		END	ELSE		BEGIN			Str1 := 'S';			SendControlFrame(Str1, 'T');		END;END;PROCEDURE Flash(Num1: Longint);VAR	Str1: Str255;BEGIN	Str1 := '  ';	Str1[1] := ESC;	IF Num1 > 0 THEN		Str1[2] := chr($48)	ELSE		Str1[2] := chr($49);	StrPrint(Str1);END;PROCEDURE SInput(PStr2: Pstr255;								 Num1: Longint;								 VarPtr: Ptr);VAR	Str1: Str255;	i: Integer;	termine: boolean;BEGIN	WITH GetCurSt^ DO		BEGIN			{ affichage du prompt et du curseur }			IF PStr2 <> NIL THEN StrPrint(PStr2^);			{ entree de la zone }			Str1 := '';			Error := Zinput(Str1, 0, 0, 240, 0, MaxTime, ' ', True);			{ controle et affectation de la zone }			IF Num1 = 1 THEN { 1= Chaine; 0= Longint}				BEGIN					BlockMoveData(@Str1, VarPtr, Length(Str1) + 1);				END			ELSE				BEGIN					Num1 := SSVal(Str1);					BlockMoveData(@Num1, VarPtr, 4);				END;			IF BAND(Byte(InSilentFlag),1)=0 THEN CarPrint(DC4);			{ plus de zones de saisie }			IF HardType = ModemDrg THEN			BEGIN				Str1 := '';				SendControlFrame(Str1, 'z');			END;		END;	{ WITH }END;PROCEDURE Inverse(Num1: Longint);VAR	Str1: Str255;BEGIN	Str1 := '  ';	Str1[1] := ESC;	IF Num1 > 0 THEN		Str1[2] := chr($5D)	ELSE		Str1[2] := chr($5C);	StrPrint(Str1);END;PROCEDURE SSize(Num1: Longint);VAR	Str1: Str255;BEGIN	IF (Num1 >= 0) & (Num1 < 4) THEN		BEGIN			Str1 := '  ';			Str1[1] := ESC;			Str1[2] := chr($4C + Num1);			StrPrint(Str1);		END;END;PROCEDURE SUnderLine(Num1: Longint);VAR	Str1: Str255;BEGIN	Str1 := '  ';	Str1[1] := ESC;	IF Num1 > 0 THEN		Str1[2] := chr($5A)	ELSE		Str1[2] := chr($59);	StrPrint(Str1);END;PROCEDURE WaitConnect(WTime: Longint);VAR	ThePtr: TPtr;	Str1: Str255;	Termine: BOOLEAN;	EndTime: LONGINT;		FUNCTION ModemWaitConnect:BOOLEAN;	VAR		Str1, Str2: Str255;		termine: boolean;		i: Integer;		BEGIN		REPEAT			WaitDelay(30);			GetTheStatus(Str1);	{ pour les reconnexions }			GetCurSt^.ConFlag := FALSE;		UNTIL (Str1[2]<>'F') | ((EndTime > 0) & (TickCount > EndTime));		(*			Str1 := '';		PaqPrep(Str1, '?');		termine := False;			REPEAT			AsRead(Str1, Str2, 120, False);			IF (Length(Str2) > 0) & (Str2[1] <> 'F') THEN				termine := True			ELSE				WaitDelay(30);		UNTIL termine  OR ((TickCount > EndTime) AND (EndTime > 0));		ModemWaitConnect := Termine;				IF Termine THEN { on est connecté ! }*)		IF (Str1<>'') & (Str1[2]<>'F') & ((GetCurSt^.demoCount=0) | (Str1[4]='L'))THEN	{ on est connecte ! }		BEGIN			GetCurSt^.ConFlag := TRUE;			IF Str1[4]='T' THEN			BEGIN				GetCurSt^.IsTeletel := TRUE;	{ output sur Drg Télétel }				GetCurSt^.OpFlag := 0;			END;			ModemWaitConnect := TRUE;		END		ELSE			ModemWaitConnect := FALSE;	END;{$IFC ADSP}	FUNCTION ADSPWaitConnect:BOOLEAN;	VAR	Err: OsErr;		QPb: TQERec;		MyNode: INTEGER;		MyNet: INTEGER;			BEGIN		IF Connected=1 THEN	{ on est déjà connecté !!! }		BEGIN			ADSPWaitConnect := TRUE;			EXIT(ADSPWaitConnect);		END;				QPb.ECode := ReqADSPWaitConnect;		SetIOWait;		TEnqueue(ADSPQ,QPB);		{ Ouvrir la connection ADSP }				WITH GetCurSt^ DO		BEGIN			SetIOWait;			Infos^.PB.TCBPtr := GetCurSt;			WITH Infos^.PB.ADSPPB DO			BEGIN				ioCompletion := @AsmCompletion;				csCode := dspOpen;				ocInterval := 0;				ocMaximum := 0;			END;			Err := PBControlAsync(@Infos^.PB.ADSPPB);			YieldCpu;						{ on attend que la liaison soit bien ouverte… }			WHILE Infos^.theCCB.State = sOpening DO WaitDelay(10);						IF Infos^.theCCB.state=sOpen THEN			BEGIN				WITH Infos^.theCCB.remoteAddress DO				BEGIN					Err := GetNodeAddress(myNode,myNet);					LocalMode :=  ((aNet=MyNet) | (aNet=0)) & (aNode=MyNode);				END;				ConFlag := TRUE;				{ ••• Connexion ADSP uniquement en local ! •• }				IF (DemoCount=1) & (localmode=FALSE) THEN Disconnect;			END;			ADSPWaitConnect := Infos^.theCCB.state=sOpen;		END;	{ WITH GetCurSt^ }	END;{$ENDC}	FUNCTION SerialWaitConnect:BOOLEAN;		VAR	SepFlag	: BOOLEAN;			Err			: OsErr;			tempStr	: STRING[32];			FUNCTION AcceptCall:BOOLEAN;				VAR	EndTime2: LONGINT;				ok: BOOLEAN;						BEGIN			ok := FALSE;			WITH ThePtr^ DO			BEGIN				ConFlag := TRUE;	{ pour ComAsWrite }				tempstr:=concat(ESC,'9o',ESC,'9h');	{ modem en opposition, connexion }				ComAsWriteStr(@tempStr);				EndTime2 := TickCount + 60*15;	{ 15s pour se connecter }				WHILE (EndTime2 > TickCount) & (NOT ok) DO				BEGIN					Err := ReadCars(Str1,0,1);					IF Str1 = '' THEN WaitDelay(6)					ELSE					BEGIN						IF SepFlag AND (Str1='S') THEN Ok := TRUE;	{ connecté }(*	{ 29/6/93 }						IF SepFlag AND (Str1='l') THEN Leave;	{ a raccroché }*)						SepFlag := (Str1=SEP);					END;				END;			END;	{ WITH }			AcceptCall := Ok;			IF NOT Ok THEN	{ on raccroche }			BEGIN				tempStr:=concat(ESC,'9g',ESC,'9W');	{ coupe porteuse, raccroche }				ComAsWriteStr(@tempStr)			END			ELSE				ThePtr^.LocalMode := FALSE;	{ on est en extérieur }		END;			BEGIN		WITH ThePtr^ DO		BEGIN			{ pas d'echo local svp et suppression du curseur }			ConFlag := TRUE;			tempStr := concat(Coff,ESC,';`ZQ',Coff);			ComAsWriteStr(@tempStr);						ConFlag := FALSE;						LocalMode := TRUE;			SepFlag := FALSE;			WHILE ((EndTime=0) | (EndTime>TickCount)) & (ConFlag = FALSE) DO			BEGIN				Err := ReadCars(Str1,0,1);				IF Str1='' THEN WaitDelay(60)				ELSE					IF Str1=SEP THEN						SepFlag := TRUE					ELSE					BEGIN						IF (DemoCount<>1) & SepFlag & (Str1='l') THEN							ConFlag := AcceptCall;	{ Sonnerie }						IF (SepFlag AND (Str1='A')) OR (Str1 = RC) OR (Str1=' ') THEN							ConFlag := TRUE;	{ ENVOI, RC ou Espace }						SepFlag := FALSE;					END;			END;			SerialWaitConnect := ConFlag;			IF NOT LocalMode THEN			BEGIN				{ Supprime Clav -> Modem et Modem -> Ecran et Crée Prise -> Ecran }				tempStr := concat(ESC,';`ZQ',ESC,';`XR',ESC,';aXS');				ComAsWriteStr(@tempStr);			END;		END;	END;	{$IFC MUX}		FUNCTION MuxAsmWaitConnect:BOOLEAN;			BEGIN		WITH GetCurSt^ DO		BEGIN			IF XConFlag=FALSE THEN 			BEGIN				IF WTime>0 THEN				BEGIN					DelayValue := WTime*60;					StatusWord := PendBTCst;				END				ELSE StatusWord := PendBCst;				PendAdr := @XConFlag;				YieldCpu;	{ on se met en attente de XConFlag=TRUE }			END;			IF (demoCount=0) & XConflag THEN	{ connexion établie au niveau X25 }			BEGIN				MuxAsmWaitConnect := XConFlag;				ConFlag := XConflag;				OutputFlag := XConflag;	{ on autorise l'envoi de données si on est connecté }				XConflag := FALSE;	{ •18/2/94• }				Error := 0;{$IFC DEBUG} DebugStr('MuxAsmWaitConnect: connecte'); {$ENDC}			END			ELSE				MuxAsmWaitConnect := FALSE;		END;	END;{$ENDC}{$IFC HAYES}	FUNCTION HayesWaitConnect:BOOLEAN;		VAR Str1: Str255;			Err: INTEGER;			Recv: Str255;			TempStr: Str255;					FUNCTION AcceptCall:BOOLEAN;				VAR	EndTime: LONGINT;				ok: BOOLEAN;						BEGIN{$IFC DEBUGHAYES}DebugStr('AcceptCall');{$ENDC}			ok := FALSE;			WITH ThePtr^ DO			BEGIN				ConFlag := TRUE;	{ pour ComAsWrite }				tempstr:=concat('ATA',chr(13));				ComAsWriteStr(@tempStr);				ConFlag := FALSE;				EndTime := TickCount + 60*30;	{ 30s pour se connecter }				Recv:='';				WHILE (EndTime > TickCount) & (NOT ok) DO				BEGIN					Err := ReadCars(Str1,0,1);					IF Str1 = '' THEN WaitDelay(6)					ELSE					BEGIN						{ petit buffer tournant de 200 car. }						IF length(recv)>200 THEN Delete(Recv,1,1);						IF Str1=chr(13) THEN Recv := '' ELSE Recv:=concat(recv,Str1);						ok := pos('CONN',recv)<>0;					END;				END;				AcceptCall := Ok;				IF NOT Ok THEN	{ on raccroche }				BEGIN{$IFC DEBUGHAYES}DebugStr('Deconnecte');{$ENDC}					tempStr:=concat('ATH',chr(13));					ConFlag := TRUE;					ComAsWriteStr(@tempStr);					ConFlag := FALSE;				END				ELSE				BEGIN{$IFC DEBUGHAYES}DebugStr('Connecte');{$ENDC}					{ on lit tout ce qui suit le CONNECT }					REPEAT						Err := ReadCars(Str1,0,1);					UNTIL Str1='';				END;				LocalMode := FALSE;	{ on est toujours en extérieur }				Recv:='';			END;	{ WITH }		END;			BEGIN		WITH ThePtr^ DO		BEGIN{$IFC DEBUGHAYES}			DebugStr('HayesWaitConnect');{$ENDC}			tempStr:=concat('ATE0V1S0=1',chr(13));	{ echo off, messages anglais, réponse auto }			IF demoCount=1 THEN				tempStr[10]:='0';	{ pas de modem Hayes en mode démo }			ConFlag := TRUE;			ComAsWriteStr(@tempStr);			ConFlag := FALSE;			LocalMode := FALSE;			Recv:='';			WHILE ((EndTime=0) | (EndTime>TickCount)) & (ConFlag = FALSE) DO			BEGIN				Err := ReadCars(Str1,0,1);				IF Str1='' THEN WaitDelay(60)				ELSE				BEGIN					IF Length(Recv)>200 THEN Delete(Recv,1,1);					Recv:=concat(Recv,Str1);					IF (demoCount=0) & (pos('CONN',Recv)>0) THEN conFlag:=TRUE;(*					IF pos('RING',Recv)>0 THEN ConFlag := AcceptCall;	{ Sonnerie }					IF pos('SONN',Recv)>0 THEN ConFlag := AcceptCall;	{ Sonnerie }*)				END;			END;			HayesWaitConnect := ConFlag;{$IFC DEBUGHAYES}			IF ConFlag THEN				DebugStr('HayesWaitConnect: ConFlag=TRUE')			ELSE				DebugStr('HayesWaitConnect: ConFlag=FALSE');{$ENDC}		END;	END;{$ENDC}{$IFC PILOTE}	FUNCTION PiloteWaitConnect:BOOLEAN;		VAR		MCErr: tsMCErr;			BEGIN		PiloteWaitConnect := FALSE;		WHILE (EndTime=0) OR (EndTime>TickCount) DO		BEGIN		END;	END;{$ENDC}BEGIN	ThePtr := GetCurSt;	Byte(ThePtr^.TrPrintFlag) := 0;	IF WTime > 0 THEN EndTime := WTime * 60 + TickCount ELSE EndTime := 0;		{ 6/8/96 }		CASE ThePtr^.HardType OF		ModemDrg: termine := ModemWaitConnect;		{$IFC ADSP}		ADSPLink: termine := ADSPWaitConnect;{$ENDC}		SerialLink: termine := SerialWaitConnect;{$IFC MUX}				MuxAsm,MuxASMT: termine := MuxAsmWaitConnect;{$ENDC}{$IFC HAYES}		ModemHayes:	termine := HayesWaitConnect;{$ENDC}{$IFC PILOTE}		PiloteModem: termine := PiloteWaitConnect;{$ENDC}		END;	{ CASE }		IF termine THEN	{ on est connecté ! }	BEGIN		GetDateTime(ThePtr^.StartTime);		IF BAND(Byte(ThePtr^.InSilentFlag),16384)=0 THEN		{ 20/4/95 }		BEGIN			Cls;			Locate(0, 1);			Str1 := 'Dragster 1.99';			IF ThePtr^.DemoCount=1 THEN Str1 := concat(Str1,' DEMO');			Str1 := concat(Str1,' (C) DIT');			StrPrint(Str1);			CarPrint(chr(24));			WaitDelay(3);		END;	END;END;PROCEDURE SStatus(VAR Str2: Str255);VAR	Str1: Str255;	i: Integer;BEGIN	{ --------- format de la chaine de status -----------	1er caractere: M si modem, T si Transpac	2e	caractere: C si connexion, F sinon	3e	caractere: 0 si serveur, autre si service local du modem ('.'= pas un modem)	4e	caractere: L si minitel local, R si réseau téléphonique, T si Télétel, A = ASM	5e	caractere: Phase du modem	6e	caractere: Dernière cause d'erreur du modem	7e	caractere: A si mode normal, R si modem inversé, T = ASM/T	et sur Transpac:	8 à 16 N° Transpac de l'appelant	17/18 = sous adresse	<> N° Complémentaire (optionel)	19=PCV	20/21 = GFA	22=Données d'appel	--------- format de la chaine de status -----------}	WITH GetCurSt^ DO	CASE HardType OF		ModemDrg:		IF IsTeletel THEN	{ DrgTélétel }		BEGIN			MessDLoad(Str2,0);			IF ConFlag & (Str2[2] = 'F') THEN ConFlag := FALSE;		END		ELSE		BEGIN				{ Modem Dragster }			Str1 := '';			PaqPrep(Str1, 'S');			AsRead(Str1, Str2, 30, False);			Str2[1] := 'M';			IF ConFlag & (Str2[2] = 'F') THEN ConFlag := FALSE;		END;		{$IFC ADSP}	ADSPLink:		BEGIN			Str2:='MC.RADSP';			IF Connected=0 THEN Str2[2]:= 'F';	{ plus connecté ! }			IF LocalMode THEN Str2[4]:='L';		END;{$ENDC}	SerialLink:		BEGIN			Str2 := 'MF.RSER.';			IF ConFlag THEN Str2[2] := 'C';		{ Connecté ? }			IF LocalMode THEN Str2[4] := 'L';	{ Local ou RTC ? }		END;{$IFC MUX}	MuxAsm,MuxASMT:		BEGIN			Str2:='TF.X25.';			IF HardType=MuxASMT THEN Str2[7] := 'T';			WITH GetCurSt^ DO			BEGIN				IF ConFlag THEN Str2[2]:='C';				Str2:=concat(Str2,XCallDatas);			END;		END;{$ENDC}{$IFC HAYES}	ModemHayes:		BEGIN			Str2 := 'MF.RHAYE';			IF ConFlag THEN Str2[2] := 'C';		{ Connecté ? }			IF LocalMode THEN Str2[4] := 'L';	{ Local ou RTC ? }		END;{$ENDC}{$IFC PILOTE}	PiloteModem:		BEGIN			Str2 := 'MF.RPILO';			IF ConFlag THEN Str2[2] := 'C';		{ Connecté ? }			IF LocalMode THEN Str2[4] := 'L';	{ Local ou RTC ? }		END;{$ENDC}	END;	{ CASE }END;PROCEDURE SSetMinId(Num1: Longint;										VAR Str2: Str255);VAR	Str1: Str255;	NbCar: Integer;BEGIN	IF (Num1 < 0) OR (Num1 > 1) THEN EXIT(SSetMinId);	CASE Num1 OF		0:			BEGIN				Str1 := '   ';				Str1[1] := ESC;				Str1[2] := chr($39);				Str1[3] := IDEN1;			END;		1:			BEGIN				Str1 := '   ';				Str1[1] := ESC;				Str1[2] := chr($39);				Str1[3] := IDEN2;			END;	END;	Str1[4] := SOH;	NbCar := Length(Str2);	IF NbCar > 15 THEN NbCar := 15;	BlockMoveData(Ptr(Ord4(@Str2) + 1), Ptr(Ord4(@Str1) + 5), NbCar);	IF NbCar < 15 THEN		BEGIN			Str1[NbCar + 5] := EOT;			NbCar := NbCar + 1;		END;	NbCar := NbCar + 4;	Str1[0] := chr(NbCar);	StrPrint(Str1);END;PROCEDURE SGetMinId(VAR Str2: Str255; Num1: Longint);VAR	Str1: Str255;	i: Integer;BEGIN	Str2 := '';	IF (Num1 < 0) OR (Num1 > 2) THEN EXIT(SGetMinId);	CASE Num1 OF		0:			BEGIN				Str1 := ' ';				Str1[1] := ENQ;			END;		1:			BEGIN				Str1 := '   ';				Str1[1] := ESC;				Str1[2] := chr($39);				Str1[3] := ENQRAM;			END;		2:			BEGIN				Str1 := '   ';				Str1[1] := ESC;				Str1[2] := chr($39);				Str1[3] := ENQROM;			END;	END;	StrPrint(Str1);	WaitDelay(180);		CASE GetCurSt^.HardType OF	ModemDrg:		BEGIN			Str1 := '';			PaqPrep(Str1, '?');			AsRead(Str1, Str2, 120, False);			IF Length(Str2) > 0 THEN				BEGIN					{ on vire l'EOT }					IF Str2[Length(Str2)] = EOT THEN Str2[0] := chr(Length(Str2) - 1);					{ on vire le c et le SOH }					IF Length(Str2) >= 2 THEN						BEGIN							FOR i := 3 TO Length(Str2) DO Str2[i - 2] := Str2[i];							Str2[0] := chr(Length(Str2) - 2);						END;				END;		END;		OTHERWISE		BEGIN		END;			END;	{ CASE }END;PROCEDURE SCurPos(VAR Str2: Str255);VAR	Str1: Str255;	i: Integer;BEGIN	Str2 := '';	Str1 := '  ';	Str1[1] := ESC;	Str1[2] := chr($61);	StrPrint(Str1);	WaitDelay(180);	CASE GetCurSt^.HardType OF	ModemDrg:		BEGIN			Str1 := '';			PaqPrep(Str1, '?');			AsRead(Str1, Str2, 120, False);			IF Length(Str2) > 0 THEN				BEGIN					{ on vire le c et le US }					FOR i := 3 TO Length(Str2) DO Str2[i - 2] := Str2[i];					Str2[0] := chr(Length(Str2) - 2);				END;		END;		END;	{ CASE }END;PROCEDURE Dial(Str1: Str255);BEGIN	IF GetCurSt^.HardType <>ModemDrg THEN EXIT(Dial);	SendControlFrame(Str1, 'A');END;FUNCTION Connected: Longint;VAR	Str1, Str2: Str255;	SavedErr: INTEGER;	BEGIN	WITH GetCurSt^ DO	CASE HardType OF		ModemDrg:		BEGIN			IF ConFlag=FALSE THEN				Connected := 0		{ déconnecté }			ELSE			BEGIN				WITH GetCurSt^ DO				BEGIN					SavedErr := Error;					Str1 := '';					PaqPrep(Str1, '?');					AsRead(Str1, Str2, 120, False);					ConFlag := ((Length(Str2) = 0) OR (Str2[1] <> 'F'));					Connected := LONGINT(ConFlag);					Error := SavedErr;	{ on conserve l'erreur précédente… }				END;			END;		END;	{ ModemDrg }		{$IFC ADSP}		ADSPLink:		BEGIN			WITH GetCurST^ DO			BEGIN				{ toujours connecté ? }				IF ConFlag = TRUE THEN				BEGIN{$IFC DEBUG}DebugNum ('Connected: state=', Ord(Infos^.theCCB.State), FALSE);{$ENDC}					ConFlag := (Infos^.theCCB.State=sOpen);				END;				Connected := LONGINT(ConFlag);			END;		END;	{ ADSPLink }{$ENDC}		OTHERWISE		BEGIN			Connected := LONGINT(ConFlag);{$IFC DEBUG}IF (conflag=FALSE) & (tasknumber=1) THEN DebugStr('Connected: conflag=FALSE');{$ENDC}		END;			END;	{ CASE }END;PROCEDURE SScroll(Num1: Longint);VAR	Str1: Str255;BEGIN	Str1 := '    ';	Str1[1] := ESC;	Str1[2] := chr($3A);	Str1[3] := START;	Str1[4] := chr($43);	IF Num1 = 0 THEN Str1[3] := STOP;	StrPrint(Str1);END;PROCEDURE SLower(Num1: Longint);VAR	Str1: Str255;BEGIN	Str1 := '    ';	Str1[1] := ESC;	Str1[2] := chr($3A);	Str1[3] := START;	Str1[4] := chr($45);	IF Num1 = 0 THEN Str1[3] := STOP;	StrPrint(Str1);END;PROCEDURE TrPrint(TheFlag: Longint);{ TheFlag = 0 -> print normal avec transformations accents et répétitions						1 -> print "transparent" avec suppression accents (pour 80col.)						2 -> print "X29/Vidéopad" envoi données avec bitQ à 1						3 -> print normal avec transformations accents mais SANS REPETITIONS}BEGIN	WITH GetCurSt^ DO	BEGIN		{ on vide le buffer avant d'envoyer une commande X29/Vidéopad }		IF (Byte(TrPrintFlag)<>2) & (TheFlag=2) THEN FlushBuffer;		Byte(TrPrintFlag) := TheFlag;	END;END;PROCEDURE InputMode(SilentFlag, BuffFlag: Longint);BEGIN	WITH GetCurSt^ DO		BEGIN			Byte(InSilentFlag) := SilentFlag;		END;END;PROCEDURE SWModem;VAR	Str1: Str255;BEGIN	IF GetCurSt^.HardType <>ModemDrg THEN EXIT(SWModem);	Str1 := '';	SendControlFrame(Str1, 'R');END;PROCEDURE Disconnect;VAR	Str1: Str255;	i: Integer;BEGIN	CASE GetCurSt^.HardType OF	ModemDrg:		BEGIN			Str1 := '';			SendControlFrame(Str1, 'D');		END;		{$IFC ADSP}	ADSPLink:		BEGIN			WITH GetCurSt^ DO			BEGIN				IF ConFlag=FALSE THEN EXIT(Disconnect);				SetIOWait;				Infos^.PB.TCBPtr := GetCurSt;				WITH Infos^.PB.ADSPpb DO				BEGIN					ioCompletion := @AsmCompletion;					csCode := dspClose;					abort := 1;	{ on détruit les données qui ne sont pas encore parties… }				END;				i := PBControl(@Infos^.PB.ADSPpb, TRUE);				YieldCpu;			END;		END;{$ENDC}	SerialLink:		IF GetCurSt^.Conflag THEN		BEGIN			Str1 := concat(ESC,'9g',ESC,'9W',Coff);			ComAsWriteStr(@Str1);		END;{$IFC MUX}	MuxAsm,MuxASMT:		BEGIN{$IFC DEBUG}DebugStr('Disconnect');{$ENDC}			IF GetCurSt^.ConFlag THEN SendMuxFrame(NIL,0,LibFrame);		END;{$ENDC}{$IFC HAYES}	ModemHayes:		BEGIN			WaitDelay(90);			Str1 := '+++';			ComAsWriteStr(@Str1);			WaitDelay(90);			Str1 := concat('ATH',chr(13));			ComAsWriteStr(@Str1);		END;{$ENDC}{$IFC PILOTE}	PiloteModem:		BEGIN			{ ### à faire ### }		END;{$ENDC}	END;	{ CASE }	GetCurSt^.ConFlag := FALSE;	{ on est en principe déconnecté }END;PROCEDURE Request(Num1: Longint; VAR ScrutX, PatX: Longint);VAR	Num2: Longint;	termine: boolean;BEGIN	Num2 := BAnd(PatX, $00FFFFFF);	termine := BAnd(Num2, BAnd(ScrutX, $00FFFFFF)) = Num2;	WITH GetCurSt^ DO		BEGIN			Error := 0;			IF NOT termine THEN				BEGIN					PendStr := BAnd(PatX, $00FFFFFF);					PendAdr := @ScrutX;					IF Num1 > 0 THEN					BEGIN						StatusWord := StrPdTCst;						DelayValue := Num1;					END					ELSE						StatusWord := StrPdCst;					YieldCpu;					IF BAnd(Num2, BAnd(ScrutX, $00FFFFFF)) <> Num2 THEN Error := ErrTime;				END;		END;END;FUNCTION SPend(VAR ScrutX: Longint; Num1: Longint): Longint;VAR	termine: boolean;BEGIN	termine := ScrutX <> 0;	WITH GetCurSt^ DO		BEGIN			Error := 0;			IF NOT termine THEN				BEGIN					PendAdr := @ScrutX;					IF Num1 > 0 THEN					BEGIN						StatusWord := PdTCst;						DelayValue := Num1;					END					ELSE						StatusWord := PdCst;					YieldCpu;					IF ScrutX = 0 THEN Error := ErrTime;				END;		END;	SPend := ScrutX;	ScrutX := 0;END;PROCEDURE YieldCpu;BEGIN	WITH GetCurSt^ DO SwapTasks(@RegArea, @RegAreaF);END;PROCEDURE SPost(VAR ScrutX: Longint; Num1, Num2: Longint);VAR	termine: boolean;BEGIN	termine := ScrutX = 0;	WITH GetCurSt^ DO		BEGIN			Error := 0;			IF NOT termine THEN				BEGIN					PendAdr := @ScrutX;					IF Num2 > 0 THEN					BEGIN						StatusWord := PostTCst;						DelayValue := Num2;					END					ELSE						StatusWord := PostCst;					YieldCpu;				END;			IF ScrutX = 0 THEN				BEGIN					Error := 0;					ScrutX := Num1;					YieldCpu;				END			ELSE				Error := ErrTime;		END;END;FUNCTION TaskNumber: Longint;VAR	ThePtr: TPtr;BEGIN	TaskNumber := GetCurSt^.TaskNumber;END;FUNCTION SModNumber: Longint;BEGIN	SModNumber := GetCurSt^.TheModem;END;FUNCTION SStarFlag: Longint;BEGIN	IF GetCurSt^.StarFlag THEN		SStarFlag := 1	ELSE		SStarFlag := 0;END;PROCEDURE MessDLoad(VAR Str1: Str255; Num1: Longint);VAR	Str2: Str255;BEGIN	IF (Num1<=0) & (GetCurSt^.HardType IN [MuxAsm,MuxASMT]) THEN	{ lecture données X29 }	BEGIN		CASE -Num1 OF			0:		Str1 := GetCurSt^.Infos^.LastX29;			1:		NumToString(GetCurSt^.Infos^.PO1,Str1);			2..6:	Str1 := GetCurSt^.Infos^.PO[-Num1];			OTHERWISE Str1 := '';		END;		EXIT(MessDLoad);	END;		IF GetCurSt^.HardType <>ModemDrg THEN EXIT(MessDLoad);		Str1 := '';	IF Num1 > 99 THEN Num1 := 99;	IF Num1 < 0 THEN Num1 := 0;	NumToString(Num1, Str2);	IF Length(Str2) = 1 THEN Insert('0', Str2, 1);	PaqPrep(Str2, 'L');	AsRead(Str2, Str1, 120, False);	IF Length(Str1) > 0 THEN Delete(Str1, 1, 1);END;PROCEDURE MessULoad(Num1: Longint; VAR Str2: Str255);VAR	Str1: Str255;BEGIN	IF GetCurSt^.HardType <>ModemDrg THEN EXIT(MessULoad);	IF Num1 > 99 THEN Num1 := 99;	IF Num1 < 0 THEN Num1 := 0;	NumToString(Num1, Str1);	IF Length(Str1) = 1 THEN Insert('0', Str1, 1);	Str1 := Concat(Str1, Str2);	SendControlFrame(Str1, 'T');END;PROCEDURE SSysParm(Num1, Num2, Num3, Num4: Longint);VAR	Str1, Str2: Str255;BEGIN	IF GetCurSt^.HardType <> ModemDrg THEN EXIT(SSysParm);		Str1 := 'YY';	IF Num1 = 0 THEN		BEGIN			Str1[1] := 'N';		END;	IF Num2 = 0 THEN		BEGIN			Str1[2] := 'N';		END;	IF Num3 > 999 THEN Num3 := 999;	IF Num3 < 0 THEN Num3 := 0;	NumToString(Num3, Str2);	WHILE Length(Str2) < 3 DO Insert('0', Str2, 1);	Str1 := Concat(Str1, Str2);	IF Num4 > 999 THEN Num4 := 999;	IF Num4 < 0 THEN Num4 := 0;	NumToString(Num4, Str2);	WHILE Length(Str2) < 3 DO Insert('0', Str2, 1);	Str1 := Concat(Str1, Str2);	SendControlFrame(Str1, 'P');END;FUNCTION GetPriority: Longint;BEGIN	GetPriority := GetCurSt^.TaskPriority;END;PROCEDURE SetPriority(Num1: Longint);BEGIN	IF Num1 < 20 THEN Num1 := 20;	IF Num1 > 255 THEN Num1 := 255;	GetCurSt^.TaskPriority := Num1;				{ il faut maintenant reordonner les TCBs, en le mettant en tete					de cette liste de priorite } {Done in scheduler}END;PROCEDURE ControlSN(VAR Str1: Str255);BEGIN	GetCurSt^.Error := 0;END;{ Mode de fonctionnement du serveur }PROCEDURE RunFlags(VAR Str1: Str255);BEGIN	WITH GetCurSt^ DO	BEGIN		CASE HardType OF			ModemDrg:			BEGIN				IF IsTeletel THEN					Str1[2] := 'T'  { Dragster X25 }				ELSE					Str1[2] := 'M'; { Dragster Modem }		  END;		  			ADSPLink:				Str1[2] := 'E';	{ emulateur }			SerialLink:				Str1[2] := 'S';	{ port série }{$IFC MUX}			MuxAsm,MuxASMT:				Str1[2] := 'X';	{ multiplexeur ASM }{$ENDC}{$IFC HAYES}			ModemHayes:				Str1[2] := 'H';	{ modem Hayes™ }{$ENDC}{$IFC PILOTE}			PiloteModem:				Str1[2] := 'P'; { modem Pilote }{$ENDC}	  END; { CASE }	  Str1[1] := 'C'; { mode Compilé }	  Str1[0] := chr(2);	END;END;{==========================================================================}{  Gestion du multitache													 }{==========================================================================}PROCEDURE TimeIt;{ Routine d'interruption du timer, réactive les tâches en fin de delay }VAR ThePtr: TPtr;BEGIN { of Procedure TimeIt }	ThePtr := GetStPtr;	WHILE ThePtr <> NIL DO		WITH ThePtr^ DO			BEGIN				IF Odd(StatusWord) THEN				BEGIN					DelayValue := DelayValue -1;					IF DelayValue <=0 THEN StatusWord := ReadyCst;				END;				ThePtr := ThePtr^.NextTCB;			END;END; { of Procedure TimeIt }PROCEDURE StartTask;{ permet a une tache en erreur grave pour redemarrer à zero }{ le redemarrage est fait par le scheduler }BEGIN	WITH GetCurSt^ DO		BEGIN			StatusWord := StartCst;			YieldCpu;		END;END;FUNCTION SeekScreen(VAR Str1: Str255): Longint;VAR	TheS: TPtNameScreen;	Index: Integer;	Trouve: boolean;	TheLen: Integer;BEGIN	{ recherche de Str1 dans le Pool Noms d'ecrans }	{ si on ne trouve pas: On relance la tache a zero = RunTask }	WITH GetCurSt^ DO		BEGIN			TheS := PtNameScreen;			Index := 0;			Trouve := False;			WHILE (Length(TheS^) > 0) AND (NOT Trouve) DO				BEGIN					Trouve := EqualString(TheS^, Str1, False, True);					IF NOT Trouve THEN						BEGIN							Index := Index + 1;							TheLen := Length(TheS^) + 1;							TheS := TPtNameScreen(Ord4(TheS) + TheLen);							IF Odd(TheLen) THEN TheS := TPtNameScreen(Ord4(TheS) + 1);						END;				END;			IF Trouve THEN				SeekScreen := Index			ELSE				StartTask;		END;END;PROCEDURE RunTask;VAR	i: Integer;	WorkLong: Longint;BEGIN { of procedure RunTask }		 { on suppose en entrant ici que les registres de la tache en foreground			 sont sauves dans RegAreaF, et que CurStPtr est bien positionne }	WITH GetCurSt^ DO		IF MagicN1<>$12345678 THEN	{ on vérifie que c'est bien un TCB !!! }			DebugStr('Pb de restart;g')		ELSE		BEGIN			{ initialisation de la zone de fichiers }			{ attention, en cas de restart de la tâche, les fichiers			  ne sont pas fermés par 'FileTask' !!! }			IF TaskNumber < 1000 THEN				FOR i := 1 TO MaxFile DO					WITH TheFiles[i] DO						BEGIN(*							IF BaseFlag THEN								SClose(i)							ELSE								BaseClose(i);*)							FileRef := 0;							FileRLen := 1;							FilePos := 0;							BaseFlag := False;						END;(*			SetBaseEnd(0);*)			{ Init. des zones }			NBZones := 0;			{ on remet les modes d'input aux valeurs par defaut }			Byte(InSilentFlag) := 0;						StatusWord := ReadyCst; { mot d'etat }			DelayValue := 0; { delay }			IOCompFlag := 0; { IO terminée }			Error := NoErr; { pas d'erreur }			StartTime := 0; { Connexion Time }			LocalMode := FALSE;	{ on se considère en extérieur par défaut }			EchoFlag := True; { Echo on }			StarFlag := False; { Pas de * en saisie }			OutPutFlag := True; { Output direct autorisée / bufferisé (Télétel) ou Xon/Xoff (Mux) }			IsTeletel := False; { Output normal modem ou test buffer pour Drg Télétel }			MaxTime := 60 * 60 * 2; { 2 mn de TimeOut }			FilterFlag := True; { on filtre les ESC }			Byte(TrPrintFlag) := 0; { on optimise }			TheNScreen := 0;			TheNLine := 0;			TheNInst := 0;			TheVScreen := Ptr(PtOffScreen^[0].OffVCode);			RegArea[10] := Ptr(GetCurSt^.PTLVars); 	{A2 pointe sur les variables locales}			RegArea[11] := Ptr(GetCurSt^.PTJump); 	{A3 pointe sur la table de Jump}			RegArea[12] := Ptr(GetCurSt); 					{A4 pointe sur le TCB}			RegArea[13] := Ptr(GetCurSt^.PTJump); 	{A5 pointe sur la table de Jump}			RegArea[15] := Ptr(Ord4(PtOrgStk) - 6);	{A7 pile de départ de la tâche }			{ on met 0 et @StartTask dans la pile }			WorkLong := Ord4(@StartTask);			BlockMoveData(@WorkLong, RegArea[15], 4);			WorkLong := 0;			BlockMoveData(@WorkLong, Ptr(Ord4(RegArea[15]) + 4), 2);			RegArea[0] := PtCode;	{SP pointe sur le bas de la pile, et									D0 pointe sur le debut du code. Il suffira									de faire SwapTasks }			{ Pas de Reset des globales }			{ on rend la main }			OpFlag := 0;			RunMode := 1;	{ VBL autorisée }			FrOutPut := FALSE; { pas de FRONTSCREEN au départ }			XCallDatas:='                          ';			TraceFile := 0;	{ pas de fichier de TRACE qd on démarre }			ClearBuffer;		END;END; { of procedure RunTask }PROCEDURE Scheduler(ThePTable: Ptr);{ le scheduler tourne dans l'environnement de la tache en ForeGround }LABEL 0;TYPE	IPtr = ^INTEGER;VAR	ThePtr: TPtr;	XPriority: Integer;	TheTable: TPTPtr;	SaveStkLowPt: LONGINT;		{ copie de StkLowPt }	SaveHiHeapMark: LONGINT;	{ copie de HiHeapMark }	ModeType: INTEGER;	PROCEDURE RoundRobin;	VAR		ThePriority: Integer;		i: Integer;	BEGIN		ThePriority := ThePtr^.TaskPriority;		IF XPriority = ThePriority THEN { meme priorité }			WITH TheTable^[ThePriority] DO				BEGIN					IF ThePtr <> LastTCB THEN						WITH ThePtr^ DO							BEGIN { valse des pointeurs }								{ on vire le TCB de sa place actuelle }								IF PredTCB <> NIL THEN PredTCB^.NextTCB := NextTCB;								IF NextTCB <> NIL THEN									BEGIN										NextTCB^.PredTCB := PredTCB;										IF PredTCB = NIL THEN SetTheSt(NextTCB);									END;								{ on le met à sa nouvelle place, derriere le LastTCB }								PredTCB := LastTCB;								NextTCB := LastTCB^.NextTCB;								IF NextTCB <> NIL THEN NextTCB^.PredTCB := ThePtr;								LastTCB^.NextTCB := ThePtr;								LastTCB := ThePtr; (* bug corrigé le 30/03/88 *)							END				END		ELSE { priorité differente }			BEGIN { c'est un peu plus complexe }				{ mise à jour de l'ancienne priorité }				WITH TheTable^[XPriority] DO					BEGIN						IF ThePtr = LastTCB THEN { derniere tache de la priorité }							WITH ThePtr^ DO								BEGIN									IF PredTCB = NIL THEN										BEGIN { premiere tache, donc première priorité }											LastTCB := NIL;											{ il ne peut pas y avoir de priorité plus basse }											PredPTY := - 1;											IF NextPTY <> - 1 THEN												BEGIN													TheTable^[NextPTY].PredPTY := - 1;												END;											NextPTY := - 1										END									ELSE										BEGIN { tache quelconque, on regarde la priorité precedente													 }											IF PredTCB^.TaskPriority = XPriority THEN												BEGIN { tache precedente de meme ancienne priorité }													LastTCB := PredTCB; { elle devient la LastTCB }												END											ELSE												BEGIN { tache d'une autre priorité, plus basse }													LastTCB := NIL;													TheTable^[PredPTY].NextPTY := NextPTY;													PredPTY := - 1;													IF NextPTY <> - 1 THEN														BEGIN															TheTable^[NextPTY].PredPTY := PredPTY;															NextPTY := - 1; (* bug corrigé le 30/03/88 *)														END;												END										END;								END;					END;				{ on vire le TCB de sa place actuelle }				WITH ThePtr^ DO					BEGIN { valse des pointeurs }						IF PredTCB <> NIL THEN PredTCB^.NextTCB := NextTCB;						IF NextTCB <> NIL THEN							BEGIN								NextTCB^.PredTCB := PredTCB;								IF PredTCB = NIL THEN SetTheSt(NextTCB);							END;					END;				{ mise à jour de la nouvelle priorité }				WITH ThePtr^, TheTable^[ThePriority] DO					BEGIN						IF LastTCB = NIL THEN							BEGIN { nouvelle priorité }								LastTCB := ThePtr;								{ on recherche la première priorité plus faible }								PredPTY := - 1;								NextPTY := - 1;								i := ThePriority;								WHILE i > 0 DO									BEGIN										i := i - 1;										IF TheTable^[i].LastTCB <> NIL THEN											BEGIN												PredPTY := i;												NextPTY := TheTable^[i].NextPTY;												TheTable^[i].NextPTY := ThePriority; (* bug corrigé le													 30/03/88 *)												IF NextPTY <> - 1 THEN (* bug corrigé le 30/03/88 *)													TheTable^[NextPTY].PredPTY := ThePriority; (* bug													 corrigé le 30/03/88 *)												LEAVE;											END;									END;								{ on recherche la première priorité plus forte }								IF PredPTY = - 1 THEN (* bug corrigé le 30/03/88 *)									BEGIN										i := ThePriority;										WHILE i < 255 DO (* bug corrigé le 31/03/88 *)											BEGIN												i := i + 1;												IF TheTable^[i].LastTCB <> NIL THEN													BEGIN														NextPTY := i;														PredPTY := TheTable^[i].PredPTY; (* bug corrigé le															 30/03/88 *)														TheTable^[i].PredPTY := ThePriority; (* bug corrigé															 le 30/03/88 *)														IF PredPTY <> - 1 THEN (* bug corrigé le 30/03/88 *)															TheTable^[PredPTY].NextPTY := ThePriority; (* bug															 corrigé le 30/03/88 *)														LEAVE;													END;											END;									END;								{ on s'insere derrierre le LastTCB de la priorité plus faible }								WITH TheTable^[PredPTY] DO									BEGIN										{ on le met à sa nouvelle place, derriere le LastTCB }										PredTCB := LastTCB;										NextTCB := LastTCB^.NextTCB;										IF NextTCB <> NIL THEN											BEGIN												NextTCB^.PredTCB := PredTCB;												IF PredTCB = NIL THEN SetTheSt(NextTCB);											END;										LastTCB^.NextTCB := ThePtr;									END;							END						ELSE							BEGIN { priorité déjà existante }								{ on s'insere derrierre le LastTCB }								{ on le met à sa nouvelle place, derriere le LastTCB }								PredTCB := LastTCB;								NextTCB := LastTCB^.NextTCB;								IF NextTCB <> NIL THEN NextTCB^.PredTCB := ThePtr;								LastTCB^.NextTCB := ThePtr;								LastTCB := ThePtr;							END					END;			END;	END;	PROCEDURE XSetCurSt(ThePtr: TPtr);	BEGIN		SetCurSt(ThePtr);		WITH ThePtr^ DO			IF TaskNumber > 1000 THEN SetPtr(Ptr(Ord4(PtCode) - 4), ThePtr);	END;BEGIN { of Procedure Scheduler }	{ on désactive le StackSniffer }	SaveStkLowPt := LIPtr(StkLowPt)^;	LIPtr(StkLowPt)^:=0;		ModeType := IPtr(ORD4(ThePTable)-2)^;	TheTable := TPTPtr(ThePTable);0: ;	ThePtr := GetStPtr;	{ Ptr vers le premier TCB de la liste… }		IF ThePtr^.MagicN1<>$12345678 THEN	{ ThePtr ne pointe pas sur un TCB !!! }	BEGIN		DebugStr('Scheduler error');		ThePtr:=NIL;	{ on ne passe pas dans le reste du Scheduler }	END;		WHILE ThePtr <> NIL DO		WITH ThePtr^ DO			BEGIN				IF ReadyToRun(ThePtr) & (ModeType<=RunMode) THEN				{ tache prete en attente du CPU }				BEGIN					{ mise a jour des pointeurs pour le Round Robin }					XSetCurSt(ThePtr);					{ memo priorite courante }					XPriority := TaskPriority;					{ màj mode de fonctionnement courant •• IT Flag •• pour ReadyToRun }					CurRunMode := ModeType;					{ modif. de HiHeapMark }					SaveHiHeapMark := LIPtr(HiHeapMark)^;					LIPtr(HiHeapMark)^:= 0;					{ lancement de la tache choisie }					SwapTasks(@RegAreaF, @RegArea);					{ mise a jour des pointeurs pour le Round Robin }					LIPtr(HiHeapMark)^:=SaveHiHeapMark;					RoundRobin;					{ on reschedule sans donner la main au ForeGround }					GOTO 0;				END				ELSE { on regarde la tache suivante }					ThePtr := ThePtr^.NextTCB;			END;				SetCurSt(NIL); { on n'est plus dans une tache de Dragster }{$IFC TEST}	IF LIPtr(StkLowPt)^<>0 THEN DebugStr('Stack sniffer !!!');{$ENDC}	{ on réactive le StackSniffer }	LIPtr(StkLowPt)^:=SaveStkLowPt;		{ on rend la main a la tache en ForeGround }END; { of Procedure Scheduler }FUNCTION SSVal(VAR Str1: Str255): Longint;{ ATTENTION: la chaine Str1 est detruite }VAR	Num1: Longint;	K: Integer;	termine: boolean;BEGIN	{ on checke le type de Str1 }	{ on skippe tous les blancs devant }	K := 0;	termine := False;	WHILE (K < Length(Str1)) AND (NOT termine) DO		BEGIN			K := K + 1;			termine := Str1[K] <> ' ';		END;	{ on skippe le signe s'il est là }	IF termine THEN		BEGIN			IF (Str1[K] IN ['+'..'-']) THEN				BEGIN					{ on remplace le signe par un blanc et on met le signe au 1er car }					IF K > 1 THEN						BEGIN							Str1[1] := Str1[K];							Str1[K] := ' ';						END;					{ on doit encore skipper les blancs }					termine := False;					WHILE (K < Length(Str1)) AND (NOT termine) DO						BEGIN							K := K + 1;							termine := Str1[K] <> ' ';						END;				END		END;	{ on skippe les digits }	IF termine THEN termine := NOT (Str1[K] IN ['0'..'9']);	WHILE (K < Length(Str1)) AND (NOT termine) DO		BEGIN			K := K + 1;			termine := NOT (Str1[K] IN ['0'..'9']);		END;	IF termine THEN Str1[0] := chr(K - 1);	StringToNum(Str1, Num1);	SSVal := Num1;END;END. {of Dragster Run Time}
+{$SETC TEST=TRUE}
+{$SETC DEBUG=FALSE}
+
+{$IFC UNDEFINED DEMO}
+	{$SETC DEMO=FALSE}
+{$ENDC}
+
+{$SETC ADSP=TRUE}
+
+{$SETC DEBUGHAYES=FALSE}
+{$SETC PILOTE=FALSE}
+
+{$IFC DEMO=TRUE}
+	{$SETC MUX=FALSE}
+	{$SETC HAYES=FALSE}
+{$ELSEC}
+	{$SETC MUX=TRUE}
+	{$SETC HAYES=TRUE}
+{$ENDC}
+
+UNIT DragsterRT;
+
+INTERFACE
+
+{$DECL DrgTree}
+{$SETC DrgTree = TRUE}
+
+USES MemTypes, OSIntf, ToolIntf, PackIntf, AppleTalk, ADSP, SysEqu, TextUtils,
+	{$U :Wintree:DrgTree.p} DrgTree;
+
+{$D+}
+{$R+}
+
+TYPE
+	Pstr255 = ^Str255;
+	LIPtr = ^LONGINT;
+	
+PROCEDURE MyCompletion(ThePtr: Ptr);
+
+PROCEDURE Scheduler(ThePTable: Ptr);
+
+PROCEDURE RunTask;
+
+PROCEDURE TimeIt;
+
+FUNCTION SeekScreen(VAR Str1: Str255): Longint;
+
+PROCEDURE CarPrint(C: Char);
+
+PROCEDURE NumPrint(Num1: Longint);
+
+PROCEDURE StrPrint(VAR Str1: Str255);
+
+PROCEDURE SZone(ZPosX, ZPosY, ZLen: Longint; TheVar: Ptr; ZTkVar: Integer; TheColor: Longint);
+
+PROCEDURE Wait(NumZ: Longint);
+
+PROCEDURE Locate(X, Y: Longint);
+
+PROCEDURE SBackColor(Num1: Longint);
+
+PROCEDURE SForeColor(Num1: Longint);
+
+PROCEDURE Font(Num1: Longint);
+
+PROCEDURE Cls;
+
+PROCEDURE SCursor(Num1: Longint);
+
+PROCEDURE WaitDelay(Num1: Longint);
+
+PROCEDURE Disconnect;
+
+PROCEDURE Draw;
+
+PROCEDURE Flash(Num1: Longint);
+
+PROCEDURE SInput(PStr2: Pstr255; Num1: Longint; VarPtr: Ptr);
+
+PROCEDURE Inverse(Num1: Longint);
+
+PROCEDURE SSize(Num1: Longint);
+
+PROCEDURE SUnderLine(Num1: Longint);
+
+PROCEDURE WaitConnect(WTime: Longint);
+
+PROCEDURE Message(Num1, Num2, Num3: Longint; VAR Str1: Str255);
+
+PROCEDURE CanEol(Num1, Num2: Longint);
+
+PROCEDURE DrawScreen(TheVScreen: Ptr);
+
+FUNCTION SPend(VAR ScrutX: Longint; Num1: Longint): Longint;
+
+PROCEDURE SPost(VAR ScrutX: Longint; Num1, Num2: Longint);
+
+PROCEDURE ControlSN(VAR Str1: Str255);
+
+PROCEDURE Dial(Str1: Str255);
+
+PROCEDURE StartTask;
+
+PROCEDURE FrontScreen(Num1: Longint);
+
+PROCEDURE SGetMinId(VAR Str2: Str255; Num1: Longint);
+
+PROCEDURE SSetMinId(Num1: Longint; VAR Str2: Str255);
+
+PROCEDURE SStatus(VAR Str2: Str255);
+
+FUNCTION TaskNumber: Longint;
+
+FUNCTION GetPriority: Longint;
+
+PROCEDURE SetPriority(Num1: Longint);
+
+PROCEDURE YieldCpu;
+
+PROCEDURE Request(Num1: Longint; VAR ScrutX, PatX: Longint);
+
+PROCEDURE SWModem;
+
+FUNCTION Connected: Longint;
+
+PROCEDURE SCurPos(VAR Str2: Str255);
+
+PROCEDURE SScroll(Num1: Longint);
+
+PROCEDURE SLower(Num1: Longint);
+
+PROCEDURE CanBlock(Num1, Num2, Num3: Longint);
+
+FUNCTION SModNumber: Longint;
+
+FUNCTION SStarFlag: Longint;
+
+PROCEDURE MessDLoad(VAR Str1: Str255; Num1: Longint);
+
+PROCEDURE MessULoad(Num1: Longint; VAR Str2: Str255);
+
+PROCEDURE SSysParm(Num1, Num2, Num3, Num4: Longint);
+
+{ enqueue dequeue et printscreen }
+
+PROCEDURE PrintScreen(VAR Str1: Str255);
+
+PROCEDURE SEnqueue(ToVoie: Longint; VAR Str1: Str255);
+
+PROCEDURE SDequeue(VAR Str1: Str255);
+
+FUNCTION Similarity(VAR Str1, Str2: Str255): Longint;
+
+PROCEDURE ResetQueue;
+
+FUNCTION QueueSize: Longint;
+
+PROCEDURE SGet(VAR AdStr: Str255; Num1: Longint);
+
+PROCEDURE SGetPaq(VAR AdStr: Str255; Num1, Num2, Ch1, Ch2: Longint);
+
+PROCEDURE SSerConfig(Num1, Num2, Num3, Num4, Num5: Longint);
+
+PROCEDURE FlushBuffer;
+
+FUNCTION Rnd(Num1: Longint): Longint;
+
+PROCEDURE OpenSer(NumFile, Num1, Num2, Num3, Num4, Num5: Longint);
+
+PROCEDURE TrPrint(TheFlag: Longint);
+
+PROCEDURE InputMode(SilentFlag, BuffFlag: Longint);
+
+PROCEDURE RunFlags(VAR Str1: Str255);
+
+PROCEDURE Echo(Num1: Longint);
+
+FUNCTION SSVal(VAR Str1: Str255): Longint;
+
+IMPLEMENTATION
+
+{$SETC STARNUMBER := TRUE }
+
+{$I DragsterTCB.p}
+{$D+}
+
+CONST
+	ErrSyntax = 1; { Erreur de syntaxe }
+	ErrVParam = 2; { Mauvaise valeur de parametre }
+	ErrLabel = 3; { Etiquette utilis√©e et non d√©finie }
+	ErrDef = 4; { Red√©finition d'une √©tiquette ou d'une var }
+	ErrType = 5; { Mauvais type de parametre }
+	ErrMissing = 6; { Mauvais nombre de parametres }
+	ErrFor = 7; { For sans Next }
+	ErrNext = 8; { Next sans For }
+	ErrWhile = 9; { While sans Wend }
+	ErrWend = 10; { Wend sans While }
+	ErrZero = 11; { Division par zero }
+	ErrReturn = 12; { Return sans Gosub }
+	ErrLigne = 13; { pb de tokenisation }
+	ErrCall = 14; { mauvais appel de la fonction }
+	ErrConf = 15; { conflit de types }
+	ErrImbWF = 16; { trop d'imbrications de while/for }
+	ErrImbIf = 17; { trop d'imbrications de If }
+	ErrElse = 18; { Else sans If }
+	ErrEndif = 19; { Endif sans If }
+	ErrBreak = 20; { Break sans for/while }
+	ErrCont = 21; { Continue sans for/while }
+	ErrNonXFile = 22; { Tentative d'exec d'un fichier non exec }
+	ErrDDef = 23; { Double d√©finition d'une √©tiquette }
+	ErrBadNum = 24; { Mauvais numero de fichier }
+	ErrNotOpen = 25; { Fichier non ouvert }
+	ErrFileOpen = 26; { Fichier d√©ja ouvert }
+	ErrQEmpty = 29; { Queue vide }
+	ErrQFull = 30; { queue pleine }
+	ErrQTx = 31; { tache inexistante }
+
+	ErrTime = 128; { timeOut }
+	CRepetition = 129;
+	CEnvoi = 130;
+	CGuide = 131;
+	CSommaire = 132;
+	CSuite = 133;
+	CRetour = 134;
+	CAnnulation = 135;
+	CCorrection = 136;
+	CAutre = 137;
+	CKSuite = 138;
+	CIgnore = 255;
+
+	NUL = chr(0);
+	SOH = chr(1);
+	STX = chr(2);
+	ETX = chr(3);
+	EOT = chr(4);
+	ENQ = chr(5);
+	BELL = chr(7);
+	BS = chr(8);
+	LF = chr(10);
+	FF = chr(12);
+	RC = chr(13);
+	SO = chr(14);
+	SI = chr(15);
+	DLE = chr(16);
+	DC1 = chr(17);
+	Con = chr(17);
+	REP = chr(18);
+	SEP = chr(19);
+	DC4 = chr(20);
+	Coff = chr(20);
+	SS2 = chr(22);
+	ETB = chr($17);
+	CAN = chr(24);
+	ACC = chr(25);
+	SUB = chr(26);
+	ESC = chr(27);
+	RS = chr(30);
+	US = chr(31);
+	SP = chr(32);
+	START = chr($69);
+	STOP = chr($6A);
+	IDEN1 = chr($78);
+	IDEN2 = chr($79);
+	ENQRAM = chr($7A);
+	ENQROM = chr($7B);
+	PRO1 = chr($39);
+	PRO2 = chr($3A);
+	PRO3 = chr($3B);
+	
+{ Caract√®res utilis√©s pour les zones de saisie }
+
+	CarZone = '.';		{ remplissage de zone }
+	CarZoneMask = 'X';	{ remplissage de zone masqu√©e }
+	CarMask = '*';		{ car de masquage }
+
+	DataFrame	=	chr($30);
+	CallFrame	= chr($31);
+	LibFrame	=	chr($32);
+	ComFrame	=	chr($33);
+	ErrFrame	=	chr($34);
+	IndispFrame	=	chr($35);
+	DispFrame	=	chr($36);
+	CritLFrame	=	chr($37);
+	RDispFrame	=	chr($38);
+	X29Frame	=	chr($39);
+	X29FrameNAMTEL = chr($3A);
+	NextDataFrame = chr($40);		{ donn√©es √† suivre bit M=1 (Hyptek) }
+	NextX29Frame = chr($49);		{ message X29 √† suivre bit M=1 Q=1 }
+
+{$IFC DEBUG}
+FUNCTION Str(n:LONGINT):Str255;
+
+VAR	s:Str255;
+
+BEGIN
+	NumToString(n,s);
+	str := s;
+END;
+{$ENDC}
+
+
+PROCEDURE MyConst;
+	EXTERNAL;
+
+FUNCTION GetStPtr: TPtr;
+{ GetStPtr rend TheStPtr, qui pointe sur la chaine des TCB occupes }
+	EXTERNAL;
+
+PROCEDURE SetStPtr(ThePtr: TPtr);
+{ SetCurSt met a jour CurStPtr, qui pointe sur le TCB actif }
+	EXTERNAL;
+
+FUNCTION GetCurSt: TPtr;
+{ GetCurSt rend CurStPtr, qui pointe sur le TCB actif }
+	EXTERNAL;
+
+PROCEDURE SetTheSt(ThePtr: TPtr);
+{ SetTheSt met a jour TheStPtr, qui pointe sur la chaine des TCB occupes }
+	EXTERNAL;
+
+PROCEDURE SetCurSt(ThePtr: TPtr);
+{ SetCurSt met a jour CurStPtr, qui pointe sur le TCB actif }
+	EXTERNAL;
+
+PROCEDURE SetNilSt;
+{ SetNilSt resette CurStPtr }
+	EXTERNAL;
+
+PROCEDURE SaveRegs(AdRegs: Ptr);
+{ InitRegs va mettre les valeurs des registres √† l'adresse AdRegs }
+	EXTERNAL;
+
+PROCEDURE SwapTasks(AdRegs1, AdRegs2: Ptr);
+{ Sauvegarde contexte courant dans AdRegs1 et restaure AdRegs2 }
+	EXTERNAL;
+
+PROCEDURE AsmCompletion;
+{ IOCompletion qui donne l'adresse de la tache appelante }
+	EXTERNAL;
+
+FUNCTION ReadyToRun(ThePtr: TPtr): boolean;
+	EXTERNAL;
+
+PROCEDURE SetPtr(TheP: Ptr;
+								 ThePtr: TPtr);
+	EXTERNAL;
+
+PROCEDURE PaqPrep(VAR TheBuffer: Str255; ComChar: Char);
+	FORWARD;
+	
+PROCEDURE SendControlFrame(VAR TheBuffer: Str255; ComChar: Char);
+	FORWARD;
+
+PROCEDURE Break;
+	INLINE $FACE;
+
+PROCEDURE StrBreak(str: Str255);
+	INLINE $201F, $FACE;
+
+PROCEDURE WordAlign; FORWARD;
+
+PROCEDURE BuffDataFrame(TheBuffer: Ptr; Count: Longint);
+FORWARD;
+
+
+PROCEDURE MyCompletion(ThePtr: Ptr);
+
+BEGIN
+	WITH TPtr(ThePtr)^ DO
+		BEGIN
+			IOCompFlag := 0;
+			StatusWord := ReadyCst;
+		END;
+END;
+
+PROCEDURE WaitDelay(Num1: Longint);
+
+BEGIN
+	FlushBuffer;
+	IF Num1 > 0 THEN {‚Ä¢‚Ä¢‚Ä¢‚Ä¢ pas de DELAY < 1 ‚Ä¢‚Ä¢‚Ä¢‚Ä¢}
+		WITH GetCurSt^ DO
+			BEGIN
+				DelayValue := Num1;
+				StatusWord := DelayCst;
+			END;
+	YieldCpu;
+END;
+
+PROCEDURE WaitLong(Num1: Longint);
+
+BEGIN
+	IF Num1 > 0 THEN {‚Ä¢‚Ä¢‚Ä¢‚Ä¢ pas de DELAY < 1 ‚Ä¢‚Ä¢‚Ä¢‚Ä¢}
+		WITH GetCurSt^ DO
+			BEGIN
+				DelayValue := Num1;
+				StatusWord := DelayCst;
+			END;
+	YieldCpu;
+END;
+
+PROCEDURE TEnQueue(QNum: Integer; VAR pb: TQERec);
+
+BEGIN
+	WITH GetCurSt^, GetCurSt^.TheQueues^[QNum] DO
+		BEGIN
+			pb.EOwner := GetCurSt;
+			pb.QLink := NIL;
+			IF (QNumber = 0) OR (QFirst = NIL) THEN
+				BEGIN
+					QFirst := @pb;
+					QEnd := @pb;
+				END
+			ELSE
+				BEGIN
+					QEnd^.QLink := @pb;
+					QEnd := @pb;
+				END;
+			QNumber := QNumber + 1;
+			YieldCpu;
+		END;
+END;
+
+
+FUNCTION Concatnum(str:str255; num:longint):str255;
+
+VAR	tempStr:Str255;
+
+BEGIN
+	numtostring(num,tempstr);
+	concatnum := concat(str,tempstr);
+END;
+
+
+PROCEDURE DebugNum(str: Str255; Num: Longint; Go: boolean);
+
+VAR
+	Chaine: Str255;
+
+BEGIN
+	NumToString(Num, Chaine);
+	IF Go THEN Chaine := Concat(Chaine, ';G');
+	DebugStr(Concat(str, Chaine));
+END;
+
+
+PROCEDURE SetIOWait;
+
+BEGIN
+	WITH GetCurST^ DO
+		BEGIN
+			IOCompFlag := 1;
+			StatusWord := IOWaitCst;
+		END;
+END;
+
+{$IFC PILOTE}
+FUNCTION prepTramePilote(typeTrame: INTEGER; buffer: Ptr; count: INTEGER):StrTrame;
+
+VAR
+	temp: StrTrame;
+	
+BEGIN
+	temp[1]:=chr(typeTrame);
+	temp[2]:=chr($40+LoWord(GetCurSt^.ModNumber));
+	BlockMoveData(buffer,@temp[3],count);
+	temp[0]:=chr(count+2);
+	prepTramePilote := temp;
+END;
+{$ENDC}
+
+PROCEDURE AsRead(VAR ThePrompt, TheBuffer: Str255; TimeLimit: Longint; SkipEnt: boolean);
+
+{ uniquement appel√© si HardType=ModemDrg }
+
+LABEL 0;
+
+VAR
+	Err: OSErr;
+	pb: TQERec;
+	CCon: Char;
+	NbCar: Integer;
+	XTimeLimit: Longint;
+
+BEGIN
+	IF GetCurSt^.HardType<>ModemDrg THEN EXIT(AsRead);
+	
+	FlushBuffer;
+	XTimeLimit := TickCount + TimeLimit;
+	WITH GetCurSt^ DO
+		BEGIN
+			Error := NoErr;
+		0:
+			SetIOWait;
+			IF TimeLimit <> 0 THEN
+			BEGIN
+				StatusWord := IOTWaitCst;
+				DelayValue := 300;
+			END;
+
+			WITH pb DO
+			BEGIN
+				ECode := ReqOn;
+				EParam1 := @ThePrompt;
+				EParam2 := @TheBuffer;
+				ERet := ReqOn;
+			END;
+			TEnQueue(IOQueue, pb);
+
+			IF pb.ERet = ReqDone THEN
+				BEGIN
+					IF (theBuffer<>'') & SkipEnt THEN
+						BEGIN
+							{ les entetes de paquets sont deja retires }
+							CCon := TheBuffer[1];
+							NbCar := Length(TheBuffer) - 1;
+							BlockMoveData(Ptr(Ord4(@TheBuffer) + 2), Ptr(Ord4(@TheBuffer) + 1), NbCar);
+							TheBuffer[0] := chr(NbCar);
+							{ on v√©rifie la validit√© deconnexion }
+							IF CCon = 'F' THEN
+								BEGIN
+									ConFlag := False;
+									Error := ErrTime;
+									TheBuffer := '';
+									EXIT(AsRead);
+								END
+							ELSE IF CCon = 'c' THEN
+								BEGIN
+									XTimeLimit := TickCount + TimeLimit;
+								END;
+							IF XTimeLimit < TickCount THEN
+								BEGIN
+									Error := ErrTime;
+									TheBuffer := '';
+									EXIT(AsRead);
+								END;
+							IF Length(TheBuffer) = 0 THEN
+								BEGIN
+									WaitLong(2);
+									GOTO 0;
+								END;
+						END;
+				END
+			ELSE
+				BEGIN
+					WITH pb DO
+						BEGIN
+							ECode := ReqOff;
+							ERet := ReqOff;
+							TEnQueue(IOQueue, pb);
+						END;
+
+					WITH pb DO
+						WHILE (ERet <> ReqDone) AND (ERet <> ReqCanceled) DO WaitLong(1);
+
+					TheBuffer := '';
+					Error := ErrTime;
+				END;
+		END;
+END;
+
+
+PROCEDURE PrintRep(C:CHAR; count:INTEGER);
+
+BEGIN
+	IF Count > 0 THEN
+	BEGIN
+		CarPrint(C);
+		count := count-1;
+		WHILE Count > 0 DO
+		IF Count > 2 THEN
+			BEGIN
+				CarPrint(REP);
+				IF Count < 64 THEN
+					BEGIN
+						CarPrint(chr($40 + Count));
+						Count := 0;
+					END
+				ELSE
+					BEGIN
+						CarPrint(chr($40 + 63));
+						Count := Count - 63;
+					END;
+			END
+		ELSE
+			WHILE Count > 0 DO
+			BEGIN
+				CarPrint(C);
+				Count := count-1;
+			END;
+	END;
+END;
+
+
+PROCEDURE CheckFilter(VAR TheStr: Str255; KeepFlag: boolean);
+
+VAR
+	i, j: Integer;
+
+BEGIN
+	WITH GetCurSt^ DO
+	BEGIN
+		{‚Ä¢‚Ä¢‚Ä¢‚Ä¢ on coupe apr√®s un SEP x/y ‚Ä¢‚Ä¢‚Ä¢‚Ä¢}
+		i := Pos(SEP, TheStr);
+		IF (i > 0) & (i < Length(TheStr) - 1) THEN
+		BEGIN
+			TheStr[i] := chr(0);
+			TheStr[i + 1] := chr(0);
+		END;
+
+		i := 0;
+		j := 0;
+
+		WHILE i < Length(TheStr) DO
+		BEGIN
+			i := i + 1;
+			CASE theStr[i] OF
+				NUL,SUB:	{ caract√®res toujours filtr√©s }
+					i:=i+1;
+					
+				ESC:	{¬†filtrage acquittements protocole }
+				IF FilterFlag THEN
+					CASE TheStr[i + 1] OF
+						'9': i := i + 2;
+						':': i := i + 3;
+						';': i := i + 4;
+					END;
+					
+				ACC, SS2:	{¬†transcodage accents‚Ä¶¬†}
+					BEGIN
+						j := j + 1;
+						IF (TheStr[i + 1] IN ['A'..'K']) THEN
+							BEGIN
+								CASE TheStr[i + 2] OF
+									'a':
+										CASE TheStr[i + 1] OF
+											'A': TheStr[j] := '√†';
+											'C': TheStr[j] := '√¢';
+										END;
+									'e':
+										CASE TheStr[i + 1] OF
+											'A': TheStr[j] := '√®';
+											'B': TheStr[j] := '√©';
+											'C': TheStr[j] := '√™';
+											'H': TheStr[j] := '√´';
+										END;
+									'i':
+										CASE TheStr[i + 1] OF
+											'C': TheStr[j] := '√Æ';
+											'H': TheStr[j] := '√Ø';
+										END;
+									'o':
+										CASE TheStr[i + 1] OF
+											'C': TheStr[j] := '√¥';
+										END;
+									'u':
+										CASE TheStr[i + 1] OF
+											'C': TheStr[j] := '√ª';
+											'A': TheStr[j] := '√π';
+										END;
+									'c':
+										CASE TheStr[i + 1] OF
+											'K': TheStr[j] := '√ß';
+										END;
+									OTHERWISE TheStr[j] := TheStr[i + 2];
+								END;
+								i := i + 2;
+							END
+						ELSE
+							BEGIN
+								CASE TheStr[i + 1] OF
+									'#': TheStr[j] := chr($A3);
+									'&': TheStr[j] := '#';
+									'''': TheStr[j] := chr($86);
+									',': TheStr[j] := chr($A7);
+									'-': TheStr[j] := chr($A8);
+									'.': TheStr[j] := chr($A9);
+									'/': TheStr[j] := chr($AA);
+									'0': TheStr[j] := chr($A1);
+									'1': TheStr[j] := chr($B1);
+									'8': TheStr[j] := chr($D6);
+									'<': TheStr[j] := chr($AB);
+									'=': TheStr[j] := chr($AC);
+									'>': TheStr[j] := chr($AD);
+									'j': TheStr[j] := chr($CE);
+									'z': TheStr[j] := chr($CF);
+									OTHERWISE TheStr[j] := ' ';
+								END;
+								i := i + 1;
+							END
+					END;	{¬†ACC, SS2 }
+				
+				OTHERWISE
+					IF KeepFlag | (TheStr[i]>' ') THEN	{¬†car. conserv√©s¬†}
+					BEGIN
+						j := j + 1;
+						TheStr[j] := TheStr[i];
+					END;
+			END;	{ CASE }
+		END;	{ WHILE‚Ä¶¬†}
+		TheStr[0] := chr(j);
+	END;	{ WITH‚Ä¶¬†}
+END;
+
+
+(*
+PROCEDURE CheckFilter(VAR TheStr: Str255; KeepFlag: boolean);
+
+VAR
+	i, j: Integer;
+
+BEGIN
+	WITH GetCurSt^ DO
+		BEGIN
+			{‚Ä¢‚Ä¢‚Ä¢‚Ä¢ on coupe apr√®s un SEP x/y ‚Ä¢‚Ä¢‚Ä¢‚Ä¢}
+			i := Pos(SEP, TheStr);
+			IF (i > 0) & (i < Length(TheStr) - 1) THEN
+				BEGIN
+					TheStr[i] := chr(0);
+					TheStr[i + 1] := chr(0);
+				END;
+
+			i := 0;
+			j := 0;
+
+			WHILE i < Length(TheStr) DO
+				BEGIN
+					i := i + 1;
+					IF TheStr[i] >= ' ' THEN
+						BEGIN
+							j := j + 1;
+							TheStr[j] := TheStr[i];
+						END
+					ELSE IF TheStr[i] = SUB THEN
+						i := i + 1
+					ELSE IF (TheStr[i] = ESC) AND FilterFlag THEN
+						CASE TheStr[i + 1] OF
+							'9': i := i + 2;
+							':': i := i + 3;
+							';': i := i + 4;
+						END
+					ELSE IF (TheStr[i] = ACC) | (TheStr[i] = SS2) THEN
+						BEGIN
+							j := j + 1;
+							IF (TheStr[i + 1] IN ['A'..'K']) THEN
+								BEGIN
+									CASE TheStr[i + 2] OF
+										'a':
+											CASE TheStr[i + 1] OF
+												'A': TheStr[j] := '√†';
+												'C': TheStr[j] := '√¢';
+											END;
+										'e':
+											CASE TheStr[i + 1] OF
+												'A': TheStr[j] := '√®';
+												'B': TheStr[j] := '√©';
+												'C': TheStr[j] := '√™';
+												'H': TheStr[j] := '√´';
+											END;
+										'i':
+											CASE TheStr[i + 1] OF
+												'C': TheStr[j] := '√Æ';
+												'H': TheStr[j] := '√Ø';
+											END;
+										'o':
+											CASE TheStr[i + 1] OF
+												'C': TheStr[j] := '√¥';
+											END;
+										'u':
+											CASE TheStr[i + 1] OF
+												'C': TheStr[j] := '√ª';
+												'A': TheStr[j] := '√π';
+											END;
+										'c':
+											CASE TheStr[i + 1] OF
+												'K': TheStr[j] := '√ß';
+											END;
+										OTHERWISE TheStr[j] := TheStr[i + 2];
+									END;
+									i := i + 2;
+								END
+							ELSE
+								BEGIN
+									CASE TheStr[i + 1] OF
+										'#': TheStr[j] := chr($A3);
+										'&': TheStr[j] := '#';
+										'''': TheStr[j] := chr($86);
+										',': TheStr[j] := chr($A7);
+										'-': TheStr[j] := chr($A8);
+										'.': TheStr[j] := chr($A9);
+										'/': TheStr[j] := chr($AA);
+										'0': TheStr[j] := chr($A1);
+										'1': TheStr[j] := chr($B1);
+										'8': TheStr[j] := chr($D6);
+										'<': TheStr[j] := chr($AB);
+										'=': TheStr[j] := chr($AC);
+										'>': TheStr[j] := chr($AD);
+										'j': TheStr[j] := chr($CE);
+										'z': TheStr[j] := chr($CF);
+										OTHERWISE TheStr[j] := ' ';
+									END;
+									i := i + 1;
+								END
+						END
+					ELSE IF KeepFlag AND (TheStr[i] <> chr(0)) THEN { caract√®res de contr√¥les }
+						BEGIN
+							j := j + 1;
+							TheStr[j] := TheStr[i];
+						END;
+				END;
+			TheStr[0] := chr(j);
+		END;
+END;
+*)
+
+FUNCTION ReadCars(VAR Data: Str255; TimeLimit: Longint; NbCars: INTEGER): INTEGER;
+
+VAR
+	Err: OSErr;
+	TimeEnd: LONGINT;
+	ThePtr: TPtr;
+	Count: LONGINT;
+	
+	
+	PROCEDURE SerialRead;
+	
+	VAR	PB: MyParamBlockRec;
+			SerSta: SerStaRec;
+			
+	BEGIN
+		WITH GetCurSt^ DO
+		BEGIN
+			Err := SerGetBuf(SerRefIn,count);
+			IF Count > 0 THEN
+			BEGIN
+				SetIOWait;
+				WITH PB DO
+				BEGIN
+					TcbPtr := GetCurSt;
+					ioCompletion := @AsmCompletion;
+					ioRefNum := SerRefIn;
+					ioBuffer := @Data[1];
+					ioReqCount := NBCars;
+					ioPosMode := 0;
+				END;
+				Err := PBReadAsync(@PB.QLink);
+				YieldCpu;
+				Data[0] := CHR(PB.ioActCount);
+
+				IF HardType=SerialLink THEN	{¬†adaptation auto. de vitesse }
+				BEGIN
+					Err := SerStatus(SerRefIn,serSta);
+					IF serSta.cumErrs <> 0 THEN	{¬†changement de vitesse ? }
+					BEGIN
+						CASE SerSpeed OF
+							Baud1200:	{¬†1200 -> 4800 }
+								SerSpeed := Baud4800;
+							
+							Baud4800:	{¬†4800 -> 1200 }
+								SerSpeed := Baud1200;
+						END;	{¬†CASE }
+						Err := SerReset(SerRefIn,SerSpeed+data7+stop10+evenparity);
+						Err := SerReset(SerRefOut,SerSpeed+data7+stop10+evenparity);
+					END;
+				END;
+				
+			END
+			ELSE WaitDelay(6);
+		END;	{¬†WITH }
+	END;
+	
+{$IFC MUX}	
+	PROCEDURE MuxRead;
+	
+	VAR	Err					: OSErr;
+			XTimeLimit	: Longint;
+			xlink				: iBuffPtr;
+			nbRead			: INTEGER;
+			
+	BEGIN
+		Data := '';
+		IF TimeLimit<0 THEN
+		BEGIN
+{$IFC DEBUG}
+DebugStr(Concatnum('TimeLimit<0 ! ',timelimit));
+{$ENDC}
+			TimeLimit := 3600;	{¬†on remet une minute par d√©faut‚Ä¶¬†}
+		END;
+		XTimeLimit := TickCount + TimeLimit;
+		FlushBuffer;
+		
+		WITH GetCurSt^ DO
+		REPEAT
+			{ on attends qu'il y ai des donn√©es dans le buffer }
+			IF (InBuffSt=NIL) | ((InBuffSt=InBuffEnd) & (WBuffFlag=TRUE)) THEN
+			BEGIN
+				DelayValue:=XTimeLimit-TickCount;	{ attente de donn√©es avec TimeOut }
+				IF DelayValue>0 THEN StatusWord:=WDataTCst;
+				YieldCpu;
+			END;
+
+			IF InBuffSt<>Nil THEN		{ il y a des donn√©es pr√™tes √† lire ! }
+			BEGIN
+				nbRead := 0;
+				WITH InBuffSt^ DO
+				BEGIN
+					CASE NbCars OF
+						0: { lecture de tout ce qui est arriv√© }
+							nbRead := length(InBuff);
+						
+						-1:	{ lecture jusqu'√† un SEP/xx ou un CR }
+						BEGIN
+							IF pos(char(13),InBuff)>0 THEN	{ on a trouv√© un CR }
+								nbRead := pos(char(13),Inbuff)
+							ELSE
+								IF (pos(char(19),InBuff)>0) & (length(InBuff)>Pos(char(19),Inbuff)) THEN	{ on a trouv√© un SEP/xx }
+									nbRead := Pos(char(19),Inbuff)+1;
+						END;
+	
+						OTHERWISE
+							IF Length(InBuff)>=NbCars THEN	{ on a re√ßu assez de donn√©es }
+								nbRead := NbCars;
+					END;	{ CASE }
+					
+					IF nbRead>0 THEN
+					BEGIN
+						BlockMoveData(@inBuff[1],@Data[1],nbRead);
+						Data[0] := chr(nbRead);
+						Delete(Inbuff,1,nbRead);
+					END;
+					
+					IF length(InBuff)=0 THEN					{ on supprime ce buffer si il est vide }
+					BEGIN
+						xLink:=Link;										{ save pointer to next buffer }
+						Link:=InBuffPool^.Link;					{ link to first of free pool }
+						InBuffPool^.Link:=InBuffSt;			{ and become first of free pool }
+						InBuffSt:=xLink;								{ point to next buffer }
+						IF InBuffSt=Nil THEN InBuffEnd:=Nil;
+						InBuffNb:=InBuffNb-1;
+					END;
+				END;
+			END;
+		UNTIL (Conflag=FALSE) | (Data<>'') | ((TimeLimit<>0) & (TickCount>xTimeLimit));
+{$IFC DEBUG}
+IF Data='' THEN DebugStr(Concatnum('Data vide ! TimeLimit=',timelimit));
+{$ENDC}
+	END;
+{$ENDC}
+
+BEGIN		{¬†ReadCars }
+	Data := '';
+	TimeEnd := TickCount + TimeLimit;
+	ThePtr := GetCurSt;
+	WITH ThePtr^ DO
+	BEGIN
+		REPEAT
+			CASE HardType OF
+{$IFC ADSP}
+				ADSPLink:
+				BEGIN
+					IOCompFlag := 1;
+					StatusWord := ioWaitCst;
+					Infos^.pb.tcbPtr := ThePtr;
+					WITH Infos^.pb.ADSPPB DO
+						BEGIN
+							ioCompletion := ProcPtr(Ord4(@AsmCompletion));
+							csCode := dspStatus;
+						END;
+					Err := PBControlAsync(@Infos^.pb.ADSPPB);
+					YieldCpu;
+
+{$IFC DEBUG}
+IF Infos^.pb.ADSPPB.ioResult<>NoErr THEN
+	DebugNum ('ReadCars: ioResult=', Infos^.pb.ADSPPB.ioResult, FALSE);
+{$ENDC}
+
+					ConFlag := ConFlag & (Infos^.theCCB.State=sOpen) & (Infos^.pb.ADSPPB.ioResult=noErr);
+
+					IF Infos^.pb.ADSPPB.recvQPending > 0 THEN
+					BEGIN
+						IOCompFlag := 1;
+						StatusWord := ioWaitCst;
+						Infos^.pb.tcbPtr := ThePtr;
+						WITH Infos^.pb.ADSPPB DO
+							BEGIN
+								ioCompletion := ProcPtr(Ord4(@AsmCompletion));
+								csCode := dspRead;
+								reqCount := NbCars;
+								dataPtr := @Data[1];
+							END;
+						Err := PBControlAsync(@Infos^.pb.ADSPPB);
+						YieldCpu;
+						
+						Data[0]:=chr(Infos^.pb.ADSPPB.ActCount);
+					END
+					ELSE WaitDelay(6);
+{$IFC DEBUG}
+IF Infos^.theCCB.UserFlags<>0 THEN
+BEGIN
+	DebugNum ('ReadCars: userFlags=', Ord(Infos^.theCCB.UserFlags), FALSE);
+	Infos^.theCCB.UserFlags:=0;
+END;
+{$ENDC}
+				END;	{ ADSPLink }
+{$ENDC}
+	
+				SerialLink: SerialRead;
+
+{$IFC MUX}
+				MuxAsm,MuxASMT: MuxRead;
+{$ENDC}
+
+{$IFC HAYES}
+				ModemHayes:
+				BEGIN
+					SerialRead;
+					IF Length(Data)<>0 THEN
+					BEGIN
+						IF Length(Data)>SZCall THEN
+							XCallDatas := copy(Data,Length(Data)-SZCall,SZCall)
+						ELSE
+							XCallDatas := copy(concat(XCallDatas,Data),1+length(data),SZCall);
+						IF (pos(concat('NO CARRIER',chr(13)),XCallDatas)<>0) OR (pos(concat('MANQUE PORTEUSE',chr(13)),XCallDatas)<>0) THEN
+						BEGIN
+{$IFC DEBUGHAYES}
+DebugStr('NO CARRIER');
+{$ENDC}
+							ConFlag := FALSE;
+							XCallDatas:='                          ';
+						END;
+					END;
+				END;
+{$ENDC}
+
+{$IFC PILOTE}
+				PiloteModem:
+				BEGIN
+					{¬†### √† faire ### }
+				END;
+{$ENDC}
+
+			END;	{ CASE }
+		
+		UNTIL (Data <> '') | (TickCount>TimeEnd) | (Conflag=FALSE);
+		IF Data = '' THEN
+		BEGIN
+			ReadCars := ErrTime;
+{$IFC DEBUG}
+DebugStr('data vide dans Readcars');
+{$ENDC}
+		END
+		ELSE
+			ReadCars := NoErr;
+		{IF Data <>'' THEN CheckFilter(Data,FALSE);	}
+		IF ConFlag=FALSE THEN
+		BEGIN
+{$IFC DEBUG}
+DebugStr('Conflag=FALSE dans ReadCars');
+{$ENDC}
+			Error := ErrTime;
+			ReadCars := ErrTime;
+		END;
+	END;
+END;
+
+
+PROCEDURE ClearBuffer;
+
+BEGIN
+	WITH GetCurSt^ DO
+		IF OpPtr <> NIL THEN OpPtr^[0] := chr(0);
+END;
+
+
+PROCEDURE ComAsWrite(TheBuffer: Ptr; Count: Longint);
+
+VAR
+	Err: OSErr;
+	pb: MyParamblockrec;
+
+BEGIN
+	WITH GetCurSt^ DO
+		BEGIN
+			IF FrOutPut & (HardType <> ModemDrg) THEN EXIT(ComAsWrite);	{ FRONTSCREEN en cours }
+			SetIOWait;
+			WITH pb DO
+				BEGIN
+					tcbPtr := GetCurSt;
+					ioCompletion := @AsmCompletion;
+					ioRefNum := SerRefOut;
+					ioBuffer := TheBuffer;
+					ioReqCount := Count;
+					ioPosMode := 0;
+				END;
+			Err := PbWriteAsync(@pb.QLink);
+			YieldCpu;
+		END;
+END;
+
+
+PROCEDURE ComAsWriteStr(datas:PStr255);
+
+BEGIN
+	ComAsWrite(@datas^[1],length(Datas^));
+END;
+
+{$IFC MUX}
+PROCEDURE SendMuxFrame(TheBuffer: Ptr; count:LONGINT; FrameChar: Char);
+
+VAR
+	lePaquet: Str255;
+	i: INTEGER;
+	
+BEGIN
+	WITH GetCurSt^ DO
+	BEGIN
+		IF FrameChar IN [DataFrame,NextDataFrame,X29Frame,X29FrameNAMTEL,NextX29Frame] THEN
+		BEGIN
+			IF Count=0 THEN EXIT(SendMuxFrame);	{ trame de donn√©e vide !! }
+			REPEAT
+				IF (ConFlag=FALSE) | (FrOutput=TRUE) THEN EXIT(SendMuxFrame);
+				IF outputFlag=FALSE THEN WaitLong(30);
+				IF Connected=0 THEN EXIT(SendMuxFrame);	{¬†‚Ä¢18/2/94‚Ä¢ d√©connexion ? }
+			UNTIL OutputFlag=TRUE;
+		END;
+	
+		CASE HardType OF
+			MuxASM:
+			BEGIN
+				lePaquet[0] := CHR(count+4);
+				lePaquet[1] := STX;
+				lePaquet[2] := FrameChar;
+				lePaquet[3] := CHR(LoWord(TheModem));
+				IF (theBuffer<>NIL) & (count>0) THEN BlockMoveData(theBuffer,@lePaquet[4],count);
+				lePaquet[count+4] := ETX;
+				{ transparence du protocole ASM/X pour les trames de donn√©es }
+				IF FrameChar IN [DataFrame,NextDataFrame,X29Frame,X29FrameNAMTEL,NextX29Frame] THEN
+				BEGIN
+					i := 4;
+					REPEAT
+						CASE ORD(lePaquet[i]) OF
+							2,3,16: { ajoute DLE devant STX/ETX/DLE }
+							BEGIN
+								Insert(DLE,lePaquet,i);
+								i := i+1;
+							END;
+						END;
+						i := i + 1;
+					UNTIL i>=Length(lePaquet);
+				END;
+			END;	{¬†MuxASM }
+			
+			MuxASMT:
+			BEGIN
+{$IFC DEBUG}
+IF conflag=FALSE THEN
+	DebugStr(concat('SendMuxFrame: ',FrameChar,' cv=',str(TheModem)));
+{$ENDC}
+				lePaquet[0] := CHR(count+6);
+				lePaquet[1] := STX;
+				CASE FrameChar OF
+					DataFrame,NextDataFrame:	lePaquet[2] := DataFrame;
+					X29Frame,NextX29Frame:		lePaquet[2] := X29FrameNAMTEL;
+					OTHERWISE 								lePaquet[2] := FrameChar;
+				END;	{¬†CASE FrameChar }
+				lePaquet[3] := CHR(LoWord(TheModem));
+				lePaquet[4] := CHR(count DIV 128);
+				lePaquet[5] := CHR(count MOD 128);
+				IF (theBuffer<>NIL) & (count>0) THEN BlockMoveData(theBuffer,@lePaquet[6],count);
+				IF FrameChar IN [NextDataFrame, NextX29Frame] THEN
+					lePaquet[count+6] := ETB	{¬†bit M √† 1 }
+				ELSE
+					lePaquet[count+6] := ETX;	{¬†bit M √† 0 }
+			END;	{¬†MuxASMT }
+		END;	{ CASE HardType }
+	END;	{ WITH GetCurSt^ }
+	ComAsWrite(@lePaquet[1],length(lePaquet));
+END;
+{$ENDC}
+
+
+PROCEDURE Transp(thecount:INTEGER);	{ passe le minitel en transparence }
+
+VAR	theStr: STRING[3];
+
+BEGIN
+	IF (GetCurSt^.HardType=SerialLink) & (GetCurSt^.LocalMode = FALSE) THEN
+	BEGIN
+		theStr[0] := CHR($1B);
+		theStr[1] := CHR($3A);	{ PRO2 }
+		theStr[2] := CHR($66);	{ TRANSPARENCE }
+		theStr[3] := CHR(theCount);
+		ComAsWrite(@theStr[0],4);
+	END;
+END;
+
+
+PROCEDURE FlushBuffer;
+
+BEGIN
+	WITH GetCurSt^ DO
+	BEGIN
+		IF (OpPtr <> NIL) & (Length(OpPtr^) <> 0) THEN
+		BEGIN
+			CASE HardType OF
+			ModemDrg:
+				BEGIN
+					IF (ConFlag | FrOutPut) THEN SendControlFrame(Pstr255(OpPtr)^, '!');
+				END;
+				
+	{$IFC ADSP}
+			ADSPLink:
+				BEGIN
+				END;
+	{$ENDC}
+	
+			SerialLink, ModemHayes:
+				BEGIN
+					Transp(length(OpPtr^));
+					ComAsWriteStr(PStr255(OpPtr));
+				END;
+
+{$IFC MUX}				
+			MuxAsm,MuxASMT:
+				IF ConFlag THEN SendMuxFrame(@OpPtr^[1],Length(PStr255(OpPtr)^),DataFrame);
+{$ENDC}
+
+{$IFC PILOTE}
+			PiloteModem:
+				BEGIN
+				END;
+{$ENDC}
+
+			END;	{ CASE }
+			OpPtr^[0] := chr(0); { on vide le buffer de sortie }
+		END;
+	END;
+END;
+
+
+PROCEDURE GetTheStatus(VAR Str2:Str255);	{ lit le status rendu par le modem ou Drg T√©l√©tel }
+
+VAR	Str1: Str255;
+
+BEGIN
+	WITH GetCurSt^ DO
+	BEGIN
+		IF HardType <> ModemDrg THEN EXIT(GetTheStatus);
+		Str1 := '';
+		PaqPrep(Str1, 'S');
+		AsRead(Str1, Str2, 30, False);
+		IF Str2[2]='F' THEN ConFlag := FALSE;	{ d√©connect√© ? }
+	END;
+END;
+
+
+PROCEDURE TestBuffer(count: INTEGER);	{ attend qu'il y ai de la place dans le buffer de DrgT√©l√©tel }
+
+VAR	Str:Str255;
+
+BEGIN
+	WITH GetCurSt^ DO
+	BEGIN
+		IF OpFlag>1024 THEN OpFlag := 0;
+		IF OpFlag<Count THEN
+		BEGIN
+			GetTheStatus(Str);
+			WHILE ConFlag & (Str[5] = '0') DO
+			BEGIN
+				WaitDelay(2*60);	{ 2 secondes d'attente }
+				GetTheStatus(Str);
+			END;
+			OpFlag := 128*(ORD(Str[5])-ORD('0'));
+		END
+		ELSE
+			OpFlag := OpFlag-count;
+	END;
+END;
+
+
+PROCEDURE SendControlFrame(VAR TheBuffer: Str255; ComChar: Char);
+
+{ uniquement appele pour HardType = ModemDrg }
+
+VAR
+	NbCar: Integer;
+
+BEGIN
+	IF GetCurSt^.HardType <> ModemDrg THEN EXIT(SendControlFrame);
+
+	NbCar := Length(TheBuffer);
+
+	IF ComChar <> '!' THEN FlushBuffer;	{ il reste peut-√™tre des datas √† envoyer }
+
+	{ on limite la taille de la trame }
+	IF Length(TheBuffer) > 251 THEN NbCar := 251;
+
+	BlockMoveData(Ptr(Ord4(@TheBuffer) + 1), Ptr(Ord4(@TheBuffer) + 3), NbCar);
+	TheBuffer[0] := chr(NbCar + 3);
+	TheBuffer[1] := chr($C0 + GetCurSt^.TheModem);
+	TheBuffer[2] := ComChar;
+	TheBuffer[NbCar + 3] := chr($80);
+
+	ComAsWriteStr(@TheBuffer);
+
+	TheBuffer := '';
+
+END;
+
+
+PROCEDURE SendCar(theCar:CHAR);	{ envoie un car. imm√©diatement sans transparence ! }
+
+VAR	Err: OsErr;
+
+BEGIN
+	WITH GetCurSt^ DO
+	CASE HardType OF
+	
+{$IFC ADSP}
+	ADSPLink:
+		BEGIN
+			IF (Conflag=FALSE) | (FrOutPut=TRUE) THEN EXIT(SendCar);
+			IOCompFlag := 1;
+			StatusWord := IOWaitCst;
+			Infos^.PB.tcbPtr := GetCurSt;
+			WITH Infos^.PB.ADSPPB DO
+			BEGIN
+				ioCompletion:=ProcPtr(Ord4(@AsmCompletion));
+				csCode := dspWrite;
+				dataPtr:=Ptr(ORD4(@TheCar)+1);
+				ReqCount:=1;
+				eom := 0;
+				flush := 1;
+			END;
+			Err:=PBControlAsync(@Infos^.PB.ADSPPB);
+			YieldCpu;
+		END;
+{$ENDC}
+
+	OTHERWISE
+		BEGIN
+			BuffDataFrame(Ptr(ORD4(@TheCar)+1),1);
+			FlushBuffer;
+		END;
+		
+	END;	{ CASE}
+END;
+
+
+
+PROCEDURE BuffDataFrame(TheBuffer: Ptr; Count: Longint);
+
+VAR
+	Err: OsErr;
+	
+	PROCEDURE SendBuffer(PROCEDURE SendIt(thePtr:Ptr; long:LONGINT; more: BOOLEAN); maxCount:INTEGER);
+	
+	VAR		i: INTEGER;
+	
+	BEGIN
+		WITH GetCurSt^ DO
+		BEGIN
+			i := Length(OpPtr^);
+			IF Count + i < maxCount THEN
+				BEGIN { on ajoute au buffer }
+					BlockMoveData(TheBuffer, Ptr(Ord4(OpPtr) + i + 1), Count);
+					OpPtr^[0] := chr(i + Count);
+				END
+			ELSE
+				BEGIN { on envoie maxCount car. }
+					BlockMoveData(TheBuffer, Ptr(Ord4(OpPtr) + i + 1), maxCount - i);
+					OpPtr^[0] := chr(maxCount);
+					SendIt(@OpPtr^[1],maxCount,TRUE);
+					IF Count > maxCount - i THEN	{ on met le reste dans le buffer }
+					BEGIN
+						BlockMoveData(Ptr(Ord4(TheBuffer) + maxCount - i), @OpPtr^[1], Count - (maxCount - i));
+						OpPtr^[0] := chr(Count - (maxCount - i));
+					END
+					ELSE
+						OpPtr^[0] := CHR(0);
+				END;
+		END;	{ WITH GetCurSt^ }
+	END;	{ SendBuffer }
+
+	
+	PROCEDURE SendModem;
+	
+	VAR
+		MyPaquet: Str255;
+		i, ToWrite: Integer;
+	
+	BEGIN	
+		WITH GetCurSt^ DO
+			BEGIN
+				IF HardType <> ModemDrg THEN { c'est bien une voie modem ? }
+					EXIT(BuffDataFrame);
+				
+				{¬†pas connect√© et pas de FrontScreen‚Ä¶ on sort !! }
+				IF (ConFlag=FALSE) & (FrOutPut=FALSE) THEN
+				BEGIN
+					OpPtr^[0]:=Chr(0);
+					EXIT(BuffDataFrame);
+				END;
+	
+				IF OpPtr <> NIL THEN
+					BEGIN
+						i := Length(OpPtr^);
+						IF Count + i < 128 THEN
+							BEGIN { on ajoute au buffer }
+								BlockMoveData(TheBuffer, Ptr(Ord4(OpPtr) + i + 1), Count);
+								OpPtr^[0] := chr(i + Count);
+							END
+						ELSE
+							BEGIN { on envoie 128 car. }
+								BlockMoveData(TheBuffer, Ptr(Ord4(OpPtr) + i + 1), 128 - i);
+								OpPtr^[0] := chr(128);
+								IF GetCurSt^.IsTeletel & (OutputFlag=FALSE) & ConFlag THEN TestBuffer(128);
+								IF (ConFlag | FrOutPut) THEN SendControlFrame(Pstr255(OpPtr)^, '!');
+								IF Count > 128 - i THEN
+								BEGIN { on met le reste dans le buffer }
+									BlockMoveData(Ptr(Ord4(TheBuffer) + 128 - i), @OpPtr^[1], Count - (128 - i));
+									OpPtr^[0] := chr(Count - (128 - i));
+								END
+								ELSE { sinon raz du buffer }
+									OpPtr^[0] := CHR(0);
+							END;
+					END
+				ELSE
+					BEGIN
+						BlockMoveData(TheBuffer, Ptr(Ord4(@MyPaquet) + 1), Count);
+						MyPaquet[0] := chr(Count);
+						IF GetCurSt^.IsTeletel & (OutputFlag=FALSE) & Conflag THEN TestBuffer(count);
+						IF (ConFlag | FrOutPut) THEN SendControlFrame(MyPaquet, '!');
+					END;
+			END;
+	
+		{ !!!!!!!!!!!!!!!! PROTECTION !!!!!!!!!!!!!!! }
+		WITH GetCurSt^ DO
+			BEGIN
+				IF TheModem = 0 THEN
+					BEGIN
+						ProtCount := ProtCount - 1;
+						IF ProtCount < 0 THEN
+							BEGIN
+								ProtCount := 2000 - abs(TickCount) MOD 700;
+								WordAlign;
+							END;
+					END;
+			END;
+	END;
+
+
+{$IFC ADSP}
+	PROCEDURE SendADSP(theBuffer:Ptr; count:LONGINT; more: BOOLEAN);
+	
+	BEGIN
+		WITH GetCurSt^ DO
+		BEGIN
+			IF FrOutPut | (conFlag=FALSE) THEN EXIT(SendADSP);
+			SetIOWait;
+			Infos^.PB.tcbPtr := GetCurSt;
+			WITH Infos^.PB.ADSPPB DO
+			BEGIN
+				ioCompletion := @AsmCompletion;
+				csCode := dspWrite;
+				dataPtr:=TheBuffer;
+				ReqCount:=Count;
+				eom := 0;
+				flush := 0;
+			END;
+			Err:=PBControl(@Infos^.PB.ADSPPB,TRUE);
+			YieldCpu;
+		END;
+	END;
+{$ENDC}
+
+	PROCEDURE SendSerial(theBuffer:Ptr; count:LONGINT; more: BOOLEAN);
+	
+	BEGIN
+		IF GetCurSt^.FrOutPut THEN EXIT(SendSerial);
+		Transp(count);
+		ComAsWrite(TheBuffer, count);
+	END;
+
+{$IFC MUX}
+	PROCEDURE SendMuxAsm(theBuffer:Ptr; count:LONGINT; more: BOOLEAN);
+	
+	VAR
+		TypePack: CHAR;
+		
+	BEGIN
+		IF Byte(GetCurSt^.TrPrintFlag)=2 THEN
+			typePack := X29Frame				{¬†envoi trame X29 ou VideoPad (bitQ=1) }
+		ELSE
+			IF more & (count=128) THEN		{¬†2/1/96 - donn√©es √† suivre uniquement si on a un paquet plein ! }
+				TypePack := NextDataFrame	{¬†donn√©es √† suivre‚Ä¶¬†}
+			ELSE
+				TypePack := DataFrame;		{¬†donn√©es "normales" }
+				
+		SendMuxFrame(theBuffer,count,typePack);
+	END;
+{$ENDC}
+
+{$IFC PILOTE}	
+	PROCEDURE SendPilote(theBuffer: Ptr; count: LONGINT; more: BOOLEAN);
+	
+	VAR
+		McErr: tsMcErr;
+		
+	BEGIN
+		REPEAT
+			IF count>128 THEN
+			BEGIN
+				McErr := _MCWriteTrame (HiWord(GetCurSt^.ModNumber), prepTramePilote(DataFrame,thebuffer,128));
+				count := count-128;
+				theBuffer := Ptr(ORD4(theBuffer)+128);
+			END
+			ELSE
+			BEGIN
+				McErr := _MCWriteTrame (HiWord(GetCurSt^.ModNumber), prepTramePilote(DataFrame,thebuffer,count));
+				count := 0;
+			END;
+		UNTIL count=0;
+	END;
+{$ENDC}	
+	
+BEGIN	{ BuffDataFrame }
+	WITH GetCurSt^ DO
+	BEGIN
+		IF  TaskNumber > MaxTasks THEN { c'est bien une voie de comm. ? }
+			EXIT(BuffDataFrame);
+
+		{¬†pas connect√© et pas de FrontScreen‚Ä¶ on sort !! }
+		IF (ConFlag=FALSE) & (FrOutPut=FALSE) THEN
+		BEGIN
+			IF OpPtr<>NIL THEN OpPtr^[0]:=Chr(0);
+			EXIT(BuffDataFrame);
+		END;
+	
+		IF OpPtr<>NIL THEN
+		CASE HardType OF
+			ModemDrg:		SendModem;
+{$IFC ADSP}
+			ADSPLink:		SendADSP(theBuffer,count, FALSE);	{ ADSP s'occupe de la bufferisation ! }
+{$ENDC}
+
+			SerialLink,ModemHayes:	SendBuffer(SendSerial,128);
+
+{$IFC MUX}			
+			MuxAsm,MuxASMT:
+				IF Byte(TrPrintFlag)=2 THEN	{¬†donn√©es X29 -> on envoie imm√©diatement }
+					SendMuxAsm(theBuffer,count, FALSE)
+				ELSE
+					SendBuffer(SendMuxAsm,128);
+{$ENDC}
+		END
+		ELSE	{ OpPtr=NIL donc pas de bufferisation }
+		CASE HardType OF
+			ModemDrg:
+				SendModem;
+			
+{$IFC ADSP}
+			ADSPLink:
+				SendADSP(theBuffer,count, FALSE);
+{$ENDC}
+	
+			SerialLink,ModemHayes:
+				SendSerial(theBuffer,count, FALSE);
+
+{$IFC MUX}			
+			MuxAsm,MuxASMT:
+				SendMuxAsm(theBuffer,count, FALSE);
+{$ENDC}
+
+{$IFC PILOTE}
+			PiloteModem:
+				SendPilote(theBuffer,count, FALSE);
+{$ENDC}
+		END;
+	END;	{ WITH GetCurSt^ }
+END;
+
+
+PROCEDURE PaqPrep(VAR TheBuffer: Str255; ComChar: Char);
+
+VAR
+	NbCar: Integer;
+
+BEGIN
+	NbCar := Length(TheBuffer);
+	IF NbCar > 251 THEN NbCar := 251;
+	BlockMoveData(Ptr(Ord4(@TheBuffer) + 1), Ptr(Ord4(@TheBuffer) + 3), NbCar);
+	TheBuffer[1] := chr($C0 + GetCurSt^.TheModem);
+	TheBuffer[2] := ComChar;
+	TheBuffer[NbCar + 3] := chr($80);
+	TheBuffer[0] := chr(NbCar + 3);
+END;
+
+
+PROCEDURE PrintScreen(VAR Str1: Str255);
+
+LABEL 0;
+
+CONST
+	MaxSize = 512;
+	
+VAR
+	Err: OSErr;
+	ThePtr: TPtr;
+	pb: MyParamblockrec;
+	Qpb: TQERec;
+	FileRef: Integer;
+	FilePos, FileLength, Count: Longint;
+	Paq: Str255;
+	FileType: OsType;
+	{ on temporise pour 1k en RTC }
+	LTime, LLen: Longint;
+
+BEGIN
+	{ FlushBuffer; }
+	ThePtr := GetCurSt;
+	LLen := 0;
+	LTime := TickCount;
+
+	WITH ThePtr^ DO
+		BEGIN
+			{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ GetInfo pour conna√Ætre le type de fichier ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ }
+			SetIOWait;
+			WITH pb DO
+				BEGIN
+					tcbPtr := ThePtr;
+					ioCompletion := ProcPtr(Ord4(@AsmCompletion));
+					ioNamePtr := @Str1;
+					ioVRefNum := 0;
+					ioVersNum := 0;
+					ioFDirIndex := 0;
+				END;
+
+			WITH Qpb DO
+				BEGIN
+					ECode := ReqGetFInfo;
+					EParam1 := @pb;
+				END;
+			TEnQueue(FileQ, Qpb);
+
+			Error := pb.ioResult;
+			IF Error <> NoErr THEN EXIT(PrintScreen);
+			FileType := pb.ioFlFndrInfo.fdType; { Type du fichier }
+			FileLength := pb.ioFlLgLen; { Longueur du fichier }
+
+			{ ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ On ouvre le fichier ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ }
+			SetIOWait;
+			WITH pb DO
+				BEGIN
+					tcbPtr := ThePtr;
+					ioCompletion := ProcPtr(Ord4(@AsmCompletion));
+					ioNamePtr := @Str1;
+					ioVRefNum := 0;
+					ioVersNum := 0;
+					ioPermssn := FsRdWrPerm;
+					ioMisc := NIL;
+				END;
+
+			WITH Qpb DO
+				BEGIN
+					ECode := ReqOpen;
+					EParam1 := @pb;
+					EMisc := 0;
+				END;
+			TEnQueue(FileQ, Qpb);
+
+			Error := pb.ioResult;
+			IF Error <> NoErr THEN
+				BEGIN
+					EXIT(PrintScreen);
+				END;
+
+			FileRef := Qpb.EMisc;	{ refNum interne de l'√©cran ouvert }
+
+			IF FileType = 'VCOD' THEN { ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ Format "VCOD" ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ }
+				BEGIN
+					SetIOWait;
+
+					WITH pb DO
+						BEGIN
+							tcbPtr := ThePtr;
+							ioCompletion := ProcPtr(Ord4(@AsmCompletion));
+							ioBuffer := @FileLength;
+							ioReqCount := 4;
+							ioPosMode := fsFromStart;
+							ioPosOffset := 0;
+						END;
+
+					WITH Qpb DO
+						BEGIN
+							ECode := ReqRead;
+							EParam1 := @pb;
+							EMisc := FileRef;
+						END;
+					TEnQueue(FileQ, Qpb);
+
+					Error := pb.ioResult;
+					IF Error <> NoErr THEN GOTO 0;
+				END { Format VCOD }
+			ELSE
+				pb.ioPosOffset := 0;	{¬†formet VTEX et autres‚Ä¶¬†on part du d√©but¬†}
+				
+			IF IsTeletel THEN
+			BEGIN
+				OutputFlag := FALSE;	{ testbuffer pour DrgT√©l√©tel }
+				opFlag := 0;
+			END;
+			
+			{ READ and SEND datas }
+			REPEAT
+				FilePos := pb.ioPosOffset;
+				IF FileLength > 128 THEN
+					Count := 128
+				ELSE
+					Count := FileLength;
+				FileLength := FileLength - Count;
+
+				SetIOWait;
+
+				WITH pb DO
+					BEGIN
+						tcbPtr := ThePtr;
+						ioCompletion := ProcPtr(Ord4(@AsmCompletion));
+						ioBuffer := Ptr(Ord4(@Paq) + 1);
+						ioReqCount := Count;
+						ioPosMode := fsFromStart;
+						ioPosOffset := FilePos;
+					END;
+
+				WITH Qpb DO
+					BEGIN
+						ECode := ReqRead;
+						EParam1 := @pb;
+						EMisc := FileRef;
+					END;
+				TEnQueue(FileQ, Qpb);
+				
+				Error := pb.ioResult;
+				IF Error <> NoErr THEN GOTO 0;
+				
+				Paq[0] := chr(pb.ioActCount);
+				BuffDataFrame(Ptr(Ord4(@Paq) + 1), Length(Paq));
+				
+				IF (HardType=ModemDrg) & (IsTeletel=FALSE) THEN
+				BEGIN
+					IF LLen > MaxSize THEN
+						BEGIN
+							WaitDelay((MaxSize DIV 2) - abs(TickCount - LTime));
+							LLen := 0;
+							LTime := TickCount;
+						END
+					ELSE
+						LLen := LLen + Count;
+				END;
+
+			UNTIL (FileLength = 0) | (pb.ioActCount = 0);
+
+			{ CLOSE }
+		0:
+			IF IsTeletel THEN OutputFlag := TRUE;	{ plus de testBuffer sur DrgT√©l√©tel }
+			
+			SetIOWait;
+			WITH pb DO
+				BEGIN
+					tcbPtr := ThePtr;
+					ioCompletion := ProcPtr(Ord4(@AsmCompletion));
+				END;
+
+			WITH Qpb DO
+				BEGIN
+					ECode := ReqClose;
+					EParam1 := @pb;
+					EMisc := FileRef;
+				END;
+			TEnQueue(FileQ, Qpb);
+
+			Error := pb.ioResult;
+		END;
+END;
+
+PROCEDURE SEnqueue(ToVoie: Longint; VAR Str1: Str255);
+
+VAR
+	ThePtr: TPtr;
+	i: Integer;
+
+BEGIN
+	ThePtr := GetCurSt;
+
+	IF NOT (((ToVoie >= 1) AND (ToVoie <= MaxTasks)) OR ((ToVoie >= 256) AND
+		 (ToVoie < 256 + MaxAux))) THEN
+		BEGIN
+			ThePtr^.Error := ErrQTx;
+			EXIT(SEnqueue);
+		END;
+
+	IF ToVoie >= 256 THEN ToVoie := MaxTasks + ToVoie - 255;
+
+	WITH ThePtr^ DO
+		WITH TheMQueues^[ToVoie] DO
+			IF MPtr = NIL THEN
+				BEGIN
+					Error := ErrQTx;
+				END
+			ELSE { la tache existe }
+			IF (MFirst = MFree) AND (Mnb > 0) THEN
+				BEGIN { mais plus de place...}
+					Error := ErrQFull;
+				END
+			ELSE
+				BEGIN { peut etre assez de place }
+					IF MFree > MFirst THEN
+						i := MMax - (MFree - MFirst) + 1
+					ELSE
+						i := MFirst - MFree;
+					IF Mnb = 0 THEN i := MMax;
+					IF i <= Length(Str1) THEN
+						BEGIN
+							Error := ErrQFull;
+							EXIT(SEnqueue);
+						END;
+					FOR i := 0 TO Length(Str1) DO
+						BEGIN
+							MPtr^[MFree] := Str1[i];
+							MFree := MFree + 1;
+							IF MFree = MMax THEN MFree := 0;
+						END;
+
+					Mnb := Mnb + 1;
+				END;
+END;
+
+PROCEDURE SDequeue(VAR Str1: Str255);
+
+VAR
+	ThePtr: TPtr;
+	i, j: Integer;
+	TheVoie: Integer;
+
+BEGIN
+	ThePtr := GetCurSt;
+	TheVoie := ThePtr^.TaskNumber;
+	IF TheVoie >= 256 THEN TheVoie := MaxTasks + TheVoie - 255;
+	WITH ThePtr^ DO
+		WITH TheMQueues^[TheVoie] DO
+			IF Mnb = 0 THEN
+				BEGIN
+					Error := ErrQEmpty;
+					Str1 := '';
+				END
+			ELSE {il y a au moins un message }
+				BEGIN
+					Str1[0] := MPtr^[MFirst];
+					i := MFirst + 1;
+					j := 0;
+					WHILE j < Length(Str1) DO
+						BEGIN
+							IF i = MMax THEN i := 0;
+							j := j + 1;
+							Str1[j] := MPtr^[i];
+							i := i + 1;
+						END;
+					IF i = MMax THEN i := 0;
+					MFirst := i;
+					Mnb := Mnb - 1;
+				END;
+END;
+
+PROCEDURE ResetQueue;
+
+VAR
+	ThePtr: TPtr;
+	TheVoie: Integer;
+
+BEGIN
+	ThePtr := GetCurSt;
+	TheVoie := ThePtr^.TaskNumber;
+	IF TheVoie >= 256 THEN TheVoie := MaxTasks + TheVoie - 255;
+	WITH ThePtr^ DO
+		WITH TheMQueues^[TheVoie] DO
+			BEGIN
+				MFirst := 0;
+				MFree := 0;
+				Mnb := 0;
+			END;
+END;
+
+FUNCTION QueueSize: Longint;
+
+VAR
+	ThePtr: TPtr;
+	TheVoie: Integer;
+
+BEGIN
+	ThePtr := GetCurSt;
+	TheVoie := ThePtr^.TaskNumber;
+	IF TheVoie >= 256 THEN TheVoie := MaxTasks + TheVoie - 255;
+	WITH ThePtr^ DO WITH TheMQueues^[TheVoie] DO QueueSize := Mnb;
+END;
+
+FUNCTION Upc2(Str1: Str255): Str255;
+
+BEGIN
+	UpperString(Str1, True);
+	Upc2 := Str1;
+END;
+
+FUNCTION DSpcR2(Str1: Str255): Str255;
+
+BEGIN
+	WHILE (Length(Str1) > 0) AND (Str1[Length(Str1)] = ' ') DO
+		Str1[0] := chr(Ord(Str1[0]) - 1);
+	DSpcR2 := Str1;
+END;
+
+FUNCTION DSpcL2(Str1: Str255): Str255;
+
+BEGIN
+	WHILE (Length(Str1) > 0) AND (Str1[1] = ' ') DO Delete(Str1, 1, 1);
+	DSpcL2 := Str1;
+END;
+
+FUNCTION Similarity(VAR Str1, Str2: Str255): Longint;
+
+BEGIN
+	Similarity := Longint(DSpcR2(DSpcL2(Upc2(Str1))) = DSpcR2(DSpcL2(Upc2(Str2))));
+END;
+
+
+PROCEDURE SwapBits(VAR K: Longint; Bit1, Bit2: Integer);
+
+VAR
+	FBit1, FBit2: boolean;
+
+BEGIN
+	FBit1 := BTst(K, Bit1);
+	FBit2 := BTst(K, Bit2);
+	IF FBit1 THEN
+		BSET(K, Bit2)
+	ELSE
+		BCLR(K, Bit2);
+	IF FBit2 THEN
+		BSET(K, Bit1)
+	ELSE
+		BCLR(K, Bit1);
+END;
+
+PROCEDURE WordAlign;
+
+LABEL 0;
+
+VAR
+	Key, keyB, IdC: Longint;
+	Str1, Str2: Str255;
+	i: Integer;
+	ThePtr: TPtr;
+	NbRetrys: Integer; { 5 tentatives maximum }
+
+	InBuff: Str255; { buffer d'entr√©e }
+	WBuffFlag: boolean; { vrai si remplissage du buffer en cours }
+
+BEGIN
+	ThePtr := GetCurSt;
+	ThePtr^.Error := 0;
+	IF ThePtr^.HardType <> ModemDrg THEN EXIT(WordAlign);
+	
+	NbRetrys := 0;
+
+	REPEAT
+
+		{break;}
+
+		NbRetrys := NbRetrys + 1;
+		{ test du numero de serie du modem }
+		Key := BXOR(BRotL(TickCount, BAnd(TickCount, $0F)), $47DA2E51);
+		Str1 := '@@@@@@@@';
+		FOR i := 1 TO 8 DO Str1[i] := chr($40 + BAnd(BSR(Key, 32 - (i * 4)), $0F));
+		PaqPrep(Str1, '0');
+		AsRead(Str1, Str2, 600, False);
+
+		{ test erreur }
+		IF ThePtr^.Error <> 0 THEN GOTO 0;
+
+		keyB := 0;
+		FOR i := 1 TO 8 DO
+			keyB := BOR(keyB, BSL(BAnd(Ord(Str2[1 + i]), $0F), 32 - (i * 4)));
+		{ keyB est la cl√© de cryptage }
+
+		IdC := 0;
+		FOR i := 1 TO 8 DO
+			IdC := BOR(IdC, BSL(BAnd(Ord(Str2[9 + i]), $0F), 32 - (i * 4)));
+
+		{ Idc est crypte avec ma cle }
+		{ je triture ma cl√© }
+		Key := BXOR(Key, $A720351D);
+		i := BAnd(BSR(Key, 16), 31) + 1;
+		Key := BRotL(Key, i);
+		SwapBits(Key, 3, 15);
+		SwapBits(Key, 7, 13);
+		SwapBits(Key, 10, 28);
+		SwapBits(Key, 22, 31);
+		IdC := BXOR(IdC, Key);
+		{Break;}
+		IF IdC <> ThePtr^.RTId THEN ThePtr^.Error := 1;
+		IF ThePtr^.Error <> 0 THEN GOTO 0;
+
+		{ j'encrypte avec la cl√© qu'on m'a donn√© }
+		Key := keyB;
+		{ je triture ma cl√© }
+		Key := BXOR(Key, $A720351D);
+		i := BAnd(BSR(Key, 16), 31) + 1;
+		Key := BRotL(Key, i);
+		SwapBits(Key, 3, 15);
+		SwapBits(Key, 7, 13);
+		SwapBits(Key, 10, 28);
+		SwapBits(Key, 22, 31);
+		Key := BXOR(ThePtr^.RTId, Key);
+
+		Str1 := '@@@@@@@@';
+		FOR i := 1 TO 8 DO Str1[i] := chr($40 + BAnd(BSR(Key, 32 - (i * 4)), $0F));
+
+		SendControlFrame(Str1, '2');
+		ThePtr^.Error := 0;
+	0:
+	UNTIL (ThePtr^.Error = 0) OR (NbRetrys >= 5);
+	{IF ThePtr^.Error <> 0 THEN DebugStr('Pb de protection;g');}
+END;
+
+
+PROCEDURE CarPrint(C: Char);
+
+BEGIN
+	IF ORD(c)<128 THEN BuffDataFrame(Ptr(Ord4(@C) + 1), 1);
+END;
+
+
+PROCEDURE NumPrint(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	{‚Ä¢‚Ä¢‚Ä¢‚Ä¢ Bouge la m√©moire !!!! ‚Ä¢‚Ä¢‚Ä¢‚Ä¢}
+	NumToString(Num1, Str1);
+	BuffDataFrame(Ptr(Ord4(@Str1) + 1), Length(Str1));
+END;
+
+PROCEDURE StrPrint(VAR Str1: Str255);
+
+VAR
+	Str2: Str255;
+	i, j, xi: Integer;
+	termine: boolean;
+	LastCar: Char;
+
+BEGIN		{¬†PROCEDURE StrPrint }
+	CASE Byte(GetCurSt^.TrPrintFlag) OF
+		0,3:	{¬†print normal (transcodage et r√©pet) ou juste transcodage }
+		BEGIN
+			{ compactage de la chaine Str1 -> Str2 }
+			i := 0;
+			j := 0;
+			WHILE i < Length(Str1) DO
+			BEGIN
+				i := i + 1;
+				j := j + 1;
+				{ on checke les accents }
+				LastCar := Str1[i];
+				IF Ord(LastCar) > 127 THEN
+				CASE LastCar OF
+					chr(130):
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'K';
+							Str2[j + 2] := 'C';
+							j := j + 2
+						END;
+					chr(131):
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'B';
+							Str2[j + 2] := 'E';
+							j := j + 2
+						END;
+					'√†':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'A';
+							Str2[j + 2] := 'a';
+							j := j + 2
+						END;
+					'√¢':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'C';
+							Str2[j + 2] := 'a';
+							j := j + 2
+						END;
+					'√§':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'H';
+							Str2[j + 2] := 'a';
+							j := j + 2
+						END;
+					'√ß':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'K';
+							Str2[j + 2] := 'c';
+							j := j + 2
+						END;
+					'√©':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'B';
+							Str2[j + 2] := 'e';
+							j := j + 2
+						END;
+					'√®':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'A';
+							Str2[j + 2] := 'e';
+							j := j + 2
+						END;
+					'√™':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'C';
+							Str2[j + 2] := 'e';
+							j := j + 2
+						END;
+					'√´':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'H';
+							Str2[j + 2] := 'e';
+							j := j + 2
+						END;
+					'√Æ':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'C';
+							Str2[j + 2] := 'i';
+							j := j + 2
+						END;
+					'√Ø':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'H';
+							Str2[j + 2] := 'i';
+							j := j + 2
+						END;
+					'√¥':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'C';
+							Str2[j + 2] := 'o';
+							j := j + 2
+						END;
+					'√π':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'A';
+							Str2[j + 2] := 'u';
+							j := j + 2
+						END;
+					'√º':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'H';
+							Str2[j + 2] := 'u';
+							j := j + 2
+						END;
+					'√ª':
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'C';
+							Str2[j + 2] := 'u';
+							j := j + 2
+						END;
+					chr(163): {¬£}
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := '#';
+							j := j + 1
+						END;
+					chr(207): {≈ì}
+						BEGIN
+							Str2[j] := SS2;
+							Str2[j + 1] := 'z';
+							j := j + 1
+						END;
+					OTHERWISE Str2[j] := ' ';
+				END	{¬†CASE }
+				ELSE
+					Str2[j] := LastCar;
+				
+				{ on regarde le nombre de cars identiques }
+				xi := i;
+				termine := (Byte(GetCurSt^.TrPrintFlag)<>0);	{¬†on ne cherche pas les repet. si TrPrint=3}
+				WHILE (i < Length(Str1)) AND (NOT termine) DO
+				BEGIN
+					IF (Str1[i + 1] = LastCar) & (LastCar>=' ') THEN
+						i := i + 1
+					ELSE
+						termine := True;
+				END;	{¬†WHILE }
+			
+				{ le nombre de cars repeter est egal a i-xi }
+				xi := i - xi;
+				IF (xi > 2) OR ((Ord(LastCar) > 127) AND (xi > 0)) THEN
+				BEGIN
+					IF xi < 64 THEN
+					BEGIN
+						Str2[j + 1] := REP;
+						Str2[j + 2] := chr($40 + xi);
+						j := j + 2;
+					END
+					ELSE
+					BEGIN
+						Str2[j + 1] := REP;
+						Str2[j + 2] := chr($40 + 63);
+						j := j + 2;
+						i := i - xi + 63;
+						CYCLE;
+					END;
+				END
+				ELSE
+					{ on recopie les 2 cars max }
+					IF xi > 0 THEN
+					BEGIN
+						Str2[j + 1] := LastCar;
+						IF xi > 1 THEN Str2[j + 2] := LastCar;
+						j := j + xi;
+					END;
+	
+				{ on envoie Str2 si sup√©rieur ou egal a 128 cars }
+				IF j >= 128 THEN
+				BEGIN
+					{ on met a jour la longueur de la chaine resultante }
+					Str2[0] := chr(j);
+					{ envoi de la chaine }
+					BuffDataFrame(Ptr(Ord4(@Str2) + 1), Length(Str2));
+					j := 0;
+				END;
+			END;	{¬†WHILE }
+	
+			IF j > 0 THEN
+			BEGIN
+				{ on met a jour la longueur de la chaine resultante }
+				Str2[0] := chr(j);
+				{ envoi de la chaine }
+				BuffDataFrame(Ptr(Ord4(@Str2) + 1), Length(Str2));
+			END;
+		
+		END;	{¬†print normal }
+		
+		1:	{¬†print transparent -> adaptation 80col }
+		BEGIN
+			{ envoi de la chaine }
+			Str2 := Str1;
+			FOR i := 1 TO Length(Str2) DO
+			BEGIN
+				IF Ord(Str2[i]) > 127 THEN	{ filtrage pour le 80col }
+				CASE Str2[i] OF
+					'√©', '√®', '√™', '√´': Str2[i] := 'e';
+					'√†', '√¢', '√§': Str2[i] := 'a';
+					'√Æ', '√Ø': Str2[i] := 'i';
+					'√¥', '√∂': Str2[i] := 'o';
+					'√π', '√ª', '√º': Str2[i] := 'u';
+					'√ß': Str2[i] := 'c';
+					OTHERWISE Str2[i] := ' ';
+				END;
+			END;
+	
+			BuffDataFrame(Ptr(Ord4(@Str2) + 1), Length(Str2));
+			EXIT(StrPrint);
+		END;
+	
+		2:	{¬†envoi de commande X29/Vid√©opad, aucune transformation ! }
+		BEGIN
+			BuffDataFrame(@Str1[1], Length(Str1));
+		END;
+	END; { CASE }
+END;	{ PROCEDURE StrPrint }
+
+
+FUNCTION Zinput(VAR Str1: Str255;
+								PosX, PosY, MaxLen, Attribs: Integer;
+								MaxTime: Longint;
+								BackCar: Char;
+								ReqInput: boolean): Integer;
+
+VAR
+	termine: boolean;
+	ThePtr: TPtr;
+	NbCar: Integer;
+	i: Integer;
+
+	
+	PROCEDURE ZoneModem;
+	
+	VAR	Requete: Str255;
+	
+		FUNCTION GetVChar: Integer;	{ trouve le code erreur correspondant √† la touche }
+	
+		VAR
+			Count: Longint;
+			Err: OSErr;
+	
+		BEGIN
+			IF Length(Str1) >= 2 THEN
+				BEGIN
+					IF Str1[Length(Str1) - 1] = SEP THEN
+						BEGIN
+							CASE Str1[Length(Str1)] OF
+								'A': GetVChar := CEnvoi;
+								'B': GetVChar := CRetour;
+								'C': GetVChar := CRepetition;
+								'D': GetVChar := CGuide;
+								'E': GetVChar := CAnnulation;
+								'F': GetVChar := CSommaire;
+								'G': GetVChar := CCorrection;
+								'H': GetVChar := CSuite;
+								OTHERWISE
+									BEGIN
+										GetVChar := CAutre;
+										EXIT(GetVChar);
+									END
+							END;
+							Delete(Str1, Length(Str1) - 1, 2);
+						END
+					ELSE
+						BEGIN
+							CASE Str1[Length(Str1)] OF
+								RC: GetVChar := CEnvoi;
+								LF: GetVChar := CIgnore;
+								OTHERWISE
+									BEGIN
+										GetVChar := CAutre;
+										EXIT(GetVChar);
+									END
+							END;
+							Delete(Str1, Length(Str1), 1);
+						END;
+				END
+			ELSE
+				BEGIN
+					CASE Str1[Length(Str1)] OF
+						chr(13): GetVChar := CEnvoi;
+						LF: GetVChar := CIgnore;
+						OTHERWISE
+							BEGIN
+								GetVChar := CAutre;
+								EXIT(GetVChar);
+							END
+					END;
+					Delete(Str1, Length(Str1), 1);
+				END;
+		END;
+
+
+	BEGIN		{¬†PROCEDURE ZoneModem }
+		Attribs := BAND(Attribs,255);	{ on vire les nouveaux flags }
+		WITH ThePtr^ DO
+		IF NOT ReqInput THEN
+			BEGIN { saisie de zone }
+				{ envoyer la commande de saisie de zone }
+				Requete := 'XYLLAAER';
+				IF MaxLen > 240 THEN MaxLen := 240;
+				IF NOT(PosX IN [0..64]) THEN PosX := 0;
+				IF NOT(PosY IN [0..64]) THEN PosY := 0;
+				Requete[1] := chr($40 + PosX);
+				Requete[2] := chr($40 + PosY);
+				Requete[3] := chr($40 + MaxLen DIV 16);
+				Requete[4] := chr($40 + MaxLen MOD 16);
+				Requete[5] := chr($40 + Attribs DIV 16);
+				Requete[6] := chr($40 + Attribs MOD 16);
+				IF EchoFlag THEN
+					Requete[7] := chr($7F)		{ echo normal }
+				ELSE
+					Requete[7] := CarMask;		{ '*' }
+					
+				IF EchoFlag THEN
+					Requete[8] := CarZone		{ '.' }
+				ELSE
+					Requete[8] := CarZoneMask;	{ 'X' }
+				NbCar := Length(Str1);
+				IF NbCar > 240 THEN NbCar := 240;
+	
+				{‚Ä¢‚Ä¢‚Ä¢‚Ä¢ bug des accents pour les modems ‚Ä¢‚Ä¢‚Ä¢‚Ä¢}
+				{FOR i := 1 TO NbCar DO ReQuete[i+8] := chr(9);}
+				BlockMoveData(Ptr(Ord4(@Str1) + 1), Ptr(Ord4(@Requete) + 9), NbCar);
+	
+				Requete[0] := chr(NbCar + Length(Requete));
+				SendControlFrame(Requete, 'Z');
+			END
+		ELSE { saisie Input }
+			BEGIN
+				{ envoyer la commande d'input }
+				Requete := 'E';
+				IF EchoFlag THEN
+					Requete[1] := chr($7F)
+				ELSE
+					Requete[1] := CarMask;
+				SendControlFrame(Requete, 'U');
+			END;
+	
+		{ preparer la requete de demande d'etat de saisie }
+		Requete := '';
+		PaqPrep(Requete, '?');
+	
+		WITH ThePtr^ DO
+			BEGIN
+				termine := False;
+				REPEAT
+					AsRead(Requete, Str1, MaxTime, True);
+					IF Error <> 0 THEN
+						termine := True
+					ELSE
+						BEGIN
+							Error := GetVChar;
+							IF Error <> CIgnore THEN termine := True;
+						END;
+				UNTIL termine;
+				CheckFilter(Str1, True);
+			END;
+	END;	{¬†PROCEDURE ZoneModem }
+
+
+	PROCEDURE DrawZone(total: BOOLEAN);
+	
+		PROCEDURE LocateZone;
+	
+		BEGIN
+			Locate(PosX + (PosY+Length(Str1)-1) DIV 40, 1+(PosY + Length(Str1)-1) MOD 40);
+			i := BAnd(Attribs, 7);
+			IF i <> 7 THEN sForeColor(i);
+			i := BAnd(BSR(Attribs, 4), 1);
+			IF i <> 0 THEN Flash(i);
+			i := BAnd(BSR(Attribs, 5), 1);
+			IF i <> 0 THEN Inverse(i);
+			i := BAnd(BSR(Attribs, 6), 3);
+			IF i <> 0 THEN SSize(i);
+		END;
+
+	BEGIN		{ PROCEDURE DrawZone }
+		LocateZone;
+		IF Total THEN
+		BEGIN
+			PrintRep(CarZone,MaxLen-length(Str1));
+			LocateZone;
+		END;
+		IF ThePtr^.EchoFlag=FALSE THEN		{¬†2/04/96 }
+			CarPrint(SO);	{¬†on passe en graphique pour emp√™cher l'√©cho }
+		IF BAND(Attribs,8)=0 THEN SendCar(Con);
+	END;		{¬†PROCEDURE DrawZone }
+	
+	
+	PROCEDURE ZoneNormal;
+	
+	VAR	theCar: CHAR;
+		i: INTEGER;
+		Err: OsErr;
+		SepFlag: BOOLEAN;	{ indique si on vient de recevoir un SEP }
+		EscFlag: BOOLEAN;	{ indique si on vient de recevoir un ESC }
+		theCars: Str255;
+		nbTrans: INTEGER;	{ nombre de car. √† ne pas renvoyer en echo }
+
+		PROCEDURE DoCorrection;
+		
+		BEGIN
+			WITH ThePtr^ DO
+			IF MaxLen =0 THEN
+				Error := CCorrection
+			ELSE
+				IF Str1<>'' THEN
+				BEGIN
+					SendCar(BS);
+					SendCar(CarZone);
+					SendCar(BS);
+					IF (length(Str1) > 2) & ((Str1[length(Str1)-2]=SS2) | (Str1[length(Str1)-2]=ACC)) THEN
+						Str1[0] := CHR(ORD(Str1[0])-3)
+					ELSE
+						Str1[0] := PRED(Str1[0]);
+				END;
+		END;
+
+
+		PROCEDURE DoAnnulation;
+		
+		BEGIN
+			WITH ThePtr^ DO
+			IF MaxLen = 0 THEN
+				Error := CAnnulation
+			ELSE
+			BEGIN
+				Str1 := '';
+				DrawZone(TRUE);
+			END;
+		END;
+		
+		
+	BEGIN		{ PROCEDURE ZoneNormal }
+		WITH ThePtr^ DO
+		BEGIN
+			DrawZone(FALSE);
+			SepFlag := FALSE;
+			EscFlag := FALSE;
+			Error := NoErr;
+			FlushBuffer;
+			nbTrans := 0;
+			
+			REPEAT
+				IF Connected<>0 THEN
+				BEGIN
+					theCars := '';
+					theCar := Chr(0);
+					Err := ReadCars(theCars,MaxTime,1);
+					IF theCars<>'' THEN theCar := theCars[1];
+					CASE Err OF
+						ErrTime:
+							BEGIN
+{$IFC DEBUG}
+DebugStr('ErrTime dans ZoneNormal');
+{$ENDC}
+								Error := ErrTime;
+								Termine := TRUE;
+							END;
+							
+						NoErr:
+							BEGIN
+								IF SepFlag THEN	{ SEP/xx }
+								BEGIN
+									CASE theCar OF
+									'A': Error := CEnvoi;
+									'B': Error := CRetour;
+									'C': Error := CRepetition;
+									'D': Error := CGuide;
+									'E': DoAnnulation;
+									'F': Error := CSommaire;
+									'G': DoCorrection;
+									'H': Error := CSuite;
+									'I','S':	{ Shift-Connexion ou D√©connexion sur port s√©rie }
+										IF HardType = SerialLink THEN
+										BEGIN
+											SendCar(cOff);
+											Disconnect;
+											Error := ErrTime;
+										END;
+									END;
+									SepFlag := FALSE;
+								END
+								ELSE
+								BEGIN
+									SepFlag := FALSE;
+									{ filtrage des r√©ponses protocole }
+									IF EscFlag THEN	{ ESC xx }
+									BEGIN
+										CASE ORD(theCar) OF
+											$39..$3B:
+												BEGIN
+													nbTrans := ORD(theCar)-$38;
+													EscFlag := FALSE;
+												END;
+											$20..$2F:
+												BEGIN
+												END;
+											$30..$38,$3C..$3F:
+												BEGIN
+													nbTrans := 1;
+													EscFlag := FALSE;
+												END;
+											OTHERWISE
+												BEGIN
+													nbTrans := 0;
+													EscFlag := FALSE;
+												END;
+										END;
+									END
+									ELSE	{ r√©ception de car. }
+									IF (theCar >= ' ') OR (theCar=SS2) OR (theCar=ACC) THEN
+									BEGIN
+										IF nbTrans=0 THEN	{ on ne filtre pas }
+										BEGIN
+											IF (length(Str1)<MaxLen) | (HardType IN [MuxAsm,MuxASMT]) THEN
+											BEGIN
+												IF theCar=ACC THEN theCar := SS2;
+												Str1 := concat(Str1, theCar);
+												IF NOT (HardType IN [MuxAsm,MuxASMT]) THEN SendCar(theCar);
+											END
+											ELSE
+												IF NOT (HardType IN [MuxAsm,MuxASMT]) THEN SendCar(BELL);
+										END
+										ELSE	{ on filtre }
+											nbTrans := nbTrans-1;
+									END
+									ELSE
+										CASE theCar OF	{ car. sp√©ciaux }
+											ESC:
+												EscFlag := TRUE;
+										
+											BS:
+												DoCorrection;
+												
+											RC:
+												IF (HardType IN [MuxAsm,MuxASMT]) & (length(Str1)>0) THEN
+												BEGIN
+													CASE Str1[length(str1)] OF
+														'A': Error := CEnvoi;
+														'B': Error := CRetour;
+														'C': Error := CRepetition;
+														'D': Error := CGuide;
+														'E': DoAnnulation;
+														'F': Error := CSommaire;
+														'G':
+														BEGIN
+															Str1[0] := pred(Str1[0]);	{ 2/04/96 - bug sur Correction }
+															DoCorrection;
+															Str1[0] := succ(Str1[0]);	{ 2/04/96 - bug sur Correction }
+														END;
+														'H': Error := CSuite;
+														OTHERWISE Error := cAutre;
+													END;
+													IF (Error<>cAutre) & (Str1<>'') THEN
+														Str1[0] := pred(Str1[0]);	{ on retire le car. en trop }
+												END
+												ELSE
+													Error := CEnvoi;
+												
+											SEP:
+												SepFlag := TRUE;
+												
+											OTHERWISE	{¬†caract√®res de contr√¥le }
+												Str1 := concat(Str1, theCar);
+										END;
+								END;
+							END;
+						END;	{ CASE }
+					END
+					ELSE
+					BEGIN		{ connected = 0, utilisateur d√©connect√© }
+{$IFC DEBUG}
+DebugStr('connected=0 dans ZoneNormal');
+{$ENDC}
+						Error := ErrTime;
+						Termine := TRUE;
+					END;
+			UNTIL Error<>NoErr;
+			CheckFilter(Str1,TRUE);
+			IF BAND(Attribs,8)=0 THEN CarPrint(Coff);
+		END;	{ WITH ThePtr^ }
+	END;		{ PROCEDURE ZoneNormal }
+
+
+	PROCEDURE InputNormal;
+	
+	VAR	theCar: CHAR;
+		i: INTEGER;
+		Err: OsErr;
+		SepFlag: BOOLEAN;
+		theCars: Str255;
+
+		PROCEDURE DoCorrection;
+		
+		BEGIN
+			WITH ThePtr^ DO
+			IF Str1<>'' THEN
+			BEGIN
+				SendCar(BS);
+				SendCar(' ');
+				SendCar(BS);
+				Str1[0] := PRED(Str1[0]);
+			END
+			ELSE Error := CCorrection;
+		END;
+
+
+		PROCEDURE DoAnnulation;
+		
+		BEGIN
+			WITH ThePtr^ DO
+			IF Str1<>'' THEN
+			BEGIN
+				WHILE length(Str1)>0 DO DoCorrection;
+			END
+			ELSE Error := CAnnulation;
+		END;
+		
+		
+	BEGIN		{¬†PROCEDURE InputNormal }
+		WITH ThePtr^ DO
+		BEGIN
+			SepFlag := FALSE;
+			Error := NoErr;
+			CarPrint(Con);
+			FlushBuffer;
+			
+			REPEAT
+				IF Connected<>0 THEN
+				BEGIN
+					Err := ReadCars(theCars,MaxTime,1);
+					IF TheCars <> '' THEN theCar := theCars[1];
+					CASE Err OF
+						ErrTime: Error := ErrTime;
+	
+						NoErr:
+							BEGIN
+								IF SepFlag THEN
+								BEGIN
+									CASE theCar OF
+									'A': Error := CEnvoi;
+									'B': Error := CRetour;
+									'C': Error := CRepetition;
+									'D': Error := CGuide;
+									'E': DoAnnulation;
+									'F': Error := CSommaire;
+									'G': DoCorrection;
+									'H': Error := CSuite;
+									'I','S':	{ Shift-Connexion ou D√©connexion }
+										BEGIN
+											SendCar(cOff);
+											Disconnect;
+											Error := ErrTime;
+										END;
+									END;
+									SepFlag := FALSE;
+								END
+								ELSE
+								IF (theCar >= ' ') OR (theCar=SS2) OR (theCar=ACC) THEN
+								BEGIN
+									IF length(Str1)<MaxStrLen THEN
+									BEGIN
+										IF theCar=ACC THEN theCar := SS2;
+										IF NOT (HardType IN [MuxAsm,MuxASMT]) THEN SendCar(theCar);
+										Str1 := concat(Str1, theCar);
+									END
+									ELSE
+										IF NOT (HardType IN [MuxAsm,MuxASMT]) THEN SendCar(BELL);
+								END
+								ELSE
+									CASE theCar OF
+										BS:
+											DoCorrection;
+											
+										RC:
+											IF (HardType IN [MuxAsm,MuxASMT]) & (length(Str1)>0) THEN
+											BEGIN
+												CASE Str1[length(str1)] OF
+													'A': Error := CEnvoi;
+													'B': Error := CRetour;
+													'C': Error := CRepetition;
+													'D': Error := CGuide;
+													'E': DoAnnulation;
+													'F': Error := CSommaire;
+													'G': DoCorrection;
+													'H': Error := CSuite;
+													OTHERWISE Error := cAutre;
+												END;
+												IF (Error<>cAutre) & (Str1<>'') THEN
+													Str1[0] := pred(Str1[0]);	{ on retire le car. en trop }
+											END
+											ELSE
+												Error := CEnvoi;
+											
+										SEP:
+											SepFlag := TRUE;
+											
+										OTHERWISE	{¬†code contr√¥le }
+											Str1 := concat(Str1, theCar);
+											
+									END;	{ CASE theCar }
+							END;	{ Car. re√ßus }
+					END;	{ CASE }
+				END
+				ELSE
+				BEGIN
+					Error := ErrTime;
+					Termine := TRUE;
+				END;
+			UNTIL Error<>NoErr;
+			CheckFilter(Str1,TRUE);
+			CarPrint(Coff);
+		END;
+	END;		{¬†PROCEDURE InputNormal }
+
+BEGIN		{¬†FUNCTION ZInput }
+	ThePtr := GetCurSt;
+	
+	CASE ThePtr^.HardType OF
+		ModemDrg: ZoneModem;
+		OTHERWISE
+			IF ReqInput THEN InputNormal ELSE ZoneNormal;
+	END; { CASE HardType }
+
+	Zinput := ThePtr^.Error;
+END;		{¬†FUNCTION ZInput }
+
+PROCEDURE Message(Num1, Num2, Num3: Longint; VAR Str1: Str255);
+
+BEGIN
+	Locate(Num1, Num2);
+	StrPrint(Str1);
+	WaitDelay(Num3);
+	CanEol(Num1, Num2);
+	IF Num1 = 0 THEN CarPrint(LF); { ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ retour dans la page ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ }
+END;
+
+PROCEDURE CanEol(Num1, Num2: Longint);
+
+BEGIN
+	Locate(Num1, Num2);
+	CarPrint(CAN);
+END;
+
+
+PROCEDURE CanBlock(Num1, Num2, Num3: Longint);
+
+VAR
+	i: Integer;
+
+BEGIN
+	CanEol(Num1, Num3); { ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ optimisation Canblock ‚Ä¢‚Ä¢‚Ä¢‚Ä¢¬†}
+	FOR i := Num1 + 1 TO Num2 DO
+		BEGIN
+			CarPrint(LF);
+			CarPrint(CAN);
+		END;
+END;
+
+
+PROCEDURE SZone(ZPosX, ZPosY, ZLen: Longint; TheVar: Ptr; ZTkVar: Integer; TheColor: Longint);
+
+BEGIN { ajout d'une zone }
+	WITH GetCurSt^ DO
+		IF NBZones < MaxZones THEN
+			BEGIN
+
+				NBZones := NBZones + 1;
+				WITH TheZones[NBZones] DO
+					BEGIN
+						IF (BAND(Byte(GetCurSt^.InSilentFlag),2)<>0) & (ZPosX=0) THEN ZPosX := 1;	{¬†20/4/95 }
+						PosX := ZPosX;
+						PosY := ZPosY;
+						IF ZLen > 240 THEN ZLen := 240;
+						IF ZLen < 0 THEN ZLen := 0;
+						Len := ZLen;
+						TkVar := ZTkVar;
+						AdVar := TheVar;
+						Color := TheColor;
+					END;
+			END;
+END;
+
+PROCEDURE Wait(NumZ: Longint);
+
+LABEL 0;
+
+VAR
+	Num1: Longint;
+	Str1,Str2: Str255;
+	C: Char;
+	i, K, NumZone, NextZone: Integer;
+	termine: boolean;
+	Count: Integer;
+	ThePtr: TPtr;
+	XEchoFlag: boolean;
+	FlagKilo: boolean;
+
+	PROCEDURE AffZone(NumZone: Integer; CheckRedraw: boolean);
+
+	VAR
+		Count, K: Integer;
+		StrTemp: Str255;
+		
+	BEGIN
+		{ affichage des valeurs par defaut et des pointilles }
+		WITH ThePtr^, ThePtr^.TheZones[NumZone] DO
+			BEGIN
+
+				IF CheckRedraw THEN IF Bitand(Color, 512) = 0 THEN EXIT(AffZone);
+
+				IF TkVar = 1 THEN
+					Str1 := Pstr255(AdVar)^
+				ELSE
+					BEGIN
+						Num1 := LongintPtr(AdVar)^;
+						IF Num1 = 0 THEN
+							Str1 := ''
+						ELSE
+							NumToString(Num1, Str1);
+					END;
+				IF Length(Str1) > Len THEN Str1[0] := chr(Len);
+
+				{ positionnement }
+				Locate(PosX, PosY);
+
+				{ ========= affichage des attributs ========= }
+
+				IF XEchoFlag=FALSE THEN		{¬†2/04/96 }
+					CarPrint(SO);	{¬†on passe en graphique pour emp√™cher l'√©cho }
+
+				{ ***** Couleur ***** }
+
+				IF BAnd(Color, 7) <> 7 THEN sForeColor(BAnd(Color, 7));
+
+				{ ***** Taille ***** }
+
+				K := BAnd(BSR(Color, 6), 3);
+				IF K <> 0 THEN SSize(K);
+
+				{ ***** Inversion ***** }
+
+				K := BAnd(BSR(Color, 5), 1);
+				IF K <> 0 THEN Inverse(K);
+
+				{ ***** Clignotement ***** }
+
+				K := BAnd(BSR(Color, 4), 1);
+				IF K <> 0 THEN Flash(K);
+
+				{ valeur par d√©faut }
+				StrTemp := Str1;
+				IF NOT XEchoFlag THEN FOR K := 1 TO Length(StrTemp) DO Str2[K] := CarMask;
+				StrPrint(StrTemp);
+				IF CheckRedraw THEN IF Bitand(Color, 1024) <> 0 THEN CarPrint(chr(24));
+				
+				{ pointill√©s }
+				IF XEchoFlag THEN
+					C := CarZone
+				ELSE
+					C := CarZoneMask;
+					
+				IF XEchoFlag=FALSE THEN		{¬†2/04/96 }
+					CarPrint(SI);	{¬†on passe en texte pour afficher les points }
+
+				PrintRep(C,Len - Length(Str1));
+			END;
+	END;
+
+	PROCEDURE SelectZone(i, j: Integer);
+
+	BEGIN
+		IF j <> 0 THEN
+			BEGIN
+				IF ThePtr^.TheZones[j].TkVar = 1 THEN
+					BEGIN
+						BlockMoveData(@Str1, ThePtr^.TheZones[j].AdVar, Length(Str1) + 1);
+					END
+				ELSE
+					BEGIN
+						Num1 := SSVal(Str1);
+						BlockMoveData(@Num1, ThePtr^.TheZones[j].AdVar, 4);
+					END;
+				IF i <> j THEN AffZone(j, True);
+			END;
+
+		IF i = 0 THEN EXIT(SelectZone);
+		WITH ThePtr^, ThePtr^.TheZones[i] DO
+			BEGIN
+				IF TkVar = 1 THEN
+					BlockMoveData(AdVar, @Str1, 256)
+				ELSE
+					BEGIN
+						Num1 := LongintPtr(Ord4(AdVar))^;
+						IF Num1 = 0 THEN
+							Str1 := ''
+						ELSE
+							NumToString(Num1, Str1);
+					END;
+				IF Length(Str1) > Len THEN Str1[0] := chr(Len);
+
+			END;
+	END;
+
+	PROCEDURE ResetVars;
+
+	VAR
+		j: Integer;
+
+	BEGIN
+		Num1 := 0;
+		WITH ThePtr^ DO
+			FOR j := 1 TO NBZones DO BlockMoveData(@Num1, TheZones[j].AdVar, 4);
+	END;
+
+BEGIN		{ WAIT }
+	ThePtr := GetCurSt;
+	XEchoFlag := ThePtr^.EchoFlag;
+	FlagKilo := False;
+
+	WITH ThePtr^ DO
+	BEGIN
+		IF (NBZones = 0) THEN
+			BEGIN
+				ZoneNumber := 0;
+				Error := ErrTime;
+				EXIT(Wait);
+			END;
+		
+		{ s√©lection de la zone de d√©part }
+		NumZone := NumZ;
+		IF NumZ = 0 THEN NumZone := ZoneNumber;	{ on reprend la derni√®re zone }
+		IF NumZ < 0 THEN NumZone := -NumZ;
+		IF NumZone > ThePtr^.NBZones THEN NumZone := ThePtr^.NBZones;
+	END;
+
+0:
+	{ affichage des valeurs par defaut et des pointilles }
+	IF NumZ>=0 THEN WITH ThePtr^ DO FOR i := 1 TO NBZones DO AffZone(i, False);
+
+	XEchoFlag := ThePtr^.EchoFlag;
+	Str2:='';
+	SelectZone(NumZone, 0);
+
+	{ entree de la zone }
+	termine := False;
+	WITH ThePtr^ DO
+		REPEAT
+			FlagKilo := False;
+			WITH TheZones[NumZone] DO
+				Error := Zinput(Str1, PosX, PosY, Len, Color, MaxTime, '.', False);
+			
+			StarFlag := (Str1[Length(Str1)] = '*');
+			
+			{ saisie au kilometre }
+			WHILE (NbZones>1) & (NumZone<NbZones) & (Length(Str1)>TheZones[NumZone].Len)
+				& (BitAnd(TheZones[NumZone].Color,256)<>0) DO
+			BEGIN	{ saisie trop longue }
+				BlockMoveData(@Str1[TheZones[NumZone].Len+1],@Str2[1],length(Str1)-TheZones[NumZone].Len);
+				Str2[0]:=CHR(length(Str1)-TheZones[NumZone].Len);
+				Str1[0]:=CHR(TheZones[NumZone].Len);
+				SelectZone(NumZone+1,NumZone);
+				Str1 := Str2;
+				NumZone := NumZone+1;
+			END;
+
+			{ IF StarFlag THEN Str1[0] := chr(Length(Str1) - 1); }
+			
+			CASE Error OF
+				ErrTime, CEnvoi, CGuide, CSommaire, CAutre, CRepetition:
+					BEGIN
+						termine := True;
+					END;
+				CCorrection:
+					BEGIN
+						IF TheZones[NumZone].Len = 0 THEN
+							termine := True
+						ELSE IF (Length(Str1) = 0) AND (NumZone > 1) THEN
+							BEGIN
+								IF Bitand(TheZones[NumZone - 1].Color, 256) <> 0 THEN
+									BEGIN
+										{ Correction sur zone pr√©c√©dente }
+										FlagKilo := True;
+										SelectZone(NumZone - 1, NumZone);
+										NumZone := NumZone - 1;
+										IF Length(Str1) > 0 THEN
+											BEGIN
+												Str1[0] := chr(Length(Str1) - 1);
+												CarPrint(BS);
+												CarPrint(CarZone);
+												CarPrint(BS);
+											END;
+									END;
+							END;
+					END;
+				CAnnulation:
+					IF StarFlag THEN	{¬†annulation de toutes les zones }
+						BEGIN
+							SendCar(DC4);
+							ResetVars;
+							NumZone := 1;
+							GOTO 0;
+						END
+					ELSE
+						termine := True;
+				CSuite:
+					BEGIN
+						IF Bitand(TheZones[NumZone].Color, 4096) <> 0 THEN
+							BEGIN
+								termine := True;
+							END
+						ELSE IF NBZones = 1 THEN
+							termine := True
+						ELSE
+							BEGIN
+								IF NumZone = NBZones THEN
+									NextZone := 1
+								ELSE
+									NextZone := NumZone + 1;
+								
+								{ on saute les zones de longueur nulle }
+								WHILE TheZones[NextZone].len = 0 DO
+								BEGIN
+									NextZone:= NextZone+1;
+									IF NextZone>NBZones THEN NextZone := 1;
+								END;
+								
+								SelectZone(NextZone, NumZone);
+								NumZone := NextZone;
+							END;
+					END;
+				CKSuite:	{ frappe au kilometre = SUITE automatique }
+					BEGIN
+						Error := CSuite;
+						IF Bitand(TheZones[NumZone].Color, 4096) <> 0 THEN
+							BEGIN
+								termine := True;
+							END
+						ELSE IF NBZones = 1 THEN
+							termine := True
+						ELSE
+							BEGIN
+								IF NumZone = NBZones THEN
+									NextZone := 1
+								ELSE
+									BEGIN
+										FlagKilo := (Bitand(TheZones[NumZone].Color, 256) <> 0);
+										NextZone := NumZone + 1;
+									END;
+								SelectZone(NextZone, NumZone);
+								NumZone := NextZone;
+							END;
+					END;
+				CRetour:
+					BEGIN
+						IF Bitand(TheZones[NumZone].Color, 8192) <> 0 THEN
+							BEGIN
+								termine := True;
+							END
+						ELSE IF NBZones = 1 THEN
+							termine := True
+						ELSE
+							BEGIN
+								IF NumZone = 1 THEN
+									NextZone := NBZones
+								ELSE
+									NextZone := NumZone - 1;
+
+								{ on saute les zones de longueur nulle }
+								WHILE TheZones[NextZone].len = 0 DO
+								BEGIN
+									NextZone:= NextZone-1;
+									IF NextZone<1 THEN NextZone := NbZones;	{ on repasse √† la derni√®re }
+								END;
+								
+								SelectZone(NextZone, NumZone);
+								NumZone := NextZone;
+							END;
+					END;
+			END;
+		UNTIL termine;
+
+	SelectZone(0, NumZone);
+	ThePtr^.ZoneNumber := NumZone;
+
+	SendCar(DC4);	{¬†on supprime le curseur‚Ä¶¬†}
+
+	{ plus de zones de saisie }
+	IF ThePtr^.HardType = ModemDrg THEN
+	BEGIN
+		Str1 := '';
+		SendControlFrame(Str1, 'z');
+	END;
+END;
+
+PROCEDURE Locate(X, Y: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	IF (BAND(Byte(GetCurSt^.InSilentFlag),2)<>0) & (x=0) THEN
+		X := 1;	{¬†20/4/95 }
+	IF (X<0) | (X>$3f) | (y<0) | (y>$3f) THEN EXIT(Locate);
+	IF (X <> 1) | (Y <> 1) THEN { ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ Optimisation pour 1,1 ‚Ä¢‚Ä¢‚Ä¢‚Ä¢ }
+		BEGIN
+			Str1[0] := chr(3);
+			Str1[1] := US;
+			Str1[2] := chr($40 + X);
+			Str1[3] := chr($40 + Y);
+			StrPrint(Str1);
+		END
+	ELSE
+		CarPrint(RS);
+END;
+
+PROCEDURE Echo(Num1: Longint);
+
+VAR
+	TheStr: Str255;
+
+BEGIN
+	GetCurSt^.EchoFlag := Num1 <> 0;
+	TheStr := '';
+END;
+
+PROCEDURE SGet(VAR AdStr: Str255; Num1: Longint);
+
+VAR
+	TheCount: Longint;
+	Str1: Str255;
+	Err: Integer;
+	AuxRefIn: Integer;
+
+BEGIN
+	AdStr := '';
+	IF (Num1 = 0) THEN { voie Videotex }
+	CASE GetCurSt^.HardType OF
+		ModemDrg:
+		BEGIN
+			Str1 := '';
+			PaqPrep(Str1, '?');
+			AsRead(Str1, AdStr, 120, False);
+			AdStr[0] := chr(Ord(AdStr[0]) - 1);
+			BlockMoveData(Ptr(Ord4(@AdStr) + 2), Ptr(Ord4(@AdStr) + 1), Length(AdStr));
+		END;
+
+{$IFC MUX}
+		MuxAsm,MuxASMT:
+		BEGIN
+			FlushBuffer;
+			Err := ReadCars(ADStr,30,0);
+		END;
+{$ENDC}
+
+		OTHERWISE
+		BEGIN
+			FlushBuffer;
+			TheCount := TickCount + 30;
+			WHILE TheCount > TickCount DO
+			BEGIN
+				Err := ReadCars(Str1,6,1);
+				IF Str1 <> '' THEN ADStr := concat(ADStr,Str1) ELSE WaitDelay(1);
+			END;
+		END;
+		
+	END	{ CASE }
+	ELSE
+		WITH GetCurSt^ DO	{ deuxi√®me port s√©rie }
+			BEGIN
+				IF SerRefIn = - 6 THEN
+					AuxRefIn := - 8
+				ELSE
+					AuxRefIn := - 6;
+				TheCount := 0;
+				Err := SerGetBuf(AuxRefIn, TheCount);
+				Error := Err;
+				IF TheCount > 255 THEN TheCount := 255;
+				IF TheCount > 0 THEN
+					BEGIN
+						Err := FSRead(AuxRefIn, TheCount, Ptr(Ord4(@AdStr) + 1));
+						Error := Err;
+						AdStr[0] := chr(TheCount);
+					END;
+			END;
+END;
+
+PROCEDURE SGetPaq(VAR AdStr: Str255;
+									Num1, Num2, Ch1, Ch2: Longint);
+
+VAR
+	TheCount: Longint;
+	Err: Integer;
+	termine: boolean;
+	TheMax: Longint;
+	Index: Integer;
+	Automate: Integer;
+	TheChar: Integer;
+	ThePtr: TPtr;
+	AuxRefIn: Integer;
+
+BEGIN
+	ThePtr := GetCurSt;
+	IF ThePtr^.SerRefIn = - 6 THEN
+		AuxRefIn := - 8
+	ELSE
+		AuxRefIn := - 6;
+
+	{TimeOut}
+	IF Num1 <= 0 THEN Num1 := ThePtr^.MaxTime;
+
+	{Maxlen}
+	IF (Num2 > MaxStrLen) OR (Num2 <= 0) THEN Num2 := MaxStrLen;
+
+	AdStr := '';
+	termine := False;
+	TheChar := 0;
+	TheMax := TickCount + Num1;
+	Automate := 0;
+	Index := 0;
+
+	REPEAT
+		TheCount := 0;
+		Err := SerGetBuf(AuxRefIn, TheCount);
+		ThePtr^.Error := Err;
+		IF TheCount > 0 THEN
+			BEGIN
+				TheCount := 1;
+				Err := FSRead(AuxRefIn, TheCount, Ptr(Ord4(@TheChar) + 1));
+				ThePtr^.Error := Err;
+				CASE Automate OF
+					0:
+						BEGIN { on attend syncstart }
+							IF (Ch1 = TheChar) OR (Ch1 < 0) THEN { synchro trouve }
+								BEGIN
+									Index := Index + 1;
+									AdStr[Index] := chr(TheChar);
+									Automate := 1;
+								END;
+						END;
+					1:
+						BEGIN { on est synchro }
+							Index := Index + 1;
+							AdStr[Index] := chr(TheChar);
+							IF Index = Num2 THEN termine := True;
+							IF TheChar = Ch2 THEN termine := True;
+						END;
+				END;
+				TheMax := TickCount + Num1;
+			END
+		ELSE
+			WaitDelay(4);
+	UNTIL termine OR (TheMax < TickCount);
+
+	AdStr[0] := chr(Index);
+
+	IF TheMax < TickCount THEN ThePtr^.Error := ErrTime;
+END;
+
+
+FUNCTION Rnd(Num1: Longint): Longint;
+
+VAR
+	Temp: LONGINT;
+	
+BEGIN
+	IF Num1<>0 THEN
+		WITH GetCurSt^ DO
+		BEGIN
+			GetDateTime(temp);
+			Rnd := abs(BXOR(BXOR(BXOR(BXOR(BXOR(TickCount, temp), Ord4(NextTCB)),
+						 Ord4(PTLVars)), Ord4(TheNScreen)), $A5A5A5A5)) MOD Num1;
+		END
+	ELSE
+		Rnd:=0;
+END;
+
+
+PROCEDURE OpenSer(NumFile, Num1, Num2, Num3, Num4, Num5: Longint);
+
+VAR
+	AuxRefIn: Integer;
+
+BEGIN
+	SSerConfig(Num1, Num2, Num3, Num4, Num5);
+	WITH GetCurSt^ DO
+		BEGIN
+			IF SerRefIn = - 6 THEN
+				AuxRefIn := - 8
+			ELSE
+				AuxRefIn := - 6;
+			IF (NumFile < 1) OR (NumFile > MaxFile) THEN
+				BEGIN
+					Error := ErrBadNum;
+					EXIT(OpenSer);
+				END;
+			IF TheFiles[NumFile].FileRef <> 0 THEN
+				BEGIN
+					Error := ErrFileOpen;
+					EXIT(OpenSer);
+				END;
+			TheFiles[NumFile].FileRef := AuxRefIn;
+			TheFiles[NumFile].BaseFlag := False;
+		END;
+END;
+
+PROCEDURE SSerConfig(Num1, Num2, Num3, Num4, Num5: Longint);
+
+VAR
+	TheConfig: Integer;
+	Err: Integer;
+	Flags: SerShk;
+	ThePtr: TPtr;
+	AuxRefIn: Integer;
+	AuxRefOut: Integer;
+	AuxPort: Integer;
+
+BEGIN
+	ThePtr := GetCurSt;
+	IF ThePtr^.SerRefIn = - 6 THEN
+		AuxPort := 2
+	ELSE
+		AuxPort := 1;
+
+	TheConfig := 0;
+
+	CASE Num1 DIV 100 OF
+		3: TheConfig := baud300;
+		6: TheConfig := baud600;
+		12: TheConfig := baud1200;
+		18: TheConfig := baud1800;
+		24: TheConfig := baud2400;
+		36: TheConfig := baud3600;
+		48: TheConfig := baud4800;
+		72: TheConfig := baud7200;
+		192: TheConfig := baud19200;
+		576: TheConfig := baud57600;
+
+		OTHERWISE TheConfig := baud9600;
+	END;
+
+	CASE Num2 OF
+		5: TheConfig := TheConfig + data5;
+		6: TheConfig := TheConfig + data6;
+		7: TheConfig := TheConfig + data7;
+
+		OTHERWISE TheConfig := TheConfig + data8;
+	END;
+
+	CASE Num3 OF
+		1: TheConfig := TheConfig + oddParity;
+		2: TheConfig := TheConfig + evenParity;
+
+		OTHERWISE TheConfig := TheConfig + noParity;
+	END;
+
+	CASE Num4 OF
+		15: TheConfig := TheConfig + stop15;
+		20: TheConfig := TheConfig + stop20;
+
+		OTHERWISE TheConfig := TheConfig + stop10;
+	END;
+
+	CASE AuxPort OF
+		1: { Port Modem }
+			BEGIN
+				Err := OpenDriver('.AOut', AuxRefOut);
+				Err := OpenDriver('.AIn', AuxRefIn);
+			END;
+
+		2: { Port Imprimante }
+			BEGIN
+				Err := OpenDriver('.BOut', AuxRefOut);
+				Err := OpenDriver('.BIn', AuxRefIn);
+			END;
+	END;
+
+	Err := SerReset(AuxRefIn, TheConfig);
+	Err := SerReset(AuxRefOut, TheConfig);
+	Err := SerSetBuf(AuxRefIn, ThePtr^.TheAuxBuffPtr, SerBufSz);
+
+	CASE Num5 OF
+		0:	{¬†no handshaking }
+		BEGIN
+			WITH Flags DO
+			BEGIN
+				fXon := 0;
+				finX := 0;
+				xOn := chr(19);
+				xOff := chr(17);
+				fcts := 0;
+				errs := 0;
+				evts := 0;
+				fDTR := 0;
+			END;
+			Err := SerHShake(AuxRefIn, Flags);
+			Err := SerHShake(AuxRefOut, Flags);		
+		END;
+		
+		1: { Xon/Xoff}
+			BEGIN
+				WITH Flags DO
+					BEGIN
+						fXon := 1;
+						finX := 1;
+						xOn := chr(19);
+						xOff := chr(17);
+						fcts := 0;
+						errs := 0;
+						evts := 0;
+						fDTR := 0;
+					END;
+				Err := SerHShake(AuxRefIn, Flags);
+				Err := SerHShake(AuxRefOut, Flags);
+			END;
+
+		2: { CTS }
+			BEGIN
+				WITH Flags DO
+					BEGIN
+						fXon := 0;
+						finX := 0;
+						xOn := chr(19);
+						xOff := chr(17);
+						fcts := 1;
+						errs := 0;
+						evts := 0;
+						fDTR := 1;
+					END;
+				Err := SerHShake(AuxRefIn, Flags);
+				Err := SerHShake(AuxRefOut, Flags);
+			END;
+	END;
+
+END;
+
+PROCEDURE SBackColor(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	IF (Num1 >= 0) & (Num1 < 8) THEN
+		BEGIN
+			CASE Num1 OF
+				1: Num1 := 4;
+				2: Num1 := 1;
+				3: Num1 := 5;
+				4: Num1 := 2;
+				5: Num1 := 6;
+				6: Num1 := 3;
+			END;
+			Str1 := '  ';
+			Str1[1] := ESC;
+			Str1[2] := chr($50 + Num1);
+			StrPrint(Str1);
+		END;
+END;
+
+PROCEDURE SForeColor(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	IF (Num1 >= 0) & (Num1 < 8) THEN
+		BEGIN
+			CASE Num1 OF
+				1: Num1 := 4;
+				2: Num1 := 1;
+				3: Num1 := 5;
+				4: Num1 := 2;
+				5: Num1 := 6;
+				6: Num1 := 3;
+			END;
+			Str1 := '  ';
+			Str1[1] := ESC;
+			Str1[2] := chr($40 + Num1);
+			StrPrint(Str1);
+		END;
+END;
+
+PROCEDURE Font(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	Str1 := ' ';
+	IF Num1 > 0 THEN
+		Str1[1] := SO
+	ELSE
+		Str1[1] := SI;
+	StrPrint(Str1);
+END;
+
+PROCEDURE Cls;
+
+VAR
+	Str1: Str255;
+	i: Integer;
+
+BEGIN
+	ClearBuffer;
+	IF BAND(Byte(GetCurSt^.InSilentFlag),2)<>0 THEN		{¬†20/4/95 }
+		Str1 := concat('  ',FF)
+	ELSE
+		Str1 := concat('  ',FF,US,'@A',CAN,LF);
+	StrPrint(Str1);
+END;
+
+PROCEDURE SCursor(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	Str1 := ' ';
+	IF Num1 > 0 THEN
+		Str1[1] := DC1
+	ELSE
+		Str1[1] := DC4;
+	StrPrint(Str1);
+END;
+
+PROCEDURE Draw;
+
+CONST
+	MaxSize = 512;
+	
+VAR
+	LgC, LgV, CurPos: Longint;
+	LTime, LLen: Longint;
+
+BEGIN
+	{FlushBuffer;}
+	WITH GetCurSt^ DO
+	BEGIN
+		LLen := 0;
+		LTime := TickCount;
+		CurPos := 0;
+		LgV := LongintPtr(TheVScreen)^;
+		IF IsTeletel THEN
+		BEGIN
+			OutputFlag := FALSE;
+			OpFlag := 0;
+		END;
+		WHILE CurPos < LgV DO
+		BEGIN
+			LgC := LgV - CurPos;
+			IF LgC > 128 THEN LgC := 128;
+			BuffDataFrame(Ptr(Ord4(TheVScreen) + CurPos + 4), LgC);
+			CurPos := CurPos + LgC;
+			IF (HardType=ModemDrg) & (IsTeletel=FALSE) THEN
+			BEGIN
+				IF LLen >= MaxSize THEN
+				BEGIN
+					WaitDelay((MaxSize DIV 2) - abs(TickCount - LTime));
+					LLen := 0;
+					LTime := TickCount;
+				END
+				ELSE
+					LLen := LLen + LgC;
+			END;
+		END;
+		IF IsTeletel THEN OutputFlag := TRUE;
+	END;
+END;
+
+PROCEDURE DrawScreen(TheVScreen: Ptr);
+
+CONST
+	MaxSize = 512;
+	
+VAR
+	LgC, LgV, CurPos: Longint;
+	LTime, LLen: Longint;
+	{ nouvelle version, on temporise pour 1k }
+
+BEGIN
+	CurPos := 0;
+	LgV := LongintPtr(TheVScreen)^;
+	LLen := 0;
+	LTime := TickCount;
+	WITH GetCurSt^ DO
+		IF IsTeletel THEN
+		BEGIN
+			OutputFlag := FALSE;
+			opFlag := 0;
+		END;
+		
+	WHILE CurPos < LgV DO
+	BEGIN
+		LgC := LgV - CurPos;
+		IF LgC > 128 THEN LgC := 128;
+		BuffDataFrame(Ptr(Ord4(TheVScreen) + CurPos + 4), LgC);
+		CurPos := CurPos + LgC;
+		WITH GetCurSt^ DO
+		IF (HardType=ModemDrg) & (IsTeletel=FALSE) THEN
+		BEGIN
+			IF LLen > MaxSize THEN
+			BEGIN
+				WaitDelay((MaxSize DIV 2) - abs(TickCount - LTime));
+				LLen := 0;
+				LTime := TickCount;
+			END
+			ELSE
+				LLen := LLen + LgC;
+		END;
+	END;
+	WITH GetCurSt^ DO IF IsTeletel THEN OutputFlag := TRUE;
+END;
+
+PROCEDURE FrontScreen(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	IF Num1=0 THEN FlushBuffer;	{ fin de FRONTSCREEN, on vide le buffer de sortie }
+	
+	GetCurSt^.FrOutPut := (Num1=1);
+	IF GetCurSt^.HardType <>ModemDrg THEN EXIT(FrontScreen);
+	
+	{ on met l'entete dans le buffer }
+	IF Num1 = 0 THEN
+		BEGIN
+			Str1 := '';
+			SendControlFrame(Str1, 't');
+		END
+	ELSE
+		BEGIN
+			Str1 := 'S';
+			SendControlFrame(Str1, 'T');
+		END;
+END;
+
+PROCEDURE Flash(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	Str1 := '  ';
+	Str1[1] := ESC;
+	IF Num1 > 0 THEN
+		Str1[2] := chr($48)
+	ELSE
+		Str1[2] := chr($49);
+	StrPrint(Str1);
+END;
+
+PROCEDURE SInput(PStr2: Pstr255;
+								 Num1: Longint;
+								 VarPtr: Ptr);
+
+VAR
+	Str1: Str255;
+	i: Integer;
+	termine: boolean;
+
+BEGIN
+	WITH GetCurSt^ DO
+		BEGIN
+			{ affichage du prompt et du curseur }
+			IF PStr2 <> NIL THEN StrPrint(PStr2^);
+
+			{ entree de la zone }
+			Str1 := '';
+			Error := Zinput(Str1, 0, 0, 240, 0, MaxTime, ' ', True);
+			{ controle et affectation de la zone }
+			IF Num1 = 1 THEN { 1= Chaine; 0= Longint}
+				BEGIN
+					BlockMoveData(@Str1, VarPtr, Length(Str1) + 1);
+				END
+			ELSE
+				BEGIN
+					Num1 := SSVal(Str1);
+					BlockMoveData(@Num1, VarPtr, 4);
+				END;
+
+			IF BAND(Byte(InSilentFlag),1)=0 THEN CarPrint(DC4);
+
+			{ plus de zones de saisie }
+			IF HardType = ModemDrg THEN
+			BEGIN
+				Str1 := '';
+				SendControlFrame(Str1, 'z');
+			END;
+		END;	{ WITH }
+END;
+
+PROCEDURE Inverse(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	Str1 := '  ';
+	Str1[1] := ESC;
+	IF Num1 > 0 THEN
+		Str1[2] := chr($5D)
+	ELSE
+		Str1[2] := chr($5C);
+	StrPrint(Str1);
+END;
+
+
+PROCEDURE SSize(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	IF (Num1 >= 0) & (Num1 < 4) THEN
+		BEGIN
+			Str1 := '  ';
+			Str1[1] := ESC;
+			Str1[2] := chr($4C + Num1);
+			StrPrint(Str1);
+		END;
+END;
+
+PROCEDURE SUnderLine(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	Str1 := '  ';
+	Str1[1] := ESC;
+	IF Num1 > 0 THEN
+		Str1[2] := chr($5A)
+	ELSE
+		Str1[2] := chr($59);
+	StrPrint(Str1);
+END;
+
+PROCEDURE WaitConnect(WTime: Longint);
+
+VAR
+	ThePtr: TPtr;
+	Str1: Str255;
+	Termine: BOOLEAN;
+	EndTime: LONGINT;
+	
+	FUNCTION ModemWaitConnect:BOOLEAN;
+
+	VAR
+		Str1, Str2: Str255;
+		termine: boolean;
+		i: Integer;
+	
+	BEGIN
+		REPEAT
+			WaitDelay(30);
+			GetTheStatus(Str1);	{ pour les reconnexions }
+			GetCurSt^.ConFlag := FALSE;
+		UNTIL (Str1[2]<>'F') | ((EndTime > 0) & (TickCount > EndTime));
+		
+(*	
+		Str1 := '';
+		PaqPrep(Str1, '?');
+		termine := False;
+	
+		REPEAT
+			AsRead(Str1, Str2, 120, False);
+			IF (Length(Str2) > 0) & (Str2[1] <> 'F') THEN
+				termine := True
+			ELSE
+				WaitDelay(30);
+		UNTIL termine  OR ((TickCount > EndTime) AND (EndTime > 0));
+		ModemWaitConnect := Termine;
+		
+		IF Termine THEN { on est connect√© ! }
+*)
+
+		IF (Str1<>'') & (Str1[2]<>'F') & ((GetCurSt^.demoCount=0) | (Str1[4]='L'))THEN	{ on est connecte ! }
+		BEGIN
+			GetCurSt^.ConFlag := TRUE;
+			IF Str1[4]='T' THEN
+			BEGIN
+				GetCurSt^.IsTeletel := TRUE;	{ output sur Drg T√©l√©tel }
+				GetCurSt^.OpFlag := 0;
+			END;
+			ModemWaitConnect := TRUE;
+		END
+		ELSE
+			ModemWaitConnect := FALSE;
+	END;
+
+
+{$IFC ADSP}
+	FUNCTION ADSPWaitConnect:BOOLEAN;
+
+	VAR	Err: OsErr;
+		QPb: TQERec;
+		MyNode: INTEGER;
+		MyNet: INTEGER;
+		
+	BEGIN
+		IF Connected=1 THEN	{ on est d√©j√† connect√© !!! }
+		BEGIN
+			ADSPWaitConnect := TRUE;
+			EXIT(ADSPWaitConnect);
+		END;
+		
+		QPb.ECode := ReqADSPWaitConnect;
+		SetIOWait;
+		TEnqueue(ADSPQ,QPB);
+
+		{ Ouvrir la connection ADSP }
+		
+		WITH GetCurSt^ DO
+		BEGIN
+			SetIOWait;
+			Infos^.PB.TCBPtr := GetCurSt;
+			WITH Infos^.PB.ADSPPB DO
+			BEGIN
+				ioCompletion := @AsmCompletion;
+				csCode := dspOpen;
+				ocInterval := 0;
+				ocMaximum := 0;
+			END;
+			Err := PBControlAsync(@Infos^.PB.ADSPPB);
+			YieldCpu;
+			
+			{¬†on attend que la liaison soit bien ouverte‚Ä¶¬†}
+			WHILE Infos^.theCCB.State = sOpening DO WaitDelay(10);
+			
+			IF Infos^.theCCB.state=sOpen THEN
+			BEGIN
+				WITH Infos^.theCCB.remoteAddress DO
+				BEGIN
+					Err := GetNodeAddress(myNode,myNet);
+					LocalMode :=  ((aNet=MyNet) | (aNet=0)) & (aNode=MyNode);
+				END;
+				ConFlag := TRUE;
+				{ ‚Ä¢‚Ä¢‚Ä¢ Connexion ADSP uniquement en local ! ‚Ä¢‚Ä¢¬†}
+				IF (DemoCount=1) & (localmode=FALSE) THEN Disconnect;
+			END;
+			ADSPWaitConnect := Infos^.theCCB.state=sOpen;
+		END;	{¬†WITH GetCurSt^ }
+	END;
+{$ENDC}
+
+	FUNCTION SerialWaitConnect:BOOLEAN;
+	
+	VAR	SepFlag	: BOOLEAN;
+			Err			: OsErr;
+			tempStr	: STRING[32];
+	
+		FUNCTION AcceptCall:BOOLEAN;
+		
+		VAR	EndTime2: LONGINT;
+				ok: BOOLEAN;
+				
+		BEGIN
+			ok := FALSE;
+			WITH ThePtr^ DO
+			BEGIN
+				ConFlag := TRUE;	{ pour ComAsWrite }
+				tempstr:=concat(ESC,'9o',ESC,'9h');	{¬†modem en opposition, connexion }
+				ComAsWriteStr(@tempStr);
+				EndTime2 := TickCount + 60*15;	{ 15s pour se connecter }
+				WHILE (EndTime2 > TickCount) & (NOT ok) DO
+				BEGIN
+					Err := ReadCars(Str1,0,1);
+					IF Str1 = '' THEN WaitDelay(6)
+					ELSE
+					BEGIN
+						IF SepFlag AND (Str1='S') THEN Ok := TRUE;	{¬†connect√© }
+(*	{¬†29/6/93 }
+						IF SepFlag AND (Str1='l') THEN Leave;	{ a raccroch√© }
+*)
+						SepFlag := (Str1=SEP);
+					END;
+				END;
+			END;	{ WITH }
+			AcceptCall := Ok;
+			IF NOT Ok THEN	{ on raccroche }
+			BEGIN
+				tempStr:=concat(ESC,'9g',ESC,'9W');	{¬†coupe porteuse, raccroche }
+				ComAsWriteStr(@tempStr)
+			END
+			ELSE
+				ThePtr^.LocalMode := FALSE;	{ on est en ext√©rieur }
+		END;
+		
+	BEGIN
+		WITH ThePtr^ DO
+		BEGIN
+			{ pas d'echo local svp et suppression du curseur }
+			ConFlag := TRUE;
+			tempStr := concat(Coff,ESC,';`ZQ',Coff);
+			ComAsWriteStr(@tempStr);			
+			ConFlag := FALSE;
+			
+			LocalMode := TRUE;
+			SepFlag := FALSE;
+			WHILE ((EndTime=0) | (EndTime>TickCount)) & (ConFlag = FALSE) DO
+			BEGIN
+				Err := ReadCars(Str1,0,1);
+				IF Str1='' THEN WaitDelay(60)
+				ELSE
+					IF Str1=SEP THEN
+						SepFlag := TRUE
+					ELSE
+					BEGIN
+						IF (DemoCount<>1) & SepFlag & (Str1='l') THEN
+							ConFlag := AcceptCall;	{ Sonnerie }
+						IF (SepFlag AND (Str1='A')) OR (Str1 = RC) OR (Str1=' ') THEN
+							ConFlag := TRUE;	{ ENVOI, RC¬†ou Espace }
+						SepFlag := FALSE;
+					END;
+			END;
+			SerialWaitConnect := ConFlag;
+			IF NOT LocalMode THEN
+			BEGIN
+				{ Supprime Clav -> Modem et Modem -> Ecran et Cr√©e Prise -> Ecran }
+				tempStr := concat(ESC,';`ZQ',ESC,';`XR',ESC,';aXS');
+				ComAsWriteStr(@tempStr);
+			END;
+		END;
+	END;
+	
+{$IFC MUX}	
+	FUNCTION MuxAsmWaitConnect:BOOLEAN;
+		
+	BEGIN
+		WITH GetCurSt^ DO
+		BEGIN
+			IF XConFlag=FALSE THEN 
+			BEGIN
+				IF WTime>0 THEN
+				BEGIN
+					DelayValue := WTime*60;
+					StatusWord := PendBTCst;
+				END
+				ELSE StatusWord := PendBCst;
+				PendAdr := @XConFlag;
+				YieldCpu;	{ on se met en attente de XConFlag=TRUE }
+			END;
+			IF (demoCount=0) & XConflag THEN	{¬†connexion √©tablie au niveau X25 }
+			BEGIN
+				MuxAsmWaitConnect := XConFlag;
+				ConFlag := XConflag;
+				OutputFlag := XConflag;	{ on autorise l'envoi de donn√©es si on est connect√© }
+				XConflag := FALSE;	{ ‚Ä¢18/2/94‚Ä¢¬†}
+				Error := 0;
+{$IFC DEBUG} DebugStr('MuxAsmWaitConnect: connecte'); {$ENDC}
+			END
+			ELSE
+				MuxAsmWaitConnect := FALSE;
+		END;
+	END;
+{$ENDC}
+
+{$IFC HAYES}
+	FUNCTION HayesWaitConnect:BOOLEAN;
+	
+	VAR Str1: Str255;
+			Err: INTEGER;
+			Recv: Str255;
+			TempStr: Str255;
+			
+		FUNCTION AcceptCall:BOOLEAN;
+		
+		VAR	EndTime: LONGINT;
+				ok: BOOLEAN;
+				
+		BEGIN
+{$IFC DEBUGHAYES}
+DebugStr('AcceptCall');
+{$ENDC}
+			ok := FALSE;
+			WITH ThePtr^ DO
+			BEGIN
+				ConFlag := TRUE;	{ pour ComAsWrite }
+				tempstr:=concat('ATA',chr(13));
+				ComAsWriteStr(@tempStr);
+				ConFlag := FALSE;
+				EndTime := TickCount + 60*30;	{ 30s pour se connecter }
+				Recv:='';
+				WHILE (EndTime > TickCount) & (NOT ok) DO
+				BEGIN
+					Err := ReadCars(Str1,0,1);
+					IF Str1 = '' THEN WaitDelay(6)
+					ELSE
+					BEGIN
+						{¬†petit buffer tournant de 200 car.¬†}
+						IF length(recv)>200 THEN Delete(Recv,1,1);
+						IF Str1=chr(13) THEN Recv := '' ELSE Recv:=concat(recv,Str1);
+						ok := pos('CONN',recv)<>0;
+					END;
+				END;
+				AcceptCall := Ok;
+				IF NOT Ok THEN	{ on raccroche }
+				BEGIN
+{$IFC DEBUGHAYES}
+DebugStr('Deconnecte');
+{$ENDC}
+					tempStr:=concat('ATH',chr(13));
+					ConFlag := TRUE;
+					ComAsWriteStr(@tempStr);
+					ConFlag := FALSE;
+				END
+				ELSE
+				BEGIN
+{$IFC DEBUGHAYES}
+DebugStr('Connecte');
+{$ENDC}
+					{¬†on lit tout ce qui suit le CONNECT }
+					REPEAT
+						Err := ReadCars(Str1,0,1);
+					UNTIL Str1='';
+				END;
+				LocalMode := FALSE;	{ on est toujours en ext√©rieur }
+				Recv:='';
+			END;	{ WITH }
+		END;
+		
+	BEGIN
+		WITH ThePtr^ DO
+		BEGIN
+{$IFC DEBUGHAYES}
+			DebugStr('HayesWaitConnect');
+{$ENDC}
+			tempStr:=concat('ATE0V1S0=1',chr(13));	{¬†echo off, messages anglais, r√©ponse auto }
+			IF demoCount=1 THEN
+				tempStr[10]:='0';	{¬†pas de modem Hayes en mode d√©mo }
+			ConFlag := TRUE;
+			ComAsWriteStr(@tempStr);
+			ConFlag := FALSE;
+
+			LocalMode := FALSE;
+			Recv:='';
+			WHILE ((EndTime=0) | (EndTime>TickCount)) & (ConFlag = FALSE) DO
+			BEGIN
+				Err := ReadCars(Str1,0,1);
+				IF Str1='' THEN WaitDelay(60)
+				ELSE
+				BEGIN
+					IF Length(Recv)>200 THEN Delete(Recv,1,1);
+					Recv:=concat(Recv,Str1);
+					IF (demoCount=0) & (pos('CONN',Recv)>0) THEN conFlag:=TRUE;
+(*
+					IF pos('RING',Recv)>0 THEN ConFlag := AcceptCall;	{ Sonnerie }
+					IF pos('SONN',Recv)>0 THEN ConFlag := AcceptCall;	{ Sonnerie }
+*)
+				END;
+			END;
+			HayesWaitConnect := ConFlag;
+{$IFC DEBUGHAYES}
+			IF ConFlag THEN
+				DebugStr('HayesWaitConnect: ConFlag=TRUE')
+			ELSE
+				DebugStr('HayesWaitConnect: ConFlag=FALSE');
+{$ENDC}
+		END;
+	END;
+{$ENDC}
+
+
+{$IFC PILOTE}
+	FUNCTION PiloteWaitConnect:BOOLEAN;
+	
+	VAR
+		MCErr: tsMCErr;
+		
+	BEGIN
+		PiloteWaitConnect := FALSE;
+		WHILE (EndTime=0) OR (EndTime>TickCount) DO
+		BEGIN
+
+		END;
+	END;
+{$ENDC}
+
+
+BEGIN
+	ThePtr := GetCurSt;
+	Byte(ThePtr^.TrPrintFlag) := 0;
+
+	IF WTime > 0 THEN EndTime := WTime * 60 + TickCount ELSE EndTime := 0;		{ 6/8/96 }
+	
+	CASE ThePtr^.HardType OF
+		ModemDrg: termine := ModemWaitConnect;
+		
+{$IFC ADSP}
+		ADSPLink: termine := ADSPWaitConnect;
+{$ENDC}
+
+		SerialLink: termine := SerialWaitConnect;
+
+{$IFC MUX}		
+		MuxAsm,MuxASMT: termine := MuxAsmWaitConnect;
+{$ENDC}
+
+{$IFC HAYES}
+		ModemHayes:	termine := HayesWaitConnect;
+{$ENDC}
+
+{$IFC PILOTE}
+		PiloteModem: termine := PiloteWaitConnect;
+{$ENDC}
+	
+	END;	{ CASE }
+	
+	IF termine THEN	{¬†on est connect√© ! }
+	BEGIN
+		GetDateTime(ThePtr^.StartTime);
+		IF BAND(Byte(ThePtr^.InSilentFlag),16384)=0 THEN		{¬†20/4/95 }
+		BEGIN
+			Cls;
+			Locate(0, 1);
+			Str1 := 'Dragster 1.99';
+			IF ThePtr^.DemoCount=1 THEN Str1 := concat(Str1,' DEMO');
+			Str1 := concat(Str1,' (C) DIT');
+			StrPrint(Str1);
+			CarPrint(chr(24));
+			WaitDelay(3);
+		END;
+	END;
+END;
+
+
+
+PROCEDURE SStatus(VAR Str2: Str255);
+
+VAR
+	Str1: Str255;
+	i: Integer;
+
+BEGIN
+
+	{ --------- format de la chaine de status -----------
+	1er caractere: M si modem, T si Transpac
+	2e	caractere: C si connexion, F sinon
+	3e	caractere: 0 si serveur, autre si service local du modem ('.'= pas un modem)
+	4e	caractere: L si minitel local, R si r√©seau t√©l√©phonique, T si T√©l√©tel, A = ASM
+	5e	caractere: Phase du modem
+	6e	caractere: Derni√®re cause d'erreur du modem
+	7e	caractere: A si mode normal, R si modem invers√©, T = ASM/T
+	et sur Transpac:
+	8 √† 16 N¬∞ Transpac de l'appelant
+	17/18 = sous adresse
+	<> N¬∞ Compl√©mentaire (optionel)
+	19=PCV
+	20/21 = GFA
+	22=Donn√©es d'appel
+	--------- format de la chaine de status -----------}
+
+	WITH GetCurSt^ DO
+	CASE HardType OF
+	
+	ModemDrg:
+		IF IsTeletel THEN	{ DrgT√©l√©tel }
+		BEGIN
+			MessDLoad(Str2,0);
+			IF ConFlag & (Str2[2] = 'F') THEN ConFlag := FALSE;
+		END
+		ELSE
+		BEGIN				{ Modem Dragster }
+			Str1 := '';
+			PaqPrep(Str1, 'S');
+			AsRead(Str1, Str2, 30, False);
+			Str2[1] := 'M';
+			IF ConFlag & (Str2[2] = 'F') THEN ConFlag := FALSE;
+		END;
+		
+{$IFC ADSP}
+	ADSPLink:
+		BEGIN
+			Str2:='MC.RADSP';
+			IF Connected=0 THEN Str2[2]:= 'F';	{¬†plus connect√© ! }
+			IF LocalMode THEN Str2[4]:='L';
+		END;
+{$ENDC}
+
+	SerialLink:
+		BEGIN
+			Str2 := 'MF.RSER.';
+			IF ConFlag THEN Str2[2] := 'C';		{ Connect√© ? }
+			IF LocalMode THEN Str2[4] := 'L';	{ Local ou RTC ? }
+		END;
+
+{$IFC MUX}
+	MuxAsm,MuxASMT:
+		BEGIN
+			Str2:='TF.X25.';
+			IF HardType=MuxASMT THEN Str2[7]¬†:= 'T';
+			WITH GetCurSt^ DO
+			BEGIN
+				IF ConFlag THEN Str2[2]:='C';
+				Str2:=concat(Str2,XCallDatas);
+			END;
+		END;
+{$ENDC}
+
+{$IFC HAYES}
+	ModemHayes:
+		BEGIN
+			Str2 := 'MF.RHAYE';
+			IF ConFlag THEN Str2[2] := 'C';		{ Connect√© ? }
+			IF LocalMode THEN Str2[4] := 'L';	{ Local ou RTC ? }
+		END;
+{$ENDC}
+
+{$IFC PILOTE}
+	PiloteModem:
+		BEGIN
+			Str2 := 'MF.RPILO';
+			IF ConFlag THEN Str2[2] := 'C';		{ Connect√© ? }
+			IF LocalMode THEN Str2[4] := 'L';	{ Local ou RTC ? }
+		END;
+{$ENDC}
+
+	END;	{ CASE }
+END;
+
+PROCEDURE SSetMinId(Num1: Longint;
+										VAR Str2: Str255);
+
+VAR
+	Str1: Str255;
+	NbCar: Integer;
+
+BEGIN
+	IF (Num1 < 0) OR (Num1 > 1) THEN EXIT(SSetMinId);
+	CASE Num1 OF
+		0:
+			BEGIN
+				Str1 := '   ';
+				Str1[1] := ESC;
+				Str1[2] := chr($39);
+				Str1[3] := IDEN1;
+			END;
+		1:
+			BEGIN
+				Str1 := '   ';
+				Str1[1] := ESC;
+				Str1[2] := chr($39);
+				Str1[3] := IDEN2;
+			END;
+	END;
+	Str1[4] := SOH;
+	NbCar := Length(Str2);
+	IF NbCar > 15 THEN NbCar := 15;
+	BlockMoveData(Ptr(Ord4(@Str2) + 1), Ptr(Ord4(@Str1) + 5), NbCar);
+	IF NbCar < 15 THEN
+		BEGIN
+			Str1[NbCar + 5] := EOT;
+			NbCar := NbCar + 1;
+		END;
+	NbCar := NbCar + 4;
+	Str1[0] := chr(NbCar);
+	StrPrint(Str1);
+END;
+
+PROCEDURE SGetMinId(VAR Str2: Str255; Num1: Longint);
+
+VAR
+	Str1: Str255;
+	i: Integer;
+
+BEGIN
+	Str2 := '';
+	IF (Num1 < 0) OR (Num1 > 2) THEN EXIT(SGetMinId);
+	CASE Num1 OF
+		0:
+			BEGIN
+				Str1 := ' ';
+				Str1[1] := ENQ;
+			END;
+		1:
+			BEGIN
+				Str1 := '   ';
+				Str1[1] := ESC;
+				Str1[2] := chr($39);
+				Str1[3] := ENQRAM;
+			END;
+		2:
+			BEGIN
+				Str1 := '   ';
+				Str1[1] := ESC;
+				Str1[2] := chr($39);
+				Str1[3] := ENQROM;
+			END;
+	END;
+	StrPrint(Str1);
+	WaitDelay(180);
+	
+	CASE GetCurSt^.HardType OF
+	ModemDrg:
+		BEGIN
+			Str1 := '';
+			PaqPrep(Str1, '?');
+			AsRead(Str1, Str2, 120, False);
+			IF Length(Str2) > 0 THEN
+				BEGIN
+					{ on vire l'EOT }
+					IF Str2[Length(Str2)] = EOT THEN Str2[0] := chr(Length(Str2) - 1);
+					{ on vire le c et le SOH }
+					IF Length(Str2) >= 2 THEN
+						BEGIN
+							FOR i := 3 TO Length(Str2) DO Str2[i - 2] := Str2[i];
+							Str2[0] := chr(Length(Str2) - 2);
+						END;
+				END;
+		END;
+	
+	OTHERWISE
+		BEGIN
+		END;
+		
+	END;	{ CASE }
+END;
+
+PROCEDURE SCurPos(VAR Str2: Str255);
+
+VAR
+	Str1: Str255;
+	i: Integer;
+
+BEGIN
+	Str2 := '';
+	Str1 := '  ';
+	Str1[1] := ESC;
+	Str1[2] := chr($61);
+	StrPrint(Str1);
+	WaitDelay(180);
+
+	CASE GetCurSt^.HardType OF
+	ModemDrg:
+		BEGIN
+			Str1 := '';
+			PaqPrep(Str1, '?');
+			AsRead(Str1, Str2, 120, False);
+			IF Length(Str2) > 0 THEN
+				BEGIN
+					{ on vire le c et le US }
+					FOR i := 3 TO Length(Str2) DO Str2[i - 2] := Str2[i];
+					Str2[0] := chr(Length(Str2) - 2);
+				END;
+		END;
+	
+	END;	{ CASE }
+END;
+
+PROCEDURE Dial(Str1: Str255);
+
+BEGIN
+	IF GetCurSt^.HardType <>ModemDrg THEN EXIT(Dial);
+	SendControlFrame(Str1, 'A');
+END;
+
+FUNCTION Connected: Longint;
+
+VAR
+	Str1, Str2: Str255;
+	SavedErr: INTEGER;
+	
+BEGIN
+	WITH GetCurSt^ DO
+	CASE HardType OF
+		ModemDrg:
+		BEGIN
+			IF ConFlag=FALSE THEN
+				Connected := 0		{ d√©connect√© }
+			ELSE
+			BEGIN
+				WITH GetCurSt^ DO
+				BEGIN
+					SavedErr := Error;
+					Str1 := '';
+					PaqPrep(Str1, '?');
+					AsRead(Str1, Str2, 120, False);
+					ConFlag := ((Length(Str2) = 0) OR (Str2[1] <> 'F'));
+					Connected := LONGINT(ConFlag);
+					Error := SavedErr;	{ on conserve l'erreur pr√©c√©dente‚Ä¶¬†}
+				END;
+			END;
+		END;	{¬†ModemDrg }
+		
+{$IFC ADSP}
+		ADSPLink:
+		BEGIN
+			WITH GetCurST^ DO
+			BEGIN
+				{ toujours connect√© ? }
+				IF ConFlag = TRUE THEN
+				BEGIN
+{$IFC DEBUG}
+DebugNum ('Connected: state=', Ord(Infos^.theCCB.State), FALSE);
+{$ENDC}
+					ConFlag := (Infos^.theCCB.State=sOpen);
+				END;
+				Connected := LONGINT(ConFlag);
+			END;
+		END;	{¬†ADSPLink }
+{$ENDC}
+
+		OTHERWISE
+		BEGIN
+			Connected := LONGINT(ConFlag);
+{$IFC DEBUG}
+IF (conflag=FALSE) & (tasknumber=1) THEN DebugStr('Connected: conflag=FALSE');
+{$ENDC}
+		END;
+		
+	END;	{ CASE }
+END;
+
+PROCEDURE SScroll(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	Str1 := '    ';
+	Str1[1] := ESC;
+	Str1[2] := chr($3A);
+	Str1[3] := START;
+	Str1[4] := chr($43);
+	IF Num1 = 0 THEN Str1[3] := STOP;
+	StrPrint(Str1);
+END;
+
+PROCEDURE SLower(Num1: Longint);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	Str1 := '    ';
+	Str1[1] := ESC;
+	Str1[2] := chr($3A);
+	Str1[3] := START;
+	Str1[4] := chr($45);
+	IF Num1 = 0 THEN Str1[3] := STOP;
+	StrPrint(Str1);
+END;
+
+PROCEDURE TrPrint(TheFlag: Longint);
+{¬†TheFlag = 0 -> print normal avec transformations accents et r√©p√©titions
+						1 -> print "transparent" avec suppression accents (pour 80col.)
+						2 -> print "X29/Vid√©opad" envoi donn√©es avec bitQ √† 1
+						3 -> print normal avec transformations accents mais SANS REPETITIONS
+}
+BEGIN
+	WITH GetCurSt^ DO
+	BEGIN
+		{¬†on vide le buffer avant d'envoyer une commande X29/Vid√©opad }
+		IF (Byte(TrPrintFlag)<>2) & (TheFlag=2) THEN FlushBuffer;
+		Byte(TrPrintFlag) := TheFlag;
+	END;
+END;
+
+PROCEDURE InputMode(SilentFlag, BuffFlag: Longint);
+
+BEGIN
+	WITH GetCurSt^ DO
+		BEGIN
+			Byte(InSilentFlag) := SilentFlag;
+		END;
+END;
+
+PROCEDURE SWModem;
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	IF GetCurSt^.HardType <>ModemDrg THEN EXIT(SWModem);
+	Str1 := '';
+	SendControlFrame(Str1, 'R');
+END;
+
+PROCEDURE Disconnect;
+
+VAR
+	Str1: Str255;
+	i: Integer;
+
+BEGIN
+	CASE GetCurSt^.HardType OF
+	ModemDrg:
+		BEGIN
+			Str1 := '';
+			SendControlFrame(Str1, 'D');
+		END;
+		
+{$IFC ADSP}
+	ADSPLink:
+		BEGIN
+			WITH GetCurSt^ DO
+			BEGIN
+				IF ConFlag=FALSE THEN EXIT(Disconnect);
+				SetIOWait;
+				Infos^.PB.TCBPtr := GetCurSt;
+				WITH Infos^.PB.ADSPpb DO
+				BEGIN
+					ioCompletion := @AsmCompletion;
+					csCode := dspClose;
+					abort := 1;	{ on d√©truit les donn√©es qui ne sont pas encore parties‚Ä¶¬†}
+				END;
+				i := PBControl(@Infos^.PB.ADSPpb, TRUE);
+				YieldCpu;
+			END;
+		END;
+{$ENDC}
+
+	SerialLink:
+		IF GetCurSt^.Conflag THEN
+		BEGIN
+			Str1 := concat(ESC,'9g',ESC,'9W',Coff);
+			ComAsWriteStr(@Str1);
+		END;
+
+{$IFC MUX}
+	MuxAsm,MuxASMT:
+		BEGIN
+{$IFC DEBUG}
+DebugStr('Disconnect');
+{$ENDC}
+			IF GetCurSt^.ConFlag THEN SendMuxFrame(NIL,0,LibFrame);
+		END;
+{$ENDC}
+
+{$IFC HAYES}
+	ModemHayes:
+		BEGIN
+			WaitDelay(90);
+			Str1 := '+++';
+			ComAsWriteStr(@Str1);
+			WaitDelay(90);
+			Str1 := concat('ATH',chr(13));
+			ComAsWriteStr(@Str1);
+		END;
+{$ENDC}
+
+{$IFC PILOTE}
+	PiloteModem:
+		BEGIN
+			{¬†### √† faire ### }
+		END;
+{$ENDC}
+
+	END;	{ CASE }
+	GetCurSt^.ConFlag := FALSE;	{ on est en principe d√©connect√© }
+END;
+
+PROCEDURE Request(Num1: Longint; VAR ScrutX, PatX: Longint);
+
+VAR
+	Num2: Longint;
+	termine: boolean;
+
+BEGIN
+	Num2 := BAnd(PatX, $00FFFFFF);
+	termine := BAnd(Num2, BAnd(ScrutX, $00FFFFFF)) = Num2;
+	WITH GetCurSt^ DO
+		BEGIN
+			Error := 0;
+			IF NOT termine THEN
+				BEGIN
+					PendStr := BAnd(PatX, $00FFFFFF);
+					PendAdr := @ScrutX;
+					IF Num1 > 0 THEN
+					BEGIN
+						StatusWord := StrPdTCst;
+						DelayValue := Num1;
+					END
+					ELSE
+						StatusWord := StrPdCst;
+					YieldCpu;
+					IF BAnd(Num2, BAnd(ScrutX, $00FFFFFF)) <> Num2 THEN Error := ErrTime;
+				END;
+		END;
+END;
+
+FUNCTION SPend(VAR ScrutX: Longint; Num1: Longint): Longint;
+
+VAR
+	termine: boolean;
+
+BEGIN
+	termine := ScrutX <> 0;
+	WITH GetCurSt^ DO
+		BEGIN
+			Error := 0;
+			IF NOT termine THEN
+				BEGIN
+					PendAdr := @ScrutX;
+					IF Num1 > 0 THEN
+					BEGIN
+						StatusWord := PdTCst;
+						DelayValue := Num1;
+					END
+					ELSE
+						StatusWord := PdCst;
+					YieldCpu;
+					IF ScrutX = 0 THEN Error := ErrTime;
+				END;
+		END;
+	SPend := ScrutX;
+	ScrutX := 0;
+END;
+
+PROCEDURE YieldCpu;
+
+BEGIN
+	WITH GetCurSt^ DO SwapTasks(@RegArea, @RegAreaF);
+END;
+
+
+PROCEDURE SPost(VAR ScrutX: Longint; Num1, Num2: Longint);
+
+VAR
+	termine: boolean;
+
+BEGIN
+	termine := ScrutX = 0;
+	WITH GetCurSt^ DO
+		BEGIN
+			Error := 0;
+			IF NOT termine THEN
+				BEGIN
+					PendAdr := @ScrutX;
+					IF Num2 > 0 THEN
+					BEGIN
+						StatusWord := PostTCst;
+						DelayValue := Num2;
+					END
+					ELSE
+						StatusWord := PostCst;
+					YieldCpu;
+				END;
+			IF ScrutX = 0 THEN
+				BEGIN
+					Error := 0;
+					ScrutX := Num1;
+					YieldCpu;
+				END
+			ELSE
+				Error := ErrTime;
+		END;
+END;
+
+FUNCTION TaskNumber: Longint;
+
+VAR
+	ThePtr: TPtr;
+
+BEGIN
+	TaskNumber := GetCurSt^.TaskNumber;
+END;
+
+FUNCTION SModNumber: Longint;
+
+BEGIN
+	SModNumber := GetCurSt^.TheModem;
+END;
+
+FUNCTION SStarFlag: Longint;
+
+BEGIN
+	IF GetCurSt^.StarFlag THEN
+		SStarFlag := 1
+	ELSE
+		SStarFlag := 0;
+END;
+
+PROCEDURE MessDLoad(VAR Str1: Str255; Num1: Longint);
+
+VAR
+	Str2: Str255;
+
+BEGIN
+	IF (Num1<=0) & (GetCurSt^.HardType IN [MuxAsm,MuxASMT]) THEN	{¬†lecture donn√©es X29 }
+	BEGIN
+		CASE -Num1 OF
+			0:		Str1 := GetCurSt^.Infos^.LastX29;
+			1:		NumToString(GetCurSt^.Infos^.PO1,Str1);
+			2..6:	Str1 := GetCurSt^.Infos^.PO[-Num1];
+			OTHERWISE Str1 := '';
+		END;
+		EXIT(MessDLoad);
+	END;
+	
+	IF GetCurSt^.HardType <>ModemDrg THEN EXIT(MessDLoad);
+	
+	Str1 := '';
+	IF Num1 > 99 THEN Num1 := 99;
+	IF Num1 < 0 THEN Num1 := 0;
+	NumToString(Num1, Str2);
+	IF Length(Str2) = 1 THEN Insert('0', Str2, 1);
+	PaqPrep(Str2, 'L');
+	AsRead(Str2, Str1, 120, False);
+	IF Length(Str1) > 0 THEN Delete(Str1, 1, 1);
+END;
+
+PROCEDURE MessULoad(Num1: Longint; VAR Str2: Str255);
+
+VAR
+	Str1: Str255;
+
+BEGIN
+	IF GetCurSt^.HardType <>ModemDrg THEN EXIT(MessULoad);
+
+	IF Num1 > 99 THEN Num1 := 99;
+	IF Num1 < 0 THEN Num1 := 0;
+	NumToString(Num1, Str1);
+	IF Length(Str1) = 1 THEN Insert('0', Str1, 1);
+	Str1 := Concat(Str1, Str2);
+	SendControlFrame(Str1, 'T');
+END;
+
+
+PROCEDURE SSysParm(Num1, Num2, Num3, Num4: Longint);
+
+VAR
+	Str1, Str2: Str255;
+
+BEGIN
+	IF GetCurSt^.HardType <> ModemDrg THEN EXIT(SSysParm);
+	
+	Str1 := 'YY';
+	IF Num1 = 0 THEN
+		BEGIN
+			Str1[1] := 'N';
+		END;
+
+	IF Num2 = 0 THEN
+		BEGIN
+			Str1[2] := 'N';
+		END;
+
+	IF Num3 > 999 THEN Num3 := 999;
+	IF Num3 < 0 THEN Num3 := 0;
+	NumToString(Num3, Str2);
+	WHILE Length(Str2) < 3 DO Insert('0', Str2, 1);
+	Str1 := Concat(Str1, Str2);
+
+	IF Num4 > 999 THEN Num4 := 999;
+	IF Num4 < 0 THEN Num4 := 0;
+	NumToString(Num4, Str2);
+	WHILE Length(Str2) < 3 DO Insert('0', Str2, 1);
+	Str1 := Concat(Str1, Str2);
+
+	SendControlFrame(Str1, 'P');
+END;
+
+FUNCTION GetPriority: Longint;
+
+BEGIN
+	GetPriority := GetCurSt^.TaskPriority;
+END;
+
+PROCEDURE SetPriority(Num1: Longint);
+
+BEGIN
+	IF Num1 < 20 THEN Num1 := 20;
+	IF Num1 > 255 THEN Num1 := 255;
+	GetCurSt^.TaskPriority := Num1;
+				{ il faut maintenant reordonner les TCBs, en le mettant en tete
+					de cette liste de priorite } {Done in scheduler}
+END;
+
+
+PROCEDURE ControlSN(VAR Str1: Str255);
+
+BEGIN
+	GetCurSt^.Error := 0;
+END;
+
+{ Mode de fonctionnement du serveur }
+PROCEDURE RunFlags(VAR Str1: Str255);
+
+BEGIN
+	WITH GetCurSt^ DO
+	BEGIN
+		CASE HardType OF
+			ModemDrg:
+			BEGIN
+				IF IsTeletel THEN
+					Str1[2] := 'T'  { Dragster X25 }
+				ELSE
+					Str1[2] := 'M'; { Dragster Modem }
+		  END;
+		  
+			ADSPLink:
+				Str1[2] := 'E';	{ emulateur }
+			SerialLink:
+				Str1[2] := 'S';	{ port s√©rie }
+{$IFC MUX}
+			MuxAsm,MuxASMT:
+				Str1[2] := 'X';	{ multiplexeur ASM }
+{$ENDC}
+{$IFC HAYES}
+			ModemHayes:
+				Str1[2] := 'H';	{¬†modem Hayes‚Ñ¢¬†}
+{$ENDC}
+{$IFC PILOTE}
+			PiloteModem:
+				Str1[2] := 'P'; { modem Pilote }
+{$ENDC}
+
+	  END; { CASE }
+	  Str1[1] := 'C'; { mode Compil√© }
+	  Str1[0] := chr(2);
+	END;
+END;
+
+{==========================================================================}
+{  Gestion du multitache													 }
+{==========================================================================}
+
+PROCEDURE TimeIt;
+{ Routine d'interruption du timer, r√©active les t√¢ches en fin de delay }
+
+VAR ThePtr: TPtr;
+
+BEGIN { of Procedure TimeIt }
+	ThePtr := GetStPtr;
+	WHILE ThePtr <> NIL DO
+		WITH ThePtr^ DO
+			BEGIN
+				IF Odd(StatusWord) THEN
+				BEGIN
+					DelayValue := DelayValue -1;
+					IF DelayValue <=0 THEN StatusWord := ReadyCst;
+				END;
+				ThePtr := ThePtr^.NextTCB;
+			END;
+END; { of Procedure TimeIt }
+
+
+PROCEDURE StartTask;
+{ permet a une tache en erreur grave pour redemarrer √† zero }
+{ le redemarrage est fait par le scheduler }
+
+BEGIN
+	WITH GetCurSt^ DO
+		BEGIN
+			StatusWord := StartCst;
+			YieldCpu;
+		END;
+END;
+
+FUNCTION SeekScreen(VAR Str1: Str255): Longint;
+
+VAR
+	TheS: TPtNameScreen;
+	Index: Integer;
+	Trouve: boolean;
+	TheLen: Integer;
+
+BEGIN
+	{ recherche de Str1 dans le Pool Noms d'ecrans }
+	{ si on ne trouve pas: On relance la tache a zero = RunTask }
+	WITH GetCurSt^ DO
+		BEGIN
+			TheS := PtNameScreen;
+			Index := 0;
+			Trouve := False;
+			WHILE (Length(TheS^) > 0) AND (NOT Trouve) DO
+				BEGIN
+					Trouve := EqualString(TheS^, Str1, False, True);
+					IF NOT Trouve THEN
+						BEGIN
+							Index := Index + 1;
+							TheLen := Length(TheS^) + 1;
+							TheS := TPtNameScreen(Ord4(TheS) + TheLen);
+							IF Odd(TheLen) THEN TheS := TPtNameScreen(Ord4(TheS) + 1);
+						END;
+				END;
+			IF Trouve THEN
+				SeekScreen := Index
+			ELSE
+				StartTask;
+		END;
+END;
+
+
+PROCEDURE RunTask;
+
+VAR
+	i: Integer;
+	WorkLong: Longint;
+
+BEGIN { of procedure RunTask }
+
+		 { on suppose en entrant ici que les registres de la tache en foreground
+			 sont sauves dans RegAreaF, et que CurStPtr est bien positionne }
+	WITH GetCurSt^ DO
+		IF MagicN1<>$12345678 THEN	{ on v√©rifie que c'est bien un TCB !!! }
+			DebugStr('Pb de restart;g')
+		ELSE
+		BEGIN
+			{ initialisation de la zone de fichiers }
+			{ attention, en cas de restart de la t√¢che, les fichiers
+			  ne sont pas ferm√©s par 'FileTask' !!! }
+			IF TaskNumber < 1000 THEN
+				FOR i := 1 TO MaxFile DO
+					WITH TheFiles[i] DO
+						BEGIN
+(*							IF BaseFlag THEN
+								SClose(i)
+							ELSE
+								BaseClose(i);
+*)
+							FileRef := 0;
+							FileRLen := 1;
+							FilePos := 0;
+							BaseFlag := False;
+						END;
+(*			SetBaseEnd(0);
+*)
+
+			{ Init. des zones }
+			NBZones := 0;
+
+			{ on remet les modes d'input aux valeurs par defaut }
+			Byte(InSilentFlag) := 0;
+			
+			StatusWord := ReadyCst; { mot d'etat }
+			DelayValue := 0; { delay }
+			IOCompFlag := 0; { IO termin√©e }
+			Error := NoErr; { pas d'erreur }
+			StartTime := 0; { Connexion Time }
+			LocalMode := FALSE;	{ on se consid√®re en ext√©rieur par d√©faut }
+			EchoFlag := True; { Echo on }
+			StarFlag := False; { Pas de * en saisie }
+			OutPutFlag := True; { Output direct autoris√©e / bufferis√© (T√©l√©tel) ou Xon/Xoff (Mux) }
+			IsTeletel := False; { Output normal modem ou test buffer pour Drg T√©l√©tel }
+			MaxTime := 60 * 60 * 2; { 2 mn de TimeOut }
+			FilterFlag := True; { on filtre les ESC }
+			Byte(TrPrintFlag) := 0; { on optimise }
+			TheNScreen := 0;
+			TheNLine := 0;
+			TheNInst := 0;
+			TheVScreen := Ptr(PtOffScreen^[0].OffVCode);
+			RegArea[10] := Ptr(GetCurSt^.PTLVars); 	{A2 pointe sur les variables locales}
+			RegArea[11] := Ptr(GetCurSt^.PTJump); 	{A3 pointe sur la table de Jump}
+			RegArea[12] := Ptr(GetCurSt); 					{A4 pointe sur le TCB}
+			RegArea[13] := Ptr(GetCurSt^.PTJump); 	{A5 pointe sur la table de Jump}
+			RegArea[15] := Ptr(Ord4(PtOrgStk) - 6);	{A7 pile de d√©part de la t√¢che }
+			{ on met 0 et @StartTask dans la pile }
+			WorkLong := Ord4(@StartTask);
+			BlockMoveData(@WorkLong, RegArea[15], 4);
+			WorkLong := 0;
+			BlockMoveData(@WorkLong, Ptr(Ord4(RegArea[15]) + 4), 2);
+			RegArea[0] := PtCode;	{SP pointe sur le bas de la pile, et
+									D0 pointe sur le debut du code. Il suffira
+									de faire SwapTasks }
+			{ Pas de Reset des globales }
+			{ on rend la main }
+			OpFlag := 0;
+			RunMode := 1;	{ VBL autoris√©e }
+			FrOutPut := FALSE; { pas de FRONTSCREEN au d√©part }
+			XCallDatas:='                          ';
+			TraceFile := 0;	{ pas de fichier de TRACE qd on d√©marre }
+			ClearBuffer;
+		END;
+
+END; { of procedure RunTask }
+
+PROCEDURE Scheduler(ThePTable: Ptr);
+
+{ le scheduler tourne dans l'environnement de la tache en ForeGround }
+
+LABEL 0;
+
+TYPE	IPtr = ^INTEGER;
+
+VAR
+	ThePtr: TPtr;
+	XPriority: Integer;
+	TheTable: TPTPtr;
+	SaveStkLowPt: LONGINT;		{ copie de StkLowPt }
+	SaveHiHeapMark: LONGINT;	{ copie de HiHeapMark }
+	ModeType: INTEGER;
+
+	PROCEDURE RoundRobin;
+
+	VAR
+		ThePriority: Integer;
+		i: Integer;
+
+	BEGIN
+		ThePriority := ThePtr^.TaskPriority;
+		IF XPriority = ThePriority THEN { meme priorit√© }
+			WITH TheTable^[ThePriority] DO
+				BEGIN
+					IF ThePtr <> LastTCB THEN
+						WITH ThePtr^ DO
+							BEGIN { valse des pointeurs }
+
+								{ on vire le TCB de sa place actuelle }
+								IF PredTCB <> NIL THEN PredTCB^.NextTCB := NextTCB;
+								IF NextTCB <> NIL THEN
+									BEGIN
+										NextTCB^.PredTCB := PredTCB;
+										IF PredTCB = NIL THEN SetTheSt(NextTCB);
+									END;
+
+								{ on le met √† sa nouvelle place, derriere le LastTCB }
+								PredTCB := LastTCB;
+								NextTCB := LastTCB^.NextTCB;
+								IF NextTCB <> NIL THEN NextTCB^.PredTCB := ThePtr;
+								LastTCB^.NextTCB := ThePtr;
+								LastTCB := ThePtr; (* bug corrig√© le 30/03/88 *)
+
+							END
+				END
+		ELSE { priorit√© differente }
+			BEGIN { c'est un peu plus complexe }
+				{ mise √† jour de l'ancienne priorit√© }
+				WITH TheTable^[XPriority] DO
+					BEGIN
+
+						IF ThePtr = LastTCB THEN { derniere tache de la priorit√© }
+							WITH ThePtr^ DO
+								BEGIN
+
+									IF PredTCB = NIL THEN
+										BEGIN { premiere tache, donc premi√®re priorit√© }
+											LastTCB := NIL;
+											{ il ne peut pas y avoir de priorit√© plus basse }
+											PredPTY := - 1;
+											IF NextPTY <> - 1 THEN
+												BEGIN
+													TheTable^[NextPTY].PredPTY := - 1;
+												END;
+											NextPTY := - 1
+										END
+
+									ELSE
+
+										BEGIN { tache quelconque, on regarde la priorit√© precedente
+													 }
+											IF PredTCB^.TaskPriority = XPriority THEN
+
+												BEGIN { tache precedente de meme ancienne priorit√© }
+													LastTCB := PredTCB; { elle devient la LastTCB }
+												END
+
+											ELSE
+
+												BEGIN { tache d'une autre priorit√©, plus basse }
+													LastTCB := NIL;
+													TheTable^[PredPTY].NextPTY := NextPTY;
+													PredPTY := - 1;
+													IF NextPTY <> - 1 THEN
+														BEGIN
+															TheTable^[NextPTY].PredPTY := PredPTY;
+															NextPTY := - 1; (* bug corrig√© le 30/03/88 *)
+														END;
+												END
+
+										END;
+
+								END;
+					END;
+
+				{ on vire le TCB de sa place actuelle }
+				WITH ThePtr^ DO
+					BEGIN { valse des pointeurs }
+
+						IF PredTCB <> NIL THEN PredTCB^.NextTCB := NextTCB;
+						IF NextTCB <> NIL THEN
+							BEGIN
+								NextTCB^.PredTCB := PredTCB;
+								IF PredTCB = NIL THEN SetTheSt(NextTCB);
+							END;
+					END;
+
+				{ mise √† jour de la nouvelle priorit√© }
+				WITH ThePtr^, TheTable^[ThePriority] DO
+					BEGIN
+
+						IF LastTCB = NIL THEN
+
+							BEGIN { nouvelle priorit√© }
+
+								LastTCB := ThePtr;
+
+								{ on recherche la premi√®re priorit√© plus faible }
+								PredPTY := - 1;
+								NextPTY := - 1;
+								i := ThePriority;
+								WHILE i > 0 DO
+									BEGIN
+										i := i - 1;
+										IF TheTable^[i].LastTCB <> NIL THEN
+											BEGIN
+												PredPTY := i;
+												NextPTY := TheTable^[i].NextPTY;
+												TheTable^[i].NextPTY := ThePriority; (* bug corrig√© le
+													 30/03/88 *)
+												IF NextPTY <> - 1 THEN (* bug corrig√© le 30/03/88 *)
+													TheTable^[NextPTY].PredPTY := ThePriority; (* bug
+													 corrig√© le 30/03/88 *)
+												LEAVE;
+											END;
+									END;
+
+								{ on recherche la premi√®re priorit√© plus forte }
+								IF PredPTY = - 1 THEN (* bug corrig√© le 30/03/88 *)
+									BEGIN
+										i := ThePriority;
+										WHILE i < 255 DO (* bug corrig√© le 31/03/88 *)
+											BEGIN
+												i := i + 1;
+												IF TheTable^[i].LastTCB <> NIL THEN
+													BEGIN
+														NextPTY := i;
+														PredPTY := TheTable^[i].PredPTY; (* bug corrig√© le
+															 30/03/88 *)
+														TheTable^[i].PredPTY := ThePriority; (* bug corrig√©
+															 le 30/03/88 *)
+														IF PredPTY <> - 1 THEN (* bug corrig√© le 30/03/88 *)
+															TheTable^[PredPTY].NextPTY := ThePriority; (* bug
+															 corrig√© le 30/03/88 *)
+														LEAVE;
+													END;
+											END;
+									END;
+
+								{ on s'insere derrierre le LastTCB de la priorit√© plus faible }
+								WITH TheTable^[PredPTY] DO
+									BEGIN
+										{ on le met √† sa nouvelle place, derriere le LastTCB }
+										PredTCB := LastTCB;
+										NextTCB := LastTCB^.NextTCB;
+										IF NextTCB <> NIL THEN
+											BEGIN
+												NextTCB^.PredTCB := PredTCB;
+												IF PredTCB = NIL THEN SetTheSt(NextTCB);
+											END;
+										LastTCB^.NextTCB := ThePtr;
+									END;
+
+							END
+
+						ELSE
+
+							BEGIN { priorit√© d√©j√† existante }
+								{ on s'insere derrierre le LastTCB }
+								{ on le met √† sa nouvelle place, derriere le LastTCB }
+								PredTCB := LastTCB;
+								NextTCB := LastTCB^.NextTCB;
+								IF NextTCB <> NIL THEN NextTCB^.PredTCB := ThePtr;
+								LastTCB^.NextTCB := ThePtr;
+								LastTCB := ThePtr;
+							END
+
+					END;
+
+			END;
+	END;
+
+	PROCEDURE XSetCurSt(ThePtr: TPtr);
+
+	BEGIN
+		SetCurSt(ThePtr);
+		WITH ThePtr^ DO
+			IF TaskNumber > 1000 THEN SetPtr(Ptr(Ord4(PtCode) - 4), ThePtr);
+	END;
+
+BEGIN { of Procedure Scheduler }
+	{ on d√©sactive le StackSniffer }
+	SaveStkLowPt := LIPtr(StkLowPt)^;
+	LIPtr(StkLowPt)^:=0;
+	
+	ModeType := IPtr(ORD4(ThePTable)-2)^;
+	TheTable := TPTPtr(ThePTable);
+
+0: ;
+	ThePtr := GetStPtr;	{ Ptr vers le premier TCB de la liste‚Ä¶¬†}
+	
+	IF ThePtr^.MagicN1<>$12345678 THEN	{ ThePtr ne pointe pas sur un TCB !!! }
+	BEGIN
+		DebugStr('Scheduler error');
+		ThePtr:=NIL;	{ on ne passe pas dans le reste du Scheduler }
+	END;
+	
+	WHILE ThePtr <> NIL DO
+		WITH ThePtr^ DO
+			BEGIN
+				IF ReadyToRun(ThePtr) & (ModeType<=RunMode) THEN
+				{ tache prete en attente du CPU }
+				BEGIN
+					{ mise a jour des pointeurs pour le Round Robin }
+					XSetCurSt(ThePtr);
+					{ memo priorite courante }
+					XPriority := TaskPriority;
+					{ m√†j mode de fonctionnement courant ‚Ä¢‚Ä¢ IT Flag ‚Ä¢‚Ä¢ pour ReadyToRun }
+					CurRunMode := ModeType;
+					{¬†modif. de HiHeapMark }
+					SaveHiHeapMark := LIPtr(HiHeapMark)^;
+					LIPtr(HiHeapMark)^:= 0;
+					{ lancement de la tache choisie }
+					SwapTasks(@RegAreaF, @RegArea);
+					{ mise a jour des pointeurs pour le Round Robin }
+					LIPtr(HiHeapMark)^:=SaveHiHeapMark;
+					RoundRobin;
+					{ on reschedule sans donner la main au ForeGround }
+					GOTO 0;
+				END
+				ELSE { on regarde la tache suivante }
+					ThePtr := ThePtr^.NextTCB;
+
+			END;
+			
+	SetCurSt(NIL); { on n'est plus dans une tache de Dragster }
+
+{$IFC TEST}
+	IF LIPtr(StkLowPt)^<>0 THEN DebugStr('Stack sniffer !!!');
+{$ENDC}
+
+	{ on r√©active le StackSniffer }
+	LIPtr(StkLowPt)^:=SaveStkLowPt;
+	
+	{ on rend la main a la tache en ForeGround }
+
+END; { of Procedure Scheduler }
+
+
+FUNCTION SSVal(VAR Str1: Str255): Longint;
+{ ATTENTION: la chaine Str1 est detruite }
+
+VAR
+	Num1: Longint;
+	K: Integer;
+	termine: boolean;
+
+BEGIN
+	{ on checke le type de Str1 }
+
+	{ on skippe tous les blancs devant }
+	K := 0;
+	termine := False;
+	WHILE (K < Length(Str1)) AND (NOT termine) DO
+		BEGIN
+			K := K + 1;
+			termine := Str1[K] <> ' ';
+		END;
+
+	{ on skippe le signe s'il est l√† }
+	IF termine THEN
+		BEGIN
+			IF (Str1[K] IN ['+'..'-']) THEN
+				BEGIN
+					{ on remplace le signe par un blanc et on met le signe au 1er car }
+					IF K > 1 THEN
+						BEGIN
+							Str1[1] := Str1[K];
+							Str1[K] := ' ';
+						END;
+					{ on doit encore skipper les blancs }
+					termine := False;
+					WHILE (K < Length(Str1)) AND (NOT termine) DO
+						BEGIN
+							K := K + 1;
+							termine := Str1[K] <> ' ';
+						END;
+				END
+		END;
+
+	{ on skippe les digits }
+	IF termine THEN termine := NOT (Str1[K] IN ['0'..'9']);
+	WHILE (K < Length(Str1)) AND (NOT termine) DO
+		BEGIN
+			K := K + 1;
+			termine := NOT (Str1[K] IN ['0'..'9']);
+		END;
+	IF termine THEN Str1[0] := chr(K - 1);
+	StringToNum(Str1, Num1);
+	SSVal := Num1;
+END;
+
+END. {of Dragster Run Time}

@@ -1,1 +1,165 @@
-program tktoken;     label     0,1;     type str255 = string[255];     var  f,g,h,k:text;          i,j, Tempi, nbparms: integer;          temp0,temp1,temp2: str255;          nbmots, nbtokens: integer;          FlagPlus, FlagMoins, FlagNop, FlagFirst: Boolean;begin     reset(f,'tokens');     rewrite(g,'TkTokenCst.p');     rewrite(h,'Tokens.r');     rewrite(k,'TokensParms.r');     Writeln(h,'/********************************************');     Writeln(h,'* tokens de Dragster');     Writeln(h,'*/');     Writeln(h,'resource ''STR#'' (260) {');     Writeln(h,'		{');     Writeln(k,'/********************************************');     Writeln(k,'* parametres des tokens de Dragster');     Writeln(k,'*/');     Writeln(k,'resource ''PARA'' (260) {');     Writeln(k,'		{');     Writeln('Generation des tokens de Dragster Basic');     Writeln(' et du fichier ressource associe');     Writeln;     i:=0;     FlagPlus:=False;     FlagMoins:=False;     FlagNop:=False;	 FlagFirst:=False;     while not eof(f) do       begin	   	  If FlagFirst then 		  begin		  	Writeln(h,';');		  	Writeln(k,';');		  end else FlagFirst:=True;          readln(f,temp0);          Write(h,'			"',Temp0,'"');          Writeln(k,'		/* ',Temp0,' */');          if temp0[length(temp0)]='$' then delete(Temp0,length(temp0),1);		  if length(temp0)>2 then          	if (temp0[length(temp0)-2]='D')          		and (temp0[length(temp0)-1]='E')          		and (temp0[length(temp0)]='C')		  		then delete(Temp0,length(temp0)-2,3);          Read(f,Tempi);          Writeln(k,'			',Tempi:3,';'); {FlagAnalys}          Read(f,Tempi);          Writeln(k,'			',Tempi:3,';'); {JumpCode}          Read(f,Tempi);          Writeln(k,'			',Tempi:3,';'); {tFunc}          Read(f,nbParms);          Write(k,'			',nbparms:3); {nbparms}          if nbparms>0 then		  begin		  	 writeln(k,';');             for j:=1 to nbparms do             begin                    Read(f,Tempi);                    Write(k,'			',Tempi:3); {parms}					if j<>nbparms then Writeln(k,';');             end;		  end;		            readln(f,temp1);          readln(f,temp2);          If Temp0<>'' then NbTokens:=i                       else goto 0;          If (pos('NOP',Temp0)=1) or (pos('PAR',Temp0)=1) then             begin               if FlagNop then goto 1                          else begin                                   NbMots:=i-1;                                   FlagNop:=True;                                   if pos('NOP',Temp0)=1 then goto 1;                               end             end          else          If Temp0='DELSPCR' Then Temp0:='DSPCR'          else          If Temp0='DELSPCL' Then Temp0:='DSPCL'          else          If Temp0='RECEIVEFILE' Then Temp0:='RECFILE'          else          If Temp0='RECEIVEBLOCK' Then Temp0:='RECBLOCK'          else          If Temp0='*' Then Temp0:='Mul'          else          If Temp0='/' Then Temp0:='Div'          else          If Temp0='=' Then Temp0:='Eq'          else          If Temp0='<' Then Temp0:='Inf'          else          If Temp0='>' Then Temp0:='Sup'          else          If Temp0='<=' Then Temp0:='EqInf'          else          If Temp0='>=' Then Temp0:='EqSup'          else          If Temp0='<>' Then Temp0:='Diff'          else          If Temp0=';' Then Temp0:='Pv'          else          If Temp0=',' Then Temp0:='V'          else          If (Temp0='+') and (not FlagPlus) Then               begin                    Temp0:='Plus';                    FlagPlus:=True;               end          else          If Temp0='+' Then Temp0:='PlusStr'          else          If (Temp0='-') and (not FlagMoins) Then               begin                    Temp0:='Moins';                    FlagMoins:=True;               end          else          If Temp0='-' Then Temp0:='Neg';          writeln('	      Tk',temp0,' = ',i:3,';');          writeln(g,'	        Tk',temp0,' = ',i:3,';');          1:;          i:=i+1;          0:;       end;     writeln;     writeln(g);     writeln(  '	   NbMots   = ',NbMots:3,  ';');     writeln(g,'	   NbMots   = ',NbMots:3,  ';');     writeln(  '	   NbTokens = ',NbTokens:3,';');     writeln(g,'	   NbTokens = ',NbTokens:3,';');     writeln;     writeln(g);     Writeln(k,'		}');     Writeln(h,'		}');     Writeln(k,'};');     Writeln(h,'};');     Writeln(k);     Writeln(h);     close(f);     close(g);     close(h);     close(k);end.
+program tktoken;
+
+     label     0,1;
+
+     type str255 = string[255];
+
+     var  f,g,h,k:text;
+          i,j, Tempi, nbparms: integer;
+          temp0,temp1,temp2: str255;
+
+          nbmots, nbtokens: integer;
+
+          FlagPlus, FlagMoins, FlagNop, FlagFirst: Boolean;
+
+begin
+     reset(f,'tokens');
+     rewrite(g,'TkTokenCst.p');
+     rewrite(h,'Tokens.r');
+     rewrite(k,'TokensParms.r');
+
+     Writeln(h,'/********************************************');
+     Writeln(h,'* tokens de Dragster');
+     Writeln(h,'*/');
+     Writeln(h,'resource ''STR#'' (260) {');
+     Writeln(h,'		{');
+
+     Writeln(k,'/********************************************');
+     Writeln(k,'* parametres des tokens de Dragster');
+     Writeln(k,'*/');
+     Writeln(k,'resource ''PARA'' (260) {');
+     Writeln(k,'		{');
+
+     Writeln('Generation des tokens de Dragster Basic');
+     Writeln(' et du fichier ressource associe');
+     Writeln;
+     i:=0;
+     FlagPlus:=False;
+     FlagMoins:=False;
+     FlagNop:=False;
+	 FlagFirst:=False;
+     while not eof(f) do
+       begin
+	   	  If FlagFirst then 
+		  begin
+		  	Writeln(h,';');
+		  	Writeln(k,';');
+		  end else FlagFirst:=True;
+          readln(f,temp0);
+          Write(h,'			"',Temp0,'"');
+          Writeln(k,'		/* ',Temp0,' */');
+          if temp0[length(temp0)]='$' then delete(Temp0,length(temp0),1);
+		  if length(temp0)>2 then
+          	if (temp0[length(temp0)-2]='D')
+          		and (temp0[length(temp0)-1]='E')
+          		and (temp0[length(temp0)]='C')
+		  		then delete(Temp0,length(temp0)-2,3);
+
+          Read(f,Tempi);
+          Writeln(k,'			',Tempi:3,';'); {FlagAnalys}
+
+          Read(f,Tempi);
+          Writeln(k,'			',Tempi:3,';'); {JumpCode}
+
+          Read(f,Tempi);
+          Writeln(k,'			',Tempi:3,';'); {tFunc}
+
+          Read(f,nbParms);
+          Write(k,'			',nbparms:3); {nbparms}
+
+          if nbparms>0 then
+		  begin
+		  	 writeln(k,';');
+             for j:=1 to nbparms do
+             begin
+                    Read(f,Tempi);
+                    Write(k,'			',Tempi:3); {parms}
+					if j<>nbparms then Writeln(k,';');
+             end;
+		  end;
+		  
+          readln(f,temp1);
+          readln(f,temp2);
+          If Temp0<>'' then NbTokens:=i
+                       else goto 0;
+          If (pos('NOP',Temp0)=1) or (pos('PAR',Temp0)=1) then
+             begin
+               if FlagNop then goto 1
+                          else begin
+                                   NbMots:=i-1;
+                                   FlagNop:=True;
+                                   if pos('NOP',Temp0)=1 then goto 1;
+                               end
+             end
+          else
+          If Temp0='DELSPCR' Then Temp0:='DSPCR'
+          else
+          If Temp0='DELSPCL' Then Temp0:='DSPCL'
+          else
+          If Temp0='RECEIVEFILE' Then Temp0:='RECFILE'
+          else
+          If Temp0='RECEIVEBLOCK' Then Temp0:='RECBLOCK'
+          else
+          If Temp0='*' Then Temp0:='Mul'
+          else
+          If Temp0='/' Then Temp0:='Div'
+          else
+          If Temp0='=' Then Temp0:='Eq'
+          else
+          If Temp0='<' Then Temp0:='Inf'
+          else
+          If Temp0='>' Then Temp0:='Sup'
+          else
+          If Temp0='<=' Then Temp0:='EqInf'
+          else
+          If Temp0='>=' Then Temp0:='EqSup'
+          else
+          If Temp0='<>' Then Temp0:='Diff'
+          else
+          If Temp0=';' Then Temp0:='Pv'
+          else
+          If Temp0=',' Then Temp0:='V'
+          else
+          If (Temp0='+') and (not FlagPlus) Then
+               begin
+                    Temp0:='Plus';
+                    FlagPlus:=True;
+               end
+          else
+          If Temp0='+' Then Temp0:='PlusStr'
+          else
+          If (Temp0='-') and (not FlagMoins) Then
+               begin
+                    Temp0:='Moins';
+                    FlagMoins:=True;
+               end
+          else
+          If Temp0='-' Then Temp0:='Neg';
+          writeln('	      Tk',temp0,' = ',i:3,';');
+          writeln(g,'	        Tk',temp0,' = ',i:3,';');
+          1:;
+          i:=i+1;
+          0:;
+       end;
+
+     writeln;
+     writeln(g);
+     writeln(  '	   NbMots   = ',NbMots:3,  ';');
+     writeln(g,'	   NbMots   = ',NbMots:3,  ';');
+     writeln(  '	   NbTokens = ',NbTokens:3,';');
+     writeln(g,'	   NbTokens = ',NbTokens:3,';');
+     writeln;
+     writeln(g);
+
+     Writeln(k,'		}');
+     Writeln(h,'		}');
+     Writeln(k,'};');
+     Writeln(h,'};');
+     Writeln(k);
+     Writeln(h);
+     close(f);
+     close(g);
+     close(h);
+     close(k);
+end.
+

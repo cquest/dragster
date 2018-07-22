@@ -1,1 +1,305 @@
-;File DragsterRT.asm;----------------------------------------------------------------;;       Jump Table de la RunTime de Dragster;;       3/86    PhB     premiere Run Time de Dragster;;-----------------------------------------------------------------                BLANKS          ON                STRING          ASIS                INCLUDE  'QuickEqu.a'                INCLUDE  'SysEqu.a'                INCLUDE  'ToolEqu.a'                INCLUDE  'Traps.a'Main	         MAIN	         EXPORT ;=================================================================; Pointeur sur le Task Control Bloc Actif;=================================================================CurStPtr        DC.L	         0;=================================================================; Pointeur sur le premier Task Control Bloc Occupe;=================================================================TheStPtr        DC.L	         0;=================================================================; Pointeur sur le dernier Task Control Bloc Occupe {pour Round Robin};=================================================================TheLStPtr       DC.L	         0;=================================================================; Pointeur sur le premier Task Control Bloc Libre;=================================================================TheFStPtr       DC.L	         0;=================================================================                EXPORT  JumpTable				JMP		JumpConst				JumpTable				DCB.W	450*2,$4EF9				; 		300 entry points;=================================================================; on construit la table de ref et on lance l'init de la unit runtime; interface Pascal:; Procedure UnitInit(TheUnitPtr);=================================================================JumpConst				MOVE.L	(SP)+,D0				; get return address				MOVE.L	(SP)+,A0				; Unit pointer				MOVE.L	D0,-(SP)				; save return address								LEA		GetCurSt,A1				; GetCurSt pointer				MOVE.L	A1,(A0)+								LEA		SetCurSt,A1				; SetCurSt pointer				MOVE.L	A1,(A0)+								LEA		GetStPtr,A1				; GetStPtr pointer				MOVE.L	A1,(A0)+								LEA		SetStPtr,A1				; SetStPtr pointer				MOVE.L	A1,(A0)+								LEA		JumpTable,A1			; JumpTable pointer				MOVE.L	A1,(A0)+				JSR		(A0)					; Unit init				RTS								; Return to caller				;;=================================================================;Function GetCurSt: StPtr;;=================================================================; GetCurSt rend CurStPtr, qui pointe sur le TCB Actif                EXPORT  GetCurStGetCurSt                move.l  CurStPtr,4(sp)	        ; Return function result                rts			        ; So long;;=================================================================;Procedure SetCurSt(ThePtr: StPtr);;=================================================================; SetCurSt met a jour CurStPtr, qui pointe sur le TCB Actif                EXPORT  SetCurStSetCurSt                move.l  (sp)+,a0	        ; Return address                lea     CurStPtr,a1	        ; get address of CurStPtr                move.l  (sp)+,(a1)	        ; set CurStPtr                jmp     (a0)		        ; So long;;=================================================================;Procedure SetStPtr(ThePtr: StPtr);;=================================================================; SetStPtr met a jour TheStPtr, qui pointe sur la premiere TCB                EXPORT  SetStPtrSetStPtr                move.l  (sp)+,a0	        ; Return address                lea     TheStPtr,a1	        ; get address of TheStPtr                move.l  (sp)+,(a1)	        ; set TheStPtr                jmp     (a0)		        ; So long;;;=================================================================;Function GetStPtr: StPtr;;=================================================================; GetStPtr rend TheStPtr, qui pointe sur la premiere TCB                EXPORT  GetStPtrGetStPtr                move.l  TheStPtr,4(sp)	        ; Return function result                rts			        ; So long;;=================================================================; Slots utilisés dans la table de Jump;=================================================================                ;	Jconst Scheduler	        ;       0                ;	Jconst RunTask		        ;       1                ;	Jconst CarPrint		        ;       2                ;	Jconst NumPrint		        ;       3                ;	Jconst StrPrint		        ;       4                ;	Jconst CarWrite		        ;       5                ;	Jconst NumWrite		        ;       6                ;	Jconst StrWrite		        ;       7                ;	Jconst SeekScreen	        ;       8                ;	Jconst SInput		        ;       9                ;	Jconst NumRead		        ;      10                ;	Jconst StrRead		        ;      11                ;	Jconst TimeIt		        ;      12	 			;	Jconst StartRead			;	   13	 			;	Jconst StartWrite 	 		;	   14	 			;	Jconst EndWrite		 		;	   15                ;	Jconst FREE		        	;      16                ;	Jconst FREE		        	;      17                ;	Jconst FREE		        	;      18                ;	Jconst FREE		        	;      19                ;	Jconst SAbs		        	;      20 + 0                ;	Jconst NumAnd		        ;      20 + 1                ;	Jconst SAppend		        ;      20 + 2                ;	Jconst SAsc		        	;      20 + 3                ;	Jconst SBackColor	        ;      20 + 4                ;	Jconst SChr		        	;      20 + 5                ;	Jconst SClose		        ;      20 + 6                ;	Jconst Cls		        	;      20 + 7                ;	Jconst SCreate		        ;      20 + 8                ;	Jconst SCursor		        ;      20 + 9                ;	Jconst Date		        	;      20 +10                ;	Jconst WaitDelay	        ;      20 +11                ;	Jconst DSpcR		        ;      20 +12                ;	Jconst DSpcL		        ;      20 +13                ;	Jconst Disconnect	        ;      20 +14                ;	Jconst Draw		        	;      20 +15                ;	Jconst Echo		        	;      20 +16                ;	Jconst SEof		        	;      20 +17                ;	Jconst SError		        ;      20 +18                ;	Jconst Flash		        ;      20 +19                ;	Jconst Font		        	;      20 +20                ;	Jconst SForeColor	        ;      20 +21                ;	Jconst Format		        ;      20 +22                ;	Jconst sFPos		        ;      20 +23                ;	Jconst FAsGetEof	        ;      20 +24                ;	Jconst sInstr		        ;      20 +25                ;	Jconst Inverse		        ;      20 +26                ;	Jconst FASDelete	        ;      20 +27                ;	Jconst SLeft		        ;      20 +28                ;	Jconst SLen		        	;      20 +29                ;	Jconst Locate		        ;      20 +30                ;	Jconst Logtime		        ;      20 +31                ;	Jconst Lwc		        	;      20 +32                ;	Jconst Mid		        	;      20 +33                ;	Jconst SNot		        	;      20 +34                ;	Jconst SOpen		        ;      20 +35                ;	Jconst NumOr		        ;      20 +36                ;	Jconst FASRename	        ;      20 +37                ;	Jconst ResetZones	        ;      20 +38                ;	Jconst SRight		        ;      20 +39                ;	Jconst RLen		        	;      20 +40                ;	Jconst RSeek		        ;      20 +41                ;	Jconst sSeek		        ;      20 +42                ;	Jconst FASSetEof	        ;      20 +43                ;	Jconst SSize		        ;      20 +44                ;	Jconst SSpc		        	;      20 +45                ;	Jconst Str		        	;      20 +46                ;	Jconst SString		        ;      20 +47                ;	Jconst STickCount	        ;      20 +48                ;	Jconst STime		        ;      20 +49                ;	Jconst TimeOut		        ;      20 +50                ;	Jconst SUnderLine	        ;      20 +51                ;	Jconst Upc		        	;      20 +52                ;	Jconst SVal		        	;      20 +53                ;	Jconst Wait		        	;      20 +54                ;	Jconst WaitConnect	        ;      20 +55                ;	Jconst ZoneNumber	        ;      20 +56                ;	Jconst SZone		        ;      20 +57                ;	Jconst Message		        ;      20 +58                ;	Jconst CanEol		        ;      20 +59                ;	Jconst Mul		        	;      20 +60                ;	Jconst SDiv		        	;      20 +61                ;	Jconst SMod		        	;      20 +62                ;	Jconst NumPlus		        ;      20 +63                ;	Jconst StrPlus		        ;      20 +64                ;	Jconst Moins		        ;      20 +65                ;	Jconst SNeg		        	;      20 +66                ;	Jconst NumEq		        ;      20 +67                ;	Jconst NumInf		        ;      20 +68                ;	Jconst NumSup		        ;      20 +69                ;	Jconst NumEqInf		        ;      20 +70                ;	Jconst NumEqSup		        ;      20 +71                ;	Jconst NumDiff		        ;      20 +72                ;	Jconst StrEq		        ;      20 +73                ;	Jconst StrInf		        ;      20 +74                ;	Jconst StrSup		        ;      20 +75                ;	Jconst StrEqInf		        ;      20 +76                ;	Jconst StrEqSup		        ;      20 +77                ;	Jconst StrDiff		        ;      20 +78                ;	Jconst InputMode		    ;      20 +79                ;	Jconst FREE		        	;      20 +80                ;	Jconst FREE		        	;      20 +81                ;	Jconst FREE		        	;      20 +82                ;	Jconst FREE		        	;      20 +83                ;	Jconst FREE		        	;      20 +84                ;	Jconst DrawScreen	        ;      20 +85                ;	Jconst SPend		        ;      20 +86                ;	Jconst SPost		        ;      20 +87                ;	Jconst SLock		        ;      20 +88                ;	Jconst SUnlock		        ;      20 +89                ;	Jconst ControlSN	        ;      20 +90                ;	Jconst Dial		        	;      20 +91                ;	Jconst StartTask	        ;      20 +92                ;	Jconst FrontScreen	        ;      20 +93                ;	Jconst SGetMinId	        ;      20 +94                ;	Jconst SSetMinId	        ;      20 +95                ;	Jconst SStatus		        ;      20 +96                ;	Jconst TaskNumber	        ;      20 +97                ;	Jconst GetPriority	        ;      20 +98                ;	Jconst SetPriority	        ;      20 +99                ;	Jconst YieldCpu		        ;      20 +100                ;	Jconst Request		        ;      20 +101                ;	Jconst SWModem		        ;      20 +102                ;	Jconst Connected	        ;      20 +103                ;	Jconst SCurPos		        ;      20 +104                ;	Jconst SScroll		        ;      20 +105                ;	Jconst SLower		        ;      20 +106                ;	Jconst CanBlock		        ;      20 +107                ;	Jconst SModNumber	        ;      20 +108                ;	Jconst SStarFlag	        ;      20 +109                ;	Jconst MessDLoad	        ;      20 +110                ;	Jconst MessULoad	        ;      20 +111                ;	Jconst BRead		        ;      20 +112                ;	Jconst BWrite		        ;      20 +113                ;	Jconst SSysParm		        ;      20 +114                ;	Jconst DirFile	        	;      20 +115                ;	Jconst SE_Init		        ;      20 +116                ;	Jconst SE_Moteur	        ;      20 +117                ;	Jconst SE_Resultat	        ;      20 +118                ;	Jconst SE_Donnee		    ;      20 +119                ;	Jconst Key		        	;      20 +120                ;	Jconst PrintScreen			;      20 +121                ;	Jconst SEnqueue				;      20 +122                ;	Jconst SDequeue				;      20 +123				;	Jconst SE_Question			;	   20 +124				;	Jconst Similarity			;	   20 +125				;	Jconst ResetQueue			;	   20 +126				;	Jconst QueueSize			;	   20 +127				;	Jconst SGet					;	   20 +128				;	Jconst SGetPaq				;	   20 +129				;	Jconst SSerConfig			;	   20 +130				;	Jconst SSecs				;	   20 +131				;	Jconst SDate2Secs			;	   20 +132				;	Jconst SSecs2Date			;	   20 +133				;	Jconst SNewFolder			;	   20 +134				;	Jconst SGetFInfo			;	   20 +135				;	Jconst SSetFInfo			;	   20 +136				;	Jconst SGetVol				;	   20 +137				;	Jconst Rnd					;	   20 +138				;	Jconst OpenSer				;	   20 +139				;	Jconst Filter				;	   20 +140				;	Jconst BaseOpen				;	   20 +141				;	Jconst BaseClose			;	   20 +142				;	Jconst BaseSeek				;	   20 +143				;	Jconst BaseUpdate			;	   20 +144				;	Jconst BaseAdd				;	   20 +145				;	Jconst BaseRemove			;	   20 +146				;	Jconst BaseNext				;	   20 +147				;	Jconst BasePred				;	   20 +148				;	Jconst BaseCreate			;	   20 +149				;	Jconst BaseInfo				;	   20 +150				;	Jconst BASEINCR				;	   20 +151				;	Jconst BASEREAD				;	   20 +152				;	Jconst BASESETREF			;	   20 +153				;	Jconst BASEGETREF			;	   20 +154				;	Jconst TrPrint				;	   20 +155               ENDMAIN			   END			   
+;File DragsterRT.asm
+;----------------------------------------------------------------
+;
+;       Jump Table de la RunTime de Dragster
+;
+;       3/86    PhB     premiere Run Time de Dragster
+;
+;-----------------------------------------------------------------
+
+
+                BLANKS          ON
+                STRING          ASIS
+
+                INCLUDE  'QuickEqu.a'
+                INCLUDE  'SysEqu.a'
+                INCLUDE  'ToolEqu.a'
+                INCLUDE  'Traps.a'
+
+Main	         MAIN	         EXPORT 
+
+;=================================================================
+; Pointeur sur le Task Control Bloc Actif
+;=================================================================
+CurStPtr        DC.L	         0
+;=================================================================
+; Pointeur sur le premier Task Control Bloc Occupe
+;=================================================================
+TheStPtr        DC.L	         0
+;=================================================================
+; Pointeur sur le dernier Task Control Bloc Occupe {pour Round Robin}
+;=================================================================
+TheLStPtr       DC.L	         0
+;=================================================================
+; Pointeur sur le premier Task Control Bloc Libre
+;=================================================================
+TheFStPtr       DC.L	         0
+
+
+;=================================================================
+                EXPORT  JumpTable
+				JMP		JumpConst
+				
+JumpTable
+				DCB.W	450*2,$4EF9				; 		300 entry points
+
+;=================================================================
+; on construit la table de ref et on lance l'init de la unit runtime
+; interface Pascal:
+; Procedure UnitInit(TheUnitPtr)
+;=================================================================
+JumpConst
+				MOVE.L	(SP)+,D0				; get return address
+				MOVE.L	(SP)+,A0				; Unit pointer
+				MOVE.L	D0,-(SP)				; save return address
+				
+				LEA		GetCurSt,A1				; GetCurSt pointer
+				MOVE.L	A1,(A0)+
+				
+				LEA		SetCurSt,A1				; SetCurSt pointer
+				MOVE.L	A1,(A0)+
+				
+				LEA		GetStPtr,A1				; GetStPtr pointer
+				MOVE.L	A1,(A0)+
+				
+				LEA		SetStPtr,A1				; SetStPtr pointer
+				MOVE.L	A1,(A0)+
+				
+				LEA		JumpTable,A1			; JumpTable pointer
+				MOVE.L	A1,(A0)+
+
+				JSR		(A0)					; Unit init
+				RTS								; Return to caller
+				
+;
+;=================================================================
+;Function GetCurSt: StPtr;
+;=================================================================
+; GetCurSt rend CurStPtr, qui pointe sur le TCB Actif
+                EXPORT  GetCurSt
+GetCurSt
+                move.l  CurStPtr,4(sp)	        ; Return function result
+                rts			        ; So long
+
+;
+;=================================================================
+;Procedure SetCurSt(ThePtr: StPtr);
+;=================================================================
+; SetCurSt met a jour CurStPtr, qui pointe sur le TCB Actif
+                EXPORT  SetCurSt
+SetCurSt
+                move.l  (sp)+,a0	        ; Return address
+                lea     CurStPtr,a1	        ; get address of CurStPtr
+                move.l  (sp)+,(a1)	        ; set CurStPtr
+                jmp     (a0)		        ; So long
+
+;
+;=================================================================
+;Procedure SetStPtr(ThePtr: StPtr);
+;=================================================================
+; SetStPtr met a jour TheStPtr, qui pointe sur la premiere TCB
+                EXPORT  SetStPtr
+SetStPtr
+                move.l  (sp)+,a0	        ; Return address
+                lea     TheStPtr,a1	        ; get address of TheStPtr
+                move.l  (sp)+,(a1)	        ; set TheStPtr
+                jmp     (a0)		        ; So long
+
+;
+;
+;=================================================================
+;Function GetStPtr: StPtr;
+;=================================================================
+; GetStPtr rend TheStPtr, qui pointe sur la premiere TCB
+                EXPORT  GetStPtr
+GetStPtr
+                move.l  TheStPtr,4(sp)	        ; Return function result
+                rts			        ; So long
+
+;
+;=================================================================
+; Slots utilis√©s dans la table de Jump
+;=================================================================
+
+
+                ;	Jconst Scheduler	        ;       0
+                ;	Jconst RunTask		        ;       1
+                ;	Jconst CarPrint		        ;       2
+                ;	Jconst NumPrint		        ;       3
+                ;	Jconst StrPrint		        ;       4
+                ;	Jconst CarWrite		        ;       5
+                ;	Jconst NumWrite		        ;       6
+                ;	Jconst StrWrite		        ;       7
+                ;	Jconst SeekScreen	        ;       8
+                ;	Jconst SInput		        ;       9
+                ;	Jconst NumRead		        ;      10
+                ;	Jconst StrRead		        ;      11
+                ;	Jconst TimeIt		        ;      12
+	 			;	Jconst StartRead			;	   13
+	 			;	Jconst StartWrite 	 		;	   14
+	 			;	Jconst EndWrite		 		;	   15
+                ;	Jconst FREE		        	;      16
+                ;	Jconst FREE		        	;      17
+                ;	Jconst FREE		        	;      18
+                ;	Jconst FREE		        	;      19
+                ;	Jconst SAbs		        	;      20 + 0
+                ;	Jconst NumAnd		        ;      20 + 1
+                ;	Jconst SAppend		        ;      20 + 2
+                ;	Jconst SAsc		        	;      20 + 3
+                ;	Jconst SBackColor	        ;      20 + 4
+                ;	Jconst SChr		        	;      20 + 5
+                ;	Jconst SClose		        ;      20 + 6
+                ;	Jconst Cls		        	;      20 + 7
+                ;	Jconst SCreate		        ;      20 + 8
+                ;	Jconst SCursor		        ;      20 + 9
+                ;	Jconst Date		        	;      20 +10
+                ;	Jconst WaitDelay	        ;      20 +11
+                ;	Jconst DSpcR		        ;      20 +12
+                ;	Jconst DSpcL		        ;      20 +13
+                ;	Jconst Disconnect	        ;      20 +14
+                ;	Jconst Draw		        	;      20 +15
+                ;	Jconst Echo		        	;      20 +16
+                ;	Jconst SEof		        	;      20 +17
+                ;	Jconst SError		        ;      20 +18
+                ;	Jconst Flash		        ;      20 +19
+                ;	Jconst Font		        	;      20 +20
+                ;	Jconst SForeColor	        ;      20 +21
+                ;	Jconst Format		        ;      20 +22
+                ;	Jconst sFPos		        ;      20 +23
+                ;	Jconst FAsGetEof	        ;      20 +24
+                ;	Jconst sInstr		        ;      20 +25
+                ;	Jconst Inverse		        ;      20 +26
+                ;	Jconst FASDelete	        ;      20 +27
+                ;	Jconst SLeft		        ;      20 +28
+                ;	Jconst SLen		        	;      20 +29
+                ;	Jconst Locate		        ;      20 +30
+                ;	Jconst Logtime		        ;      20 +31
+                ;	Jconst Lwc		        	;      20 +32
+                ;	Jconst Mid		        	;      20 +33
+                ;	Jconst SNot		        	;      20 +34
+                ;	Jconst SOpen		        ;      20 +35
+                ;	Jconst NumOr		        ;      20 +36
+                ;	Jconst FASRename	        ;      20 +37
+                ;	Jconst ResetZones	        ;      20 +38
+                ;	Jconst SRight		        ;      20 +39
+                ;	Jconst RLen		        	;      20 +40
+                ;	Jconst RSeek		        ;      20 +41
+                ;	Jconst sSeek		        ;      20 +42
+                ;	Jconst FASSetEof	        ;      20 +43
+                ;	Jconst SSize		        ;      20 +44
+                ;	Jconst SSpc		        	;      20 +45
+                ;	Jconst Str		        	;      20 +46
+                ;	Jconst SString		        ;      20 +47
+                ;	Jconst STickCount	        ;      20 +48
+                ;	Jconst STime		        ;      20 +49
+                ;	Jconst TimeOut		        ;      20 +50
+                ;	Jconst SUnderLine	        ;      20 +51
+                ;	Jconst Upc		        	;      20 +52
+                ;	Jconst SVal		        	;      20 +53
+                ;	Jconst Wait		        	;      20 +54
+                ;	Jconst WaitConnect	        ;      20 +55
+                ;	Jconst ZoneNumber	        ;      20 +56
+                ;	Jconst SZone		        ;      20 +57
+                ;	Jconst Message		        ;      20 +58
+                ;	Jconst CanEol		        ;      20 +59
+                ;	Jconst Mul		        	;      20 +60
+                ;	Jconst SDiv		        	;      20 +61
+                ;	Jconst SMod		        	;      20 +62
+                ;	Jconst NumPlus		        ;      20 +63
+                ;	Jconst StrPlus		        ;      20 +64
+                ;	Jconst Moins		        ;      20 +65
+                ;	Jconst SNeg		        	;      20 +66
+                ;	Jconst NumEq		        ;      20 +67
+                ;	Jconst NumInf		        ;      20 +68
+                ;	Jconst NumSup		        ;      20 +69
+                ;	Jconst NumEqInf		        ;      20 +70
+                ;	Jconst NumEqSup		        ;      20 +71
+                ;	Jconst NumDiff		        ;      20 +72
+                ;	Jconst StrEq		        ;      20 +73
+                ;	Jconst StrInf		        ;      20 +74
+                ;	Jconst StrSup		        ;      20 +75
+                ;	Jconst StrEqInf		        ;      20 +76
+                ;	Jconst StrEqSup		        ;      20 +77
+                ;	Jconst StrDiff		        ;      20 +78
+                ;	Jconst InputMode		    ;      20 +79
+                ;	Jconst FREE		        	;      20 +80
+                ;	Jconst FREE		        	;      20 +81
+                ;	Jconst FREE		        	;      20 +82
+                ;	Jconst FREE		        	;      20 +83
+                ;	Jconst FREE		        	;      20 +84
+                ;	Jconst DrawScreen	        ;      20 +85
+                ;	Jconst SPend		        ;      20 +86
+                ;	Jconst SPost		        ;      20 +87
+                ;	Jconst SLock		        ;      20 +88
+                ;	Jconst SUnlock		        ;      20 +89
+                ;	Jconst ControlSN	        ;      20 +90
+                ;	Jconst Dial		        	;      20 +91
+                ;	Jconst StartTask	        ;      20 +92
+                ;	Jconst FrontScreen	        ;      20 +93
+                ;	Jconst SGetMinId	        ;      20 +94
+                ;	Jconst SSetMinId	        ;      20 +95
+                ;	Jconst SStatus		        ;      20 +96
+                ;	Jconst TaskNumber	        ;      20 +97
+                ;	Jconst GetPriority	        ;      20 +98
+                ;	Jconst SetPriority	        ;      20 +99
+                ;	Jconst YieldCpu		        ;      20 +100
+                ;	Jconst Request		        ;      20 +101
+                ;	Jconst SWModem		        ;      20 +102
+                ;	Jconst Connected	        ;      20 +103
+                ;	Jconst SCurPos		        ;      20 +104
+                ;	Jconst SScroll		        ;      20 +105
+                ;	Jconst SLower		        ;      20 +106
+                ;	Jconst CanBlock		        ;      20 +107
+                ;	Jconst SModNumber	        ;      20 +108
+                ;	Jconst SStarFlag	        ;      20 +109
+                ;	Jconst MessDLoad	        ;      20 +110
+                ;	Jconst MessULoad	        ;      20 +111
+                ;	Jconst BRead		        ;      20 +112
+                ;	Jconst BWrite		        ;      20 +113
+                ;	Jconst SSysParm		        ;      20 +114
+                ;	Jconst DirFile	        	;      20 +115
+                ;	Jconst SE_Init		        ;      20 +116
+                ;	Jconst SE_Moteur	        ;      20 +117
+                ;	Jconst SE_Resultat	        ;      20 +118
+                ;	Jconst SE_Donnee		    ;      20 +119
+                ;	Jconst Key		        	;      20 +120
+                ;	Jconst PrintScreen			;      20 +121
+                ;	Jconst SEnqueue				;      20 +122
+                ;	Jconst SDequeue				;      20 +123
+				;	Jconst SE_Question			;	   20 +124
+				;	Jconst Similarity			;	   20 +125
+				;	Jconst ResetQueue			;	   20 +126
+				;	Jconst QueueSize			;	   20 +127
+				;	Jconst SGet					;	   20 +128
+				;	Jconst SGetPaq				;	   20 +129
+				;	Jconst SSerConfig			;	   20 +130
+				;	Jconst SSecs				;	   20 +131
+				;	Jconst SDate2Secs			;	   20 +132
+				;	Jconst SSecs2Date			;	   20 +133
+				;	Jconst SNewFolder			;	   20 +134
+				;	Jconst SGetFInfo			;	   20 +135
+				;	Jconst SSetFInfo			;	   20 +136
+				;	Jconst SGetVol				;	   20 +137
+				;	Jconst Rnd					;	   20 +138
+				;	Jconst OpenSer				;	   20 +139
+				;	Jconst Filter				;	   20 +140
+				;	Jconst BaseOpen				;	   20 +141
+				;	Jconst BaseClose			;	   20 +142
+				;	Jconst BaseSeek				;	   20 +143
+				;	Jconst BaseUpdate			;	   20 +144
+				;	Jconst BaseAdd				;	   20 +145
+				;	Jconst BaseRemove			;	   20 +146
+				;	Jconst BaseNext				;	   20 +147
+				;	Jconst BasePred				;	   20 +148
+				;	Jconst BaseCreate			;	   20 +149
+				;	Jconst BaseInfo				;	   20 +150
+				;	Jconst BASEINCR				;	   20 +151
+				;	Jconst BASEREAD				;	   20 +152
+				;	Jconst BASESETREF			;	   20 +153
+				;	Jconst BASEGETREF			;	   20 +154
+				;	Jconst TrPrint				;	   20 +155
+
+
+               ENDMAIN
+			   END
+			   
